@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>柏捷工地</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="柏捷工地">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#1f3a5f">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<!--
+  柏捷工地App「施工人員網頁版」（使用者 2026-11-08：iPhone 不能裝 App，用網頁＋Safari「加入主畫面」）。
+  跟 Android App 的施工人員模式一樣：代碼登入、選工地（或未分組自己打）、天氣、材料、做了什麼、拍照上傳、看 3 天內大家傳的。
+  放在自己的網址（不是嵌在 Google 頁面裡），iPhone 才記得住代碼；資料直接傳給收件服務（跟 App 同一套）。
+  代碼：第一次輸入、登入成功後記在這支手機，之後鎖住不能改，只按「登入」。
+  同一支手機打錯 3 次鎖 30 分鐘，之後再錯就一直鎖，要管理者在「人員管理」解除（收件服務第 5 版記錄）。
+  這個檔案公開沒關係：裡面沒有任何代碼或密碼。
+-->
+<style>
+:root { --navy:#1f3a5f; --orange:#f28c28; --bg:#f4f5f7; --ink:#1d2330; --muted:#6b7383; --line:#c9cfd9; --green:#1e8e5a; --red:#d63b3b; --warn:#e0662b; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-size: 17px; }
+button { font-family: inherit; cursor: pointer; }
+.top { background: var(--navy); color: #fff; padding: 12px 10px; display: flex; align-items: center; gap: 6px; position: sticky; top: 0; z-index: 5; min-height: 54px; }
+.top h1 { font-size: 20px; margin: 0; flex: 1; }
+.top button { background: none; border: 0; color: #fff; font-size: 16px; padding: 6px 10px; }
+.top .back { font-size: 26px; line-height: 1; padding: 2px 10px; }
+.wrap { max-width: 640px; margin: 0 auto; padding: 12px 12px 40px; }
+.card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.label { font-size: 14px; color: var(--muted); margin: 2px 0 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1.5px solid var(--line); background: #fff; border-radius: 18px; padding: 7px 14px; font-size: 16px; color: var(--ink); }
+.chip.on { background: var(--orange); border-color: var(--orange); color: #fff; font-weight: bold; }
+.chip.small { padding: 5px 11px; font-size: 15px; }
+.big { display: block; width: 100%; border: 0; border-radius: 12px; background: var(--orange); color: #fff; font-size: 19px; font-weight: bold; padding: 15px; margin: 6px 0 10px; }
+.big:disabled { background: #cbd1db; }
+.ghost { display: block; width: 100%; border: 2px solid var(--navy); background: #fff; color: var(--navy); border-radius: 12px; font-size: 17px; font-weight: bold; padding: 12px; }
+.ghost.red { border-color: var(--red); color: var(--red); }
+.ghost.dim { border-color: var(--line); color: var(--muted); font-weight: normal; }
+input[type=text], textarea { width: 100%; font-size: 17px; padding: 10px; border: 1.5px solid var(--line); border-radius: 8px; font-family: inherit; background: #fff; color: var(--ink); }
+textarea { min-height: 76px; resize: vertical; }
+.entry { border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 10px; margin: 6px 0; display: flex; gap: 8px; align-items: center; background: #fafbfc; }
+.entry.mine { border-color: var(--orange); background: #fff8ef; }
+.entry .who { font-weight: bold; color: var(--navy); min-width: 2.2em; }
+.entry .body { flex: 1; min-width: 0; }
+.sub { font-size: 13px; color: var(--muted); }
+.note { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.err { background: var(--warn); color: #fff; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; line-height: 1.45; }
+.box { background: #fff6ec; border: 2px solid var(--orange); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; line-height: 1.5; }
+.thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+.thumb { position: relative; padding-top: 75%; background: #d5dae2; border-radius: 8px; overflow: hidden; }
+.thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.thumb .x { position: absolute; top: 3px; right: 3px; background: rgba(0,0,0,.6); color: #fff; border: 0; border-radius: 10px; padding: 1px 8px; font-weight: bold; }
+.thumb .new { position: absolute; left: 3px; bottom: 3px; background: var(--orange); color: #fff; font-size: 11px; border-radius: 6px; padding: 0 5px; }
+.row2 { display: flex; gap: 8px; }
+.row2 > * { flex: 1; }
+.mat { display: flex; gap: 6px; margin-bottom: 6px; }
+.mat input { padding: 8px; }
+.full img { width: 100%; border-radius: 10px; display: block; margin-bottom: 8px; background: #d5dae2; min-height: 120px; }
+.link { background: none; border: 0; color: var(--navy); font-weight: bold; font-size: 16px; padding: 6px 0; }
+.link.red { color: var(--red); font-weight: normal; font-size: 14px; }
+.hd { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<input type="file" id="cam" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="pick" accept="image/*" multiple style="display:none">
+<script>
+var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
+var UNFILED = '未分組';
+var MAX_PHOTOS = 12, MAX_MATS = 9;
+var S = { code: '', saved: '', s: null, site: '', entries: [], route: 'login', busy: false, loading: false, err: '', locked: '', progress: '', codeInput: '', d: null, view: null, wx: {}, photos: {} };
+
+var LS = {
+  get: function (k) { try { return localStorage.getItem('bojie.' + k) || ''; } catch (e) { return ''; } },
+  set: function (k, v) { try { if (v) localStorage.setItem('bojie.' + k, v); else localStorage.removeItem('bojie.' + k); } catch (e) { } }
+};
+
+/** 這支手機的編號：第一次打開時隨機產生，存在這支手機（收件服務用它算打錯幾次、鎖哪一支） */
+function deviceId() {
+  var d = LS.get('device');
+  if (!d) {
+    var a = new Uint8Array(12);
+    try { crypto.getRandomValues(a); } catch (e) { for (var i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256); }
+    d = ''; for (var j = 0; j < a.length; j++) d += ('0' + a[j].toString(16)).slice(-2);
+    LS.set('device', d);
+  }
+  return d;
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+}
+function $(id) { return document.getElementById(id); }
+
+/** 收件服務的錯誤 → 給人看的字（EXPIRED：… 這種只留後面） */
+function errText(r) {
+  if (!r) return '收件服務沒有回覆';
+  if (r.message) return r.message;
+  var m = String(r.error || '');
+  return /^[A-Z]+：/.test(m) ? m.split('：').slice(1).join('：') : (m || '收件服務回覆錯誤');
+}
+
+function api(action, body) {
+  var req = { action: action, code: S.code, client: 'page', device: deviceId() };
+  for (var k in (body || {})) req[k] = body[k];
+  // text/plain：不會先多問一次（CORS preflight），收件服務的 doPost 一樣讀得到
+  return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(req) })
+    .then(function (res) { return res.json(); }, function () { throw { error: '連不上收件服務（網路有問題，等一下再試）' }; })
+    .then(function (r) {
+      if (r && r.ok) return r;
+      if (r && r.error === 'LOCKED') lockedNow(r.message);
+      throw (r || {});
+    }, function (e) { throw (e && e.error ? e : { error: '收件服務回覆看不懂，等一下再試' }); });
+}
+
+// ---------- 日期、字 ----------
+function pad(n) { return ('0' + n).slice(-2); }
+function addDays(ymd, n) { var p = ymd.split('-'); var d = new Date(+p[0], +p[1] - 1, +p[2] + n, 12); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function md(d) { var p = String(d).split('-'); return p.length === 3 ? (+p[1]) + '/' + p[2] : d; }
+function dayName(d) {
+  var a = S.s.today.split('-'), b = String(d).split('-');
+  var diff = Math.round((new Date(+a[0], +a[1] - 1, +a[2]) - new Date(+b[0], +b[1] - 1, +b[2])) / 86400000);
+  return diff === 0 ? '今天' : diff === 1 ? '昨天' : diff === 2 ? '前天' : md(d);
+}
+function windowDays() { var n = S.s.role === '管理者' ? 7 : S.s.days; var out = []; for (var i = 0; i < n; i++) out.push(addDays(S.s.today, -i)); return out; }
+function hoursLabel(h) { h = String(h).trim(); return h === '1' || h === '1.0' ? '全天' : h === '0.5' ? '半天' : h + ' 工'; }
+function matText(m) { return m.vendor + '-' + m.qty + m.unit; }
+function reqLabel(s) { return s === '待確認' ? '改過了：等管理者同意' : s === '已同意' ? '改過了：管理者已同意' : s === '不同意' ? '改過了：管理者沒同意（維持原本的）' : s; }
+function reqColor(s) { return s === '待確認' ? 'var(--warn)' : s === '不同意' ? 'var(--red)' : 'var(--green)'; }
+function wxNote(w) {
+  var t = '自動帶入：中央氣象署' + (w.station ? ' ' + w.station + '站' : '') + (w.km != null ? '（約 ' + Math.round(w.km) + ' 公里）' : '') + (w.text ? '・' + w.text : '');
+  if (w.rainToday > 0) t += '・當天雨量 ' + (Math.round(w.rainToday * 10) / 10) + ' mm';
+  if (w.source === 'record') t += '・那天下午記的';
+  return t + '；不對就點別的';
+}
+
+// ---------- 畫面 ----------
+function chip(act, v, label, on, small) {
+  return '<button class="chip' + (on ? ' on' : '') + (small ? ' small' : '') + '" data-act="' + act + '" data-v="' + esc(v) + '">' + esc(label) + '</button>';
+}
+function topBar(title, back, right, rightAct) {
+  return '<div class="top">' + (back ? '<button class="back" data-act="' + back + '">‹</button>' : '') + '<h1>' + esc(title) + '</h1>' +
+    (right ? '<button data-act="' + rightAct + '">' + esc(right) + '</button>' : '') + '</div>';
+}
+function render() {
+  var h = S.route === 'login' ? renderLogin()
+    : (!S.s || !S.s.today) ? topBar('我的工作', null, '⟳ 更新', 'reload') + '<div class="wrap">' + (S.err ? '<div class="err">' + esc(S.err) + '</div>' : '<div class="card note" style="font-size:15px">讀取中…</div>') +
+      '<button class="ghost dim" data-act="tologin" style="margin-top:14px">回登入畫面</button></div>'
+    : S.route === 'edit' ? renderEdit() : S.route === 'view' ? renderView() : renderHome();
+  $('app').innerHTML = h;
+  if (S.route === 'login') { var c = $('code'); if (c) c.value = S.codeInput; }
+  fillPhotos();
+}
+
+function standalone() { return !!(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)); }
+
+function renderLogin() {
+  var h = topBar('柏捷工地App') + '<div class="wrap">';
+  if (S.locked) {
+    return h + '<div class="card"><h2 style="margin:4px 0 10px;font-size:22px">🔒 這支手機鎖住了</h2><div class="err">' + esc(S.locked) + '</div>' +
+      '<button class="ghost" data-act="retry">' + (S.busy ? '確認中…' : '再試一次') + '</button></div></div>';
+  }
+  h += '<div class="card"><h2 style="margin:4px 0 10px;font-size:22px">施工人員登入</h2>';
+  if (S.saved) {
+    // 代碼記住了：鎖住、不顯示、不能改，只按「登入」（使用者 2026-11-08）
+    h += '<div class="label">這支手機的代碼（已記住，不能改）</div>' +
+      '<div style="font-size:28px;letter-spacing:8px;padding:8px 12px;border:1.5px solid var(--line);border-radius:8px;background:#f4f5f7;color:var(--muted)">🔒 ' + '●●●●●●' + '</div>';
+  } else {
+    h += '<div class="label">輸入管理者給你的代碼</div>' +
+      '<input type="text" id="code" data-f="codeInput" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="12" style="font-size:26px;letter-spacing:5px;text-transform:uppercase">';
+  }
+  h += (S.err ? '<div class="err" style="margin-top:10px">' + esc(S.err) + '</div>' : '') +
+    '<button class="big" data-act="login" style="margin-top:12px"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? '登入中…' : '登入') + '</button>';
+  h += S.saved ? '<div class="note">要換人或換代碼，請找管理者。</div>'
+    : '<div class="note">代碼只給你自己用；打錯 3 次這支手機會先鎖 30 分鐘。</div>';
+  h += '</div>';
+  if (!standalone()) h += '<div class="box"><b>iPhone 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按下面的「分享」⬆︎ →「加入主畫面」→ 之後都從桌面的「柏捷工地」圖示打開，在那裡輸入代碼（Safari 裡輸入的，圖示那邊不會記得）。</div></div>';
+  return h + '</div>';
+}
+
+function entryRow(e) {
+  var x = [];
+  if (e.weather) x.push('天氣 ' + e.weather);
+  if (e.materials && e.materials.length) x.push('材料 ' + e.materials.map(matText).join('、'));
+  return '<div class="entry' + (e.mine ? ' mine' : '') + '" data-act="open" data-v="' + esc(e.id) + '"><div class="who">' + esc(e.name) + '</div><div class="body">' +
+    '<div class="sub">' + esc(e.category + '｜' + hoursLabel(e.hours) + (e.proxy ? '｜管理者代填' : '')) + '</div>' +
+    (e.site === UNFILED ? '<div class="sub" style="color:var(--warn);font-weight:bold">他打的工地：' + esc(e.siteText || '（沒打）') + '</div>' : '') +
+    '<div>' + esc(e.text || '（沒寫內容）') + '</div>' +
+    (x.length ? '<div class="sub" style="color:var(--navy)">' + esc(x.join('｜')) + '</div>' : '') +
+    (e.reqStatus ? '<div class="sub" style="font-weight:bold;color:' + reqColor(e.reqStatus) + '">' + esc(reqLabel(e.reqStatus)) + '</div>' : '') +
+    '</div><div style="white-space:nowrap">📷' + (e.photos || []).length + (e.mine ? ' <b style="color:var(--orange)">✎</b>' : '') + '</div></div>';
+}
+
+function renderHome() {
+  var s = S.s;
+  var h = topBar('我的工作', null, S.loading ? '更新中…' : '⟳ 更新', 'reload') + '<div class="wrap">';
+  h += '<div class="card"><b style="font-size:18px">' + esc(s.name + (s.full ? '（' + s.full + '）' : '')) + '</b>' +
+    '<div class="sub">' + (s.role === '管理者' ? '管理者：不受期限限制' : '可以傳 ' + md(addDays(s.today, -(s.days - 1))) + '～' + md(s.today) + ' 的工作（含今天 ' + s.days + ' 天）') + '</div>' +
+    '<div class="label" style="margin-top:10px">工地</div><div class="chips">' +
+    s.sites.map(function (n) { return chip('site', n, n, n === S.site); }).join('') + chip('site', UNFILED, '未分組（自己打工地）', S.site === UNFILED) + '</div>' +
+    '<div class="note" style="margin-top:6px">沒有你的工地？選「未分組」，新增時自己打工地名稱，管理者會再歸到正確的工地。</div></div>';
+  if (S.err) h += '<div class="err">' + esc(S.err) + '</div>';
+  h += '<button class="big" data-act="add"' + (S.site ? '' : ' disabled') + '>＋ 新增我的工作</button>';
+  var groups = {}, order = [];
+  S.entries.forEach(function (e) { if (!groups[e.date]) { groups[e.date] = []; order.push(e.date); } groups[e.date].push(e); });
+  order.sort().reverse();
+  if (!order.length && !S.loading) h += '<div class="card note" style="font-size:15px">這 ' + s.days + ' 天這個工地還沒有人上傳。</div>';
+  order.forEach(function (d) {
+    var people = {}; groups[d].forEach(function (e) { people[e.name] = 1; });
+    h += '<div class="card"><b>' + md(d) + '（' + dayName(d) + '）' + esc(S.site === UNFILED ? '未分組' : S.site) + '・' + Object.keys(people).length + ' 個人上傳</b>' +
+      groups[d].map(entryRow).join('') + '</div>';
+  });
+  if (s.role !== '管理者') h += '<div class="note">超過 ' + s.days + ' 天的就看不到了；要補或要改請找管理者。</div>';
+  return h + '</div>';
+}
+
+function renderEdit() {
+  var d = S.d, s = S.s, proxy = d.proxy && s.role !== '管理者';
+  var h = topBar(d.id ? '修改我的工作' : '新增我的工作', 'home') + '<div class="wrap">';
+  if (proxy) {
+    h += '<div class="box"><b style="color:var(--warn)">這筆是管理者幫你填的</b><div>可以照你實際做的改；改的內容要等管理者按「同意」才會換（照片直接加）。</div>' +
+      (d.reqStatus ? '<div style="font-weight:bold;color:' + reqColor(d.reqStatus) + '">' + esc(reqLabel(d.reqStatus)) + (d.pending ? '（下面是你上次改的）' : '') + '</div>' : '') +
+      (d.pending || d.reqStatus === '不同意' ? '<div class="sub">管理者填的原本：' + esc(d.orig.category + '｜' + hoursLabel(d.orig.hours) + '｜' + d.orig.text) + '</div>' : '') + '</div>';
+  }
+  var auto = S.wx[d.date];
+  h += '<div class="card"><div class="hd"><div><div class="label">工地</div><b style="font-size:18px">' + esc(S.site === UNFILED ? '未分組' : S.site) + '</b></div>' +
+    '<div style="text-align:right"><div class="label">天氣</div><div class="chips" style="justify-content:flex-end;gap:4px">' +
+    s.weathers.map(function (w) { return chip('wx', w, w, d.weather === w, true); }).join('') + '</div></div></div>';
+  if (!d.touchedWx && auto && d.weather === auto.weather) h += '<div class="note">' + esc(wxNote(auto)) + '</div>';
+  if (S.site === UNFILED) h += '<div style="margin-top:8px"><div class="label">工地名稱（你知道的叫法就好）</div><input type="text" data-f="siteText" value="' + esc(d.siteText) + '" placeholder="例：新竹王先生透天" maxlength="60"><div class="note">管理者會再歸到正確的工地。</div></div>';
+  h += '<div class="label" style="margin-top:10px">哪一天的工作' + (s.role === '管理者' ? '' : '（只能傳 ' + s.days + ' 天內的）') + '</div><div class="chips">' +
+    windowDays().map(function (x) { var n = dayName(x); return chip('date', x, n.indexOf('/') >= 0 ? md(x) : n + ' ' + md(x), d.date === x); }).join('') + '</div></div>';
+  h += '<div class="card"><div class="label">大項</div><div class="chips">' + s.categories.map(function (c) { return chip('cat', c, c, d.cat === c, true); }).join('') + '</div>' +
+    '<div class="label" style="margin-top:10px">工數</div><div class="chips">' +
+    s.hours.map(function (x) { var l = hoursLabel(x); return chip('hours', x, /工$/.test(l) ? x : l + ' ' + x, d.hours === x); }).join('') + '</div></div>';
+  // 材料/機具
+  h += '<div class="card"><div class="label">' + (d.mats.length ? '材料/機具（最多 ' + MAX_MATS + ' 筆）' : '材料/機具（今天進場的；沒有就不用填）') + '</div>';
+  d.mats.forEach(function (m, i) {
+    h += '<div class="mat"><input type="text" style="flex:1.5" data-f="mat.' + i + '.vendor" value="' + esc(m.vendor) + '" placeholder="廠商">' +
+      '<input type="text" style="flex:.8" inputmode="decimal" data-f="mat.' + i + '.qty" value="' + esc(m.qty) + '" placeholder="數量">' +
+      '<input type="text" style="flex:.7" data-f="mat.' + i + '.unit" value="' + esc(m.unit) + '" placeholder="單位"></div>';
+    if (s.vendors && s.vendors.length) h += '<div class="chips" style="margin-bottom:4px">' + s.vendors.map(function (v) { return chip('matv', i + '|' + v, v, m.vendor === v, true); }).join('') + '</div>';
+    h += '<div class="chips">' + (s.units || []).map(function (u) { return chip('matu', i + '|' + u, u, m.unit === u, true); }).join('') + '</div>' +
+      '<button class="link red" data-act="matdel" data-v="' + i + '">刪掉這筆</button>';
+  });
+  if (d.mats.length < MAX_MATS) h += '<button class="link" data-act="matadd">' + (d.mats.length ? '＋ 再加一筆' : '＋ 新增材料/機具') + '</button>';
+  h += '</div>';
+  h += '<div class="card"><div class="label">做了什麼（位置、內容）</div><textarea data-f="text" placeholder="例：地梁綁紮（A 區）">' + esc(d.text) + '</textarea></div>';
+  // 照片
+  var n = d.remote.length + d.local.length;
+  h += '<div class="card"><div class="label">照片（' + n + ' 張）</div><div class="thumbs">';
+  d.remote.forEach(function (id) { h += '<div class="thumb"><img data-pid="' + esc(id) + '" alt=""><button class="x" data-act="rmremote" data-v="' + esc(id) + '">✕</button></div>'; });
+  d.local.forEach(function (p, i) { h += '<div class="thumb"><img src="' + p.url + '" alt=""><button class="x" data-act="rmlocal" data-v="' + i + '">✕</button><span class="new">未上傳</span></div>'; });
+  h += '</div>' + (n < MAX_PHOTOS ? '<div class="row2"><button class="ghost" data-act="cam">📷 拍照</button><button class="ghost" data-act="pick">🖼 從相簿選</button></div>' : '') +
+    '<div class="note" style="margin-top:6px">照片會先縮小（長邊 1600）再上傳。</div></div>';
+  if (S.err) h += '<div class="err">' + esc(S.err) + '</div>';
+  var filled = d.mats.filter(function (m) { return (m.vendor || '').trim() || (m.qty || '').trim(); }).length;
+  var ok = !S.busy && d.cat && (S.site !== UNFILED || d.siteText.trim()) && (d.text.trim() || n || filled);
+  h += '<button class="big" data-act="save"' + (ok ? '' : ' disabled') + '>' + (S.busy ? esc(S.progress || '上傳中…') : proxy ? '送出（等管理者同意）' : '上傳') + '</button>';
+  if (d.id && !proxy) h += '<button class="ghost red" data-act="del">刪除這一筆</button>';
+  if (proxy) h += '<div class="note" style="text-align:center">管理者填的這筆不能刪；不是你做的請跟管理者說。</div>';
+  h += '<div class="note" style="text-align:center;margin-top:10px">' + (s.role === '管理者' ? '管理者可以改任何一天。' : '傳了以後 ' + s.days + ' 天內還可以改；過了就只有管理者能改。') + '</div>';
+  return h + '</div>';
+}
+
+function renderView() {
+  var e = S.view, x = [];
+  var h = topBar(e.name + ' 的工作', 'home') + '<div class="wrap">';
+  if (e.proxy) h += '<div class="box"><b style="color:var(--warn)">管理者幫' + esc(e.name) + '填的</b>' + (e.reqStatus ? '<div style="font-weight:bold;color:' + reqColor(e.reqStatus) + '">' + esc(reqLabel(e.reqStatus)) + '</div>' : '') + '</div>';
+  h += '<div class="card"><div class="sub" style="font-size:15px">' + md(e.date) + '（' + dayName(e.date) + '）' + esc(e.site) + (e.siteText ? '（他打的：' + esc(e.siteText) + '）' : '') + '</div>' +
+    '<div style="font-weight:bold;margin-top:4px">' + esc(e.category + '｜' + hoursLabel(e.hours)) + '</div><div style="font-size:19px;margin-top:4px">' + esc(e.text || '（沒寫內容）') + '</div>' +
+    (e.weather ? '<div style="color:var(--navy);margin-top:6px">天氣：' + esc(e.weather) + '</div>' : '') +
+    (e.materials && e.materials.length ? '<div style="color:var(--navy)">材料/機具：' + esc(e.materials.map(matText).join('、')) + '</div>' : '') + '</div>';
+  h += '<div class="full">' + (e.photos || []).map(function (id) { return '<img data-pid="' + esc(id) + '" alt="">'; }).join('') + '</div>';
+  if (!(e.photos || []).length) h += '<div class="card note">沒有照片</div>';
+  return h + '</div>';
+}
+
+/** 雲端的照片：第一次跟收件服務拿，之後用記住的 */
+function fillPhotos() {
+  var imgs = document.querySelectorAll('img[data-pid]');
+  for (var i = 0; i < imgs.length; i++) {
+    var id = imgs[i].getAttribute('data-pid');
+    if (S.photos[id] && S.photos[id] !== 'loading') imgs[i].src = S.photos[id];
+    else if (!S.photos[id]) loadPhoto(id);
+  }
+}
+function loadPhoto(id) {
+  S.photos[id] = 'loading';
+  api('photoget', { fileId: id }).then(function (r) {
+    S.photos[id] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.data;
+    var imgs = document.querySelectorAll('img[data-pid="' + id + '"]');
+    for (var i = 0; i < imgs.length; i++) imgs[i].src = S.photos[id];
+  }).catch(function () { delete S.photos[id]; });
+}
+
+// ---------- 動作 ----------
+function go(r) { S.route = r; S.err = ''; render(); window.scrollTo(0, 0); }
+
+/** 記住的代碼不能用了（管理者換了代碼或停用）：清掉，回登入畫面重新輸入 */
+function codeGone(msg) {
+  LS.set('code', ''); S.saved = ''; S.code = ''; S.s = null; S.entries = []; S.codeInput = ''; S.route = 'login';
+  S.err = msg || '這支手機記的代碼已經不能用（管理者換了代碼或停用），請輸入新的代碼。'; render();
+}
+
+/** 收件服務說這支手機鎖住了 */
+function lockedNow(msg) { S.locked = msg || '這支手機鎖住了，請找管理者'; S.busy = false; S.loading = false; S.route = 'login'; render(); }
+
+function pickSite(s) {
+  S.site = (s.sites.indexOf(S.site) >= 0 || S.site === UNFILED) ? S.site : (s.sites[0] || '');
+  LS.set('site', S.site);
+}
+
+function relogin() {
+  S.loading = true; render();
+  return api('login').then(function (s) { S.s = s; pickSite(s); return refresh(); })
+    .catch(function (e) { S.loading = false; if (e.error === 'LOCKED') return; if (e.error === 'CODE') { codeGone(); return; } S.err = errText(e); render(); });
+}
+
+function refresh() {
+  if (!S.site) { S.loading = false; render(); return Promise.resolve(); }
+  S.loading = true; render();
+  return api('recent', { site: S.site, days: 7 }).then(function (r) {
+    S.entries = r.entries || []; if (r.today) S.s.today = r.today; S.err = ''; S.loading = false; render();
+  }).catch(function (e) { S.loading = false; if (e.error === 'LOCKED') return; if (e.error === 'CODE') { codeGone(); return; } S.err = errText(e); render(); });
+}
+
+function openEdit(e) {
+  var days = windowDays(), s = S.s;
+  var pending = !!(e && e.reqStatus === '待確認');
+  var src = (e && e.proxy && pending && s.role !== '管理者' && e.req) ? e.req : (e || {});
+  S.d = {
+    id: e ? e.id : '', date: e && days.indexOf(e.date) >= 0 ? e.date : days[0],
+    cat: src.category || '', hours: src.hours || s.hours[0], text: src.text || '', weather: src.weather || '',
+    mats: (src.materials || []).map(function (m) { return { vendor: m.vendor || '', qty: m.qty || '', unit: m.unit || '' }; }),
+    siteText: e ? (e.siteText || '') : '', remote: e ? (e.photos || []).slice() : [], removed: [], local: [],
+    touchedWx: false, lastAuto: '', proxy: !!(e && e.proxy), pending: pending, reqStatus: e ? (e.reqStatus || '') : '', orig: e
+  };
+  S.wx = {};
+  go('edit');
+  // 天氣自動帶入（今天即時、昨天前天用那天下午記的）
+  if (S.site !== UNFILED && (!e || !e.weather)) {
+    api('weather', { site: S.site, dates: days }).then(function (r) { S.wx = r.days || {}; applyWx(); render(); }).catch(function () { });
+  }
+}
+
+function applyWx() {
+  var d = S.d; if (!d || d.touchedWx) return;
+  if (!d.weather || d.weather === d.lastAuto) { var a = (S.wx[d.date] || {}).weather || ''; d.weather = a; d.lastAuto = a; }
+}
+
+/** 拍照、相簿選的 → 縮小成長邊 1600 的 JPEG */
+function shrink(file) {
+  return new Promise(function (ok, bad) {
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function () {
+      var w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, 1600 / Math.max(w, h));
+      var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      var du = c.toDataURL('image/jpeg', 0.8);
+      ok({ name: 'web_' + Date.now() + '_' + Math.floor(Math.random() * 1000) + '.jpg', url: du, data: du.split(',')[1] });
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); bad(new Error('這張照片讀不出來')); };
+    img.src = url;
+  });
+}
+
+function addFiles(files) {
+  var d = S.d; if (!d) return;
+  var list = Array.prototype.slice.call(files || []);
+  var room = MAX_PHOTOS - d.remote.length - d.local.length;
+  list = list.slice(0, Math.max(0, room));
+  Promise.all(list.map(function (f) { return shrink(f).catch(function () { return null; }); })).then(function (ps) {
+    ps.forEach(function (p) { if (p) d.local.push(p); });
+    render();
+  });
+}
+
+var ACT = {
+  login: function () {
+    var c = S.saved || (S.codeInput || '').trim().toUpperCase(); if (!c || S.busy) return;
+    S.code = c; S.busy = true; S.err = ''; render();
+    api('login').then(function (s) {
+      S.busy = false; S.s = s; S.saved = c; LS.set('code', c); S.site = LS.get('site'); pickSite(s); go('home'); refresh();
+    }).catch(function (e) {
+      S.busy = false; S.code = '';
+      if (e.error === 'LOCKED') return;
+      if (e.error === 'CODE' && S.saved) { codeGone(); return; }
+      S.codeInput = ''; S.err = e.error === 'CODE' ? (e.message || '代碼不對，或已經停用，請找管理者') : errText(e); render();
+    });
+  },
+  retry: function () {   // 鎖住的畫面「再試一次」：問收件服務還鎖不鎖（不算打錯）
+    if (S.busy) return;
+    S.busy = true; render();
+    var keep = S.code; S.code = '';
+    api('login').then(function () { }, function (e) {
+      S.busy = false; S.code = keep;
+      if (e.error === 'LOCKED') { render(); return; }
+      S.locked = ''; S.err = ''; render();   // 沒鎖了（收件服務回「代碼不對」是因為沒送代碼，不會記成打錯）
+    });
+  },
+  tologin: function () { S.route = 'login'; S.err = ''; render(); },
+  reload: function () { relogin(); },
+  site: function (v) { S.site = v; LS.set('site', v); S.entries = []; render(); refresh(); },
+  add: function () { openEdit(null); },
+  open: function (id) {
+    var e = S.entries.filter(function (x) { return x.id === id; })[0]; if (!e) return;
+    if (e.mine) openEdit(e); else { S.view = e; go('view'); }
+  },
+  home: function () { if (S.busy) return; go('home'); },
+  date: function (v) { S.d.date = v; applyWx(); render(); },
+  wx: function (v) { S.d.weather = S.d.weather === v ? '' : v; S.d.touchedWx = true; render(); },
+  cat: function (v) { S.d.cat = v; render(); },
+  hours: function (v) { S.d.hours = v; render(); },
+  matadd: function () { S.d.mats.push({ vendor: '', qty: '', unit: '' }); render(); },
+  matdel: function (v) { S.d.mats.splice(+v, 1); render(); },
+  matv: function (v) { var i = +v.split('|')[0]; S.d.mats[i].vendor = v.slice(v.indexOf('|') + 1); render(); },
+  matu: function (v) { var i = +v.split('|')[0]; S.d.mats[i].unit = v.slice(v.indexOf('|') + 1); render(); },
+  rmremote: function (v) { var d = S.d; d.remote = d.remote.filter(function (x) { return x !== v; }); d.removed.push(v); render(); },
+  rmlocal: function (v) { S.d.local.splice(+v, 1); render(); },
+  cam: function () { $('cam').value = ''; $('cam').click(); },
+  pick: function () { $('pick').value = ''; $('pick').click(); },
+  save: function () {
+    var d = S.d; if (S.busy) return;
+    S.busy = true; S.err = ''; S.progress = '上傳內容…'; render();
+    var mats = d.mats.filter(function (m) { return (m.vendor || '').trim() || (m.qty || '').trim(); });
+    var entry = { date: d.date, site: S.site, category: d.cat, hours: d.hours, text: d.text.trim(), weather: d.weather, materials: mats, siteText: d.siteText.trim() };
+    if (d.id) entry.id = d.id;
+    var chain = api('save', { entry: entry }).then(function (r) { d.id = r.id; });
+    d.removed.slice().forEach(function (fid) {
+      chain = chain.then(function () { return api('delphoto', { id: d.id, fileId: fid }); }).then(function () { d.removed = d.removed.filter(function (x) { return x !== fid; }); });
+    });
+    var todo = d.local.slice();
+    todo.forEach(function (p, i) {
+      chain = chain.then(function () { S.progress = '上傳照片 ' + (i + 1) + '/' + todo.length + '…'; render(); return api('photo', { id: d.id, name: p.name, mime: 'image/jpeg', data: p.data }); })
+        .then(function (r) { d.remote.push(r.fileId); S.photos[r.fileId] = p.url; d.local = d.local.filter(function (x) { return x !== p; }); });
+    });
+    chain.then(function () { S.busy = false; S.progress = ''; go('home'); refresh(); })
+      .catch(function (e) { S.busy = false; S.progress = ''; S.err = errText(e) + (d.id && d.local.length ? '（已經傳上去的不會重複，再按一次會接著傳）' : ''); render(); });
+  },
+  del: function () {
+    var d = S.d; if (!d.id || S.busy) return;
+    if (!confirm('要刪除這一筆嗎？內容和照片都會拿掉（管理者那邊會留紀錄）。')) return;
+    S.busy = true; render();
+    api('delete', { id: d.id }).then(function () { S.busy = false; go('home'); refresh(); })
+      .catch(function (e) { S.busy = false; S.err = errText(e); render(); });
+  }
+};
+
+document.addEventListener('click', function (ev) {
+  var el = ev.target.closest ? ev.target.closest('[data-act]') : null;
+  if (!el || el.disabled) return;
+  var a = el.getAttribute('data-act');
+  if (ACT[a]) { ev.preventDefault(); ACT[a](el.getAttribute('data-v'), el); }
+});
+document.addEventListener('input', function (ev) {
+  var k = ev.target.getAttribute && ev.target.getAttribute('data-f'); if (!k) return;
+  var v = ev.target.value;
+  if (k === 'codeInput') { S.codeInput = v; return; }
+  var d = S.d; if (!d) return;
+  if (k === 'text' || k === 'siteText') { d[k] = v; }
+  else if (k.indexOf('mat.') === 0) { var p = k.split('.'); d.mats[+p[1]][p[2]] = v; }
+  // 上傳按鈕要不要亮：只改按鈕，不整個重畫（不然打字會跳掉）
+  var b = document.querySelector('[data-act="save"]');
+  if (b) {
+    var n = d.remote.length + d.local.length;
+    var filled = d.mats.filter(function (m) { return (m.vendor || '').trim() || (m.qty || '').trim(); }).length;
+    b.disabled = !(!S.busy && d.cat && (S.site !== UNFILED || d.siteText.trim()) && (d.text.trim() || n || filled));
+  }
+});
+document.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && S.route === 'login' && ev.target.id === 'code') ACT.login(); });
+$('cam').addEventListener('change', function (ev) { addFiles(ev.target.files); });
+$('pick').addEventListener('change', function (ev) { addFiles(ev.target.files); });
+
+// ---------- 開始 ----------
+// 記住的代碼：顯示鎖住的 ●●●●●●，按「登入」才進去（使用者 2026-11-08）
+S.saved = LS.get('code');
+S.site = LS.get('site');
+render();
+</script>
+</body>
+</html>
