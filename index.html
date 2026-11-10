@@ -253,7 +253,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10j';
+var WEB_VERSION = '11/10k';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
 var PCAPP = /[?&]app=pc\b/.test(location.search);
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -582,11 +582,76 @@ function renderModal() {
   var m = S.modal;
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
-    task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal }[m.type](m);
+    task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
 }
 function closeModal() { S.modal = null; renderModal(); }
+
+// ===================== iPhone 桌面小工具（Scriptable） =====================
+// 網頁版不能放小工具，改用免費的 Scriptable App 跑「柏捷工地」小工具程式（bojie-widget.js，放在這個網站）。
+// 「複製安裝程式」：一小段程式（裡面是這支手機的代碼，用十六進位寫，看不出來），貼到 Scriptable 執行一次：
+// 下載 bojie-widget.js 存成「柏捷工地」、代碼存進 iPhone 的鑰匙圈。之後打開 Scriptable 它會自己更新。
+var IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+var WIDGET_URL = 'https://a0923337553-ai.github.io/bojie-site/bojie-widget.js';
+function widgetInstaller(code) {
+  var k = String(code || '').split('').map(function (c) { return ('000' + c.charCodeAt(0).toString(16)).slice(-4); }).join('');
+  return [
+    '// 柏捷工地 小工具安裝：貼上後按右下角 ▶ 執行一次就好（裡面有你的代碼，不要傳給別人）',
+    "const K = '" + k + "';",
+    "const U = '" + WIDGET_URL + "';",
+    "const fm = module.filename.indexOf('iCloud~') >= 0 ? FileManager.iCloud() : FileManager.local();",
+    "let src = '';",
+    "try { const r = new Request(U + '?t=' + Date.now()); r.timeoutInterval = 30; src = await r.loadString(); } catch (e) { }",
+    'const a = new Alert();',
+    "if (src.indexOf('柏捷工地小工具') < 0) {",
+    "  a.title = '下載失敗'; a.message = '網路不穩，等一下再按一次右下角 ▶'; a.addAction('好'); await a.presentAlert();",
+    '} else {',
+    "  fm.writeString(fm.joinPath(fm.documentsDirectory(), '柏捷工地.js'), src);",
+    "  Keychain.set('bojie.widget.code', K.match(/.{4}/g).map(h => String.fromCharCode(parseInt(h, 16))).join(''));",
+    "  a.title = '✅ 裝好了';",
+    "  a.message = 'Scriptable 裡多了一個「柏捷工地」。\\n\\n放到桌面：回到桌面長按空白處 → 左上角「編輯」→「加入小工具」→ 搜尋「Scriptable」→ 選大小 →「加入小工具」；再點一下那個小工具，「Script」選「柏捷工地」。\\n\\n這個安裝用的可以刪掉（往左滑 → 刪除）。';",
+    "  a.addAction('先看看'); a.addCancelAction('好');",
+    "  if (await a.presentAlert() === 0) Safari.open('scriptable:///run/' + encodeURIComponent('柏捷工地'));",
+    '}',
+    'Script.complete();',
+  ].join('\n');
+}
+/** 複製到剪貼簿（iPhone 舊一點的不支援 clipboard 就用舊方法） */
+function copyText(t) {
+  function old() {
+    return new Promise(function (ok, bad) {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = t; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, t.length);
+        var r = document.execCommand('copy'); document.body.removeChild(ta);
+        if (r) ok(); else bad();
+      } catch (e) { bad(e); }
+    });
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t).catch(old);
+  return old();
+}
+function widgetModal(m) {
+  var step = function (n, t, extra) {
+    return '<div class="row" style="align-items:flex-start;gap:8px;margin:8px 0"><b style="font-size:20px;color:var(--teal);line-height:24px">' + n + '</b>' +
+      '<div class="grow" style="font-size:16px;line-height:23px">' + t + (extra ? '<div style="margin-top:6px">' + extra + '</div>' : '') + '</div></div>';
+  };
+  return '<h3>📱 iPhone 桌面小工具</h3>' +
+    '<div class="note" style="font-size:14px">用免費的 App「Scriptable」放。設定一次，大約 3 分鐘。</div>' +
+    step('①', '到 App Store 裝「Scriptable」（免費）',
+      '<a class="pill" style="margin:0;display:inline-block;text-decoration:none" href="https://apps.apple.com/app/id1405459188" target="_blank" rel="noopener">打開 App Store</a>') +
+    step('②', '按這個按鈕，複製安裝程式',
+      '<button class="pill" style="margin:0" data-act="widgetcopy">' + (m.copied ? '已複製 ✓' : '複製安裝程式') + '</button>' +
+      (m.err ? '<div style="color:var(--red);font-size:14px;margin-top:4px">' + esc(m.err) + '</div>' : '')) +
+    step('③', '打開 Scriptable → 右上角「＋」→ 點一下中間空白 →「貼上」→ 按右下角「▶」。看到「✅ 裝好了」就好') +
+    step('④', '回到桌面：長按空白處 → 左上角「編輯」→「加入小工具」→ 搜尋「Scriptable」→ 選大小 →「加入小工具」') +
+    step('⑤', '點一下剛放好的小工具 →「Script」選「柏捷工地」') +
+    '<div class="note" style="font-size:14px;margin-top:6px">小、中＝今日提醒；大＝月曆＋這週行程＋待辦。「Parameter」打「消息」＝最新消息。點小工具會打開完整清單（待辦可以打勾）。鎖定畫面也可以放。</div>' +
+    '<div class="note" style="font-size:14px;color:var(--red)">安裝程式裡有你的代碼（看不出來），只貼在自己的手機，不要傳給別人。</div>' +
+    '<div class="btns"><button data-act="mclose">關閉</button></div>';
+}
 
 /** 電腦：寬度 900 以上首頁兩欄；2300 以上（29 吋 21:9、40 吋長條）三欄（使用者「排法要舒適不要那麼擠」：不再排四欄） */
 function mq(px) { return !!(window.matchMedia && window.matchMedia('(min-width: ' + px + 'px)').matches); }
@@ -645,7 +710,10 @@ function renderHub() {
   h += '<div class="a-foot"><div class="card"><button class="big" style="margin:0" data-act="sync">' + (S.feedBusy ? '更新中…' : '⟳ 更新') + '</button>' +
     (sub ? '<div class="sub" style="margin-top:6px">' + esc(sub) + '</div>' : '') + '</div>';
   h += '<div class="sub" style="padding-left:4px">' + esc(s.name + (s.full ? '（' + s.full + '）' : '') + '・' + s.role) + '　' + (PCAPP ? '電腦版' : '網頁版') + ' ' + WEB_VERSION + '</div>';
-  h += '<div class="note" style="padding:4px 4px 0">網頁版沒有桌面小工具，關著時也不會跳通知；打開就會更新。</div></div>';
+  // iPhone 桌面小工具（使用者 2026-11-10 選「甲」：用免費的 Scriptable）
+  if (IOS) h += '<button class="ghost" style="margin-top:8px" data-act="widgethelp">📱 放到 iPhone 桌面的小工具（教學）</button>' +
+    '<div class="note" style="padding:0 4px">網頁版關著時不會跳通知；打開就會更新。</div></div>';
+  else h += '<div class="note" style="padding:4px 4px 0">網頁版沒有桌面小工具，關著時也不會跳通知；打開就會更新。</div></div>';
   return h + '</div>';
 }
 
@@ -1728,6 +1796,12 @@ var ACT = {
   caladd: function () { openCalEdit(null); },
   // 跳出的視窗
   mclose: function () { if (S.modal && S.modal.busy) return; closeModal(); render(); },
+  widgethelp: function () { S.modal = { type: 'widget' }; renderModal(); },
+  widgetcopy: function () {
+    var m = S.modal; if (!m || !S.code) return;
+    copyText(widgetInstaller(S.code)).then(function () { m.copied = true; m.err = ''; renderModal(); },
+      function () { m.err = '複製不了：請再按一次；還是不行就找管理者'; renderModal(); });
+  },
   maskclose: function (v, el, ev) { if (ev.target === el && !(S.modal && S.modal.busy)) { closeModal(); render(); } },
   mnsite: function (v) { S.modal.site = v; renderModal(); },
   mnday: function (v) { S.modal.day = v; S.modal.other = false; renderModal(); },
