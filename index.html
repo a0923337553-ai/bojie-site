@@ -253,7 +253,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10m';
+var WEB_VERSION = '11/10n';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
 var PCAPP = /[?&]app=pc\b/.test(location.search);
 // 哪一種蘋果裝置（使用者 2026-11-10「ipad也要適配」「macbook pro 16也要」）：
@@ -669,7 +669,8 @@ function widgetModal(m) {
     step('⑤', '點一下剛放好的小工具 →「Script」選「柏捷工地」') +
     '<div class="note" style="font-size:14px;margin-top:6px">小、中＝今日提醒；大＝月曆＋這週行程＋待辦' + (IPAD ? '；<b>特大</b>（iPad 才有）＝左邊月曆、右邊今日提醒＋這週行程＋待辦' : '') +
     '。「Parameter」打「消息」＝最新消息。點小工具會打開完整清單（待辦可以打勾）。鎖定畫面也可以放。</div>' +
-    '<div class="note" style="font-size:14px;color:var(--red)">安裝程式裡有你的代碼（看不出來），只貼在自己的手機，不要傳給別人。</div>' +
+    // 使用者 2026-11-10「施工人員那也能帶他們安裝」「但你說會有一個我的密碼」：裡面是這支手機登入的人自己的代碼，不是管理者的
+    '<div class="note" style="font-size:14px;color:var(--red)">安裝程式裡是<b>這支手機登入的代碼</b>（' + esc(S.s && S.s.name ? S.s.name : '你') + ' 自己的，看不出來）。每個人用自己的手機、自己的代碼登入後再按；不要把安裝程式傳給別人。</div>' +
     '<div class="btns"><button data-act="mclose">關閉</button></div>';
 }
 
