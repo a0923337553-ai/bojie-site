@@ -10,11 +10,12 @@
 // 小工具大小：
 //   小、中＝⏰ 今日提醒（中的最後一行是待辦）
 //   大＝📅 這個月的月曆＋這週行程＋待辦（跟 Android 的「行事曆」小工具一樣）
-//   鎖定畫面也可以放（今日提醒）
+//   特大（只有 iPad）＝左邊月曆、右邊今日提醒＋這週行程＋待辦
+//   鎖定畫面也可以放（今日提醒）；Mac（macOS 14 以上）可以把 iPhone 的這個小工具放到 Mac 桌面
 // 「Parameter」打字可以換內容：消息＝📣 最新消息、提醒＝⏰ 今日提醒、行事曆＝📅 這週行程
 // 點小工具：打開 Scriptable，顯示完整的清單（待辦可以打勾）
 
-const VER = '11/10a';
+const VER = '11/10b';
 const API = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
 const WEB = 'https://a0923337553-ai.github.io/bojie-site/';
 const SELF = WEB + 'bojie-widget.js';
@@ -377,7 +378,30 @@ function buildWidget(d, fam, p) {
   const todos = todoList(f);
   const show = kind || (big ? 'cal' : 'rem');
 
-  if (show === 'news') {
+  if (fam === 'extraLarge' && show !== 'news') {
+    // iPad 特大（使用者 2026-11-10「ipad也要適配」）：左邊這個月的月曆，右邊今日提醒＋這週行程＋待辦
+    header(w, '📅 ' + new Date().getFullYear() + ' 年 ' + (new Date().getMonth() + 1) + ' 月　柏捷工地', d, 13.5);
+    const row = w.addStack(); row.layoutHorizontally(); row.topAlignContent();
+    const left = row.addStack(); left.layoutVertically(); left.size = new Size(275, 0);
+    monthGrid(left, f);
+    left.addSpacer();
+    row.addSpacer(18);
+    const right = row.addStack(); right.layoutVertically();
+    const rem = remRows(f), open = todos ? todos.filter(t => !t.done) : null;
+    txt(right, '⏰ 今日提醒', 12, COL.head, { bold: true });
+    const remN = Math.min(rem.length, 6);
+    rows(right, rem, 6, 12);
+    divider(right);
+    const tl = todos ? 1 + Math.min(3, Math.max(1, open.length)) : 0;
+    txt(right, weekTitle(f), 12, COL.head, { bold: true });
+    weekBlock(right, f, Math.max(3, 19 - 1 - remN - 1 - tl - (todos ? 1 : 0)), 12);
+    if (todos) {
+      divider(right);
+      txt(right, '✅ 待辦 ' + open.length, 12, COL.green, { bold: true });
+      rows(right, todoRows(todos, tl - 1), 9, 12);
+    }
+    right.addSpacer();
+  } else if (show === 'news') {
     header(w, '📣 最新消息', d, fam === 'small' ? 12 : 13);
     newsRows(w, f, fam === 'small' ? 2 : big ? 12 : 5, fam === 'small' ? 11.5 : 12, fam === 'small');
   } else if (show === 'cal' && big) {
@@ -466,7 +490,7 @@ async function selfUpdate() {
 }
 
 const HOWTO = '放到桌面：\n① 回到桌面，長按空白的地方\n② 左上角「編輯」→「加入小工具」\n③ 搜尋「Scriptable」，選大小 →「加入小工具」\n④ 點一下剛放好的小工具，「Script」選「柏捷工地」\n\n' +
-  '小、中＝今日提醒；大＝月曆＋這週行程＋待辦。\n「Parameter」打「消息」＝最新消息。\n鎖定畫面也可以放。';
+  '小、中＝今日提醒；大＝月曆＋這週行程＋待辦；特大（iPad）＝左邊月曆、右邊今日提醒＋這週＋待辦。\n「Parameter」打「消息」＝最新消息。\n鎖定畫面也可以放。\n\nMac：macOS 14 以上可以把這支 iPhone 的小工具放到 Mac 桌面（桌面按右鍵 →「編輯小工具」→ iPhone 的 Scriptable）。';
 
 async function appMain(show) {
   const upd = await selfUpdate();
