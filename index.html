@@ -148,6 +148,32 @@ textarea { min-height:76px; resize:vertical; }
 .stepper .mid { flex:1; text-align:center; color:var(--ink); }
 /* PDF */
 #pdfpages canvas { display:block; width:100%; height:auto; background:#fff; margin-bottom:8px; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+/* 電腦（寬螢幕）也能用（使用者 2026-11-10「現在已經有網頁版本但他是適配手機，我想要電腦也能打開的」）：
+   手機照舊一欄；寬度 900 以上首頁左右兩欄、卡片拉高，工地頁兩欄，日誌照片一排四張，行事曆左右並排 */
+.hub { display:flex; flex-direction:column; }
+.pc-only { display:none; }
+@media (min-width: 900px) {
+  .wrap { max-width:1180px; padding:18px 22px 48px; }
+  .wrap.narrow, .r-login .wrap, .r-work .wrap, .r-edit .wrap, .r-view .wrap, .r-todo .wrap, .r-pours .wrap, .r-sheets .wrap, .r-contracts .wrap { max-width:780px; }
+  .hero { padding-left:22px; padding-right:22px; }
+  .hero-in { max-width:1136px; }
+  .hubcols { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1.25fr); column-gap:18px; align-items:start; }
+  .a-news .scard { height:590px !important; }
+  .hub.has-week .a-news .scard { height:360px !important; }
+  .a-rem .scard { height:300px !important; }
+  .a-week .scard { height:190px !important; }
+  .chips.scroll { flex-wrap:wrap; overflow:visible; }
+  .tiles { display:grid; grid-template-columns:1fr 1fr; column-gap:14px; }
+  .pgrid { grid-template-columns:repeat(4, 1fr); }
+  .thumbs { grid-template-columns:repeat(6, 1fr); }
+  .calgrid { display:grid; grid-template-columns:minmax(0, 1.1fr) minmax(0, 1fr); column-gap:18px; align-items:start; }
+  .mcell { height:56px; }
+  .mcell button { width:50px; height:50px; }
+  .phone-only { display:none; }
+  .pc-only { display:block; }
+  #pdfpages { max-width:1400px; margin:0 auto; }
+  .tile:hover, .item:hover, .news:hover, .ev:hover, .siteopt:hover { filter:brightness(.97); }
+}
 /* 跳出的視窗 */
 .mask { position:fixed; inset:0; background:rgba(10,30,45,.45); z-index:50; display:flex; align-items:center; justify-content:center; padding:14px; }
 .sheet { background:#fff; border-radius:20px; width:100%; max-width:540px; max-height:88vh; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:18px 16px 10px; }
@@ -166,7 +192,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10b';
+var WEB_VERSION = '11/10c';
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 var UNFILED = '未分組';
 var MAX_PHOTOS = 12, MAX_MATS = 9, MAX_RECEIPTS = 12;
@@ -472,6 +498,7 @@ function render() {
   else h = ({ hub: renderHub, work: renderWork, edit: renderEdit, view: renderView, site: renderSite, pours: renderPours, sheets: renderSheets,
     pdf: renderPdf, contracts: renderContracts, todo: renderTodo, logs: renderLogs, calendar: renderCal }[S.route] || renderHub)();
   $('app').innerHTML = h;
+  $('app').className = 'r-' + S.route;   // 電腦版：清單、表單那幾頁窄一點比較好讀
   if (S.route === 'login') { var c = $('code'); if (c) c.value = S.codeInput; }
   for (var k in keep) { var el = document.querySelector('[data-sk="' + k + '"]'); if (el) el.scrollTop = keep[k]; }
   fillPhotos();
@@ -492,10 +519,14 @@ function renderModal() {
 }
 function closeModal() { S.modal = null; renderModal(); }
 
+/** 電腦（寬螢幕）：寬度 900 以上 */
+function wide() { return !!(window.matchMedia && window.matchMedia('(min-width: 900px)').matches); }
+var WIDE_NOW = null;
+window.addEventListener('resize', function () { var w = wide(); if (WIDE_NOW !== null && w !== WIDE_NOW && S.route === 'hub') renderSoft(); WIDE_NOW = w; });
 function standalone() { return !!(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)); }
 
 function renderLogin() {
-  var h = topBar('柏捷工地App') + '<div class="wrap">';
+  var h = topBar('柏捷工地App') + '<div class="wrap narrow">';
   if (S.locked) {
     return h + '<div class="card"><h2 style="margin:4px 0 10px;font-size:22px">🔒 這支手機鎖住了</h2><div class="err">' + esc(S.locked) + '</div>' +
       '<button class="ghost" data-act="retry">' + (S.busy ? '確認中…' : '再試一次') + '</button></div></div>';
@@ -513,25 +544,29 @@ function renderLogin() {
     '<button class="big" data-act="login" style="margin-top:12px"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? '登入中…' : '登入') + '</button>';
   h += S.saved ? '<div class="note">要換人或換代碼，請找管理者。</div>' : '<div class="note">代碼只給你自己用；打錯 3 次這支手機會先鎖 30 分鐘。</div>';
   h += '</div>';
-  if (!standalone()) h += '<div class="box"><b>iPhone 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按下面的「分享」⬆︎ →「加入主畫面」→ 之後都從桌面的「柏捷工地」圖示打開，在那裡輸入代碼（Safari 裡輸入的，圖示那邊不會記得）。</div></div>';
+  if (!standalone()) h += '<div class="box phone-only"><b>iPhone 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按下面的「分享」⬆︎ →「加入主畫面」→ 之後都從桌面的「柏捷工地」圖示打開，在那裡輸入代碼（Safari 裡輸入的，圖示那邊不會記得）。</div></div>';
+  h += '<div class="box pc-only" style="border-color:var(--teal);background:#E9F7F6"><b>電腦也可以用</b><div>直接用這個網址打開就好；代碼會記在這台電腦的這個瀏覽器（換瀏覽器、清除瀏覽紀錄要重打）。可以把這頁加到書籤。</div></div>';
   return h + '<div class="sub" style="text-align:center">網頁版 ' + WEB_VERSION + '</div></div>';
 }
 
 // ===================== 首頁 =====================
 function renderHub() {
   var s = S.s, f = S.feed, off = isOffice(), sites = feedSites(), news = shownNews();
-  var h = renderHero() + '<div class="wrap">';
-  h += siteCard(sites, news);
+  var week = off && f && f.cal;
+  // 手機一欄（照這個順序）；電腦兩欄，左右各自往下排（左：工地、提醒、天氣；右：這週行程、最新消息）
   var todos = off ? homeTodos() : null;
-  h += todos ? remTodoCard(todos) : scrollCard('⏰ 今日提醒', 168, remRows(), '', null, 'rem');
-  if (off && f && f.cal) h += weekCalCard(f.cal);
-  h += newsCard(news);
-  if (S.fc && S.fc.days && S.fc.days.length) h += weekWeather(S.fc);
+  var cSite = '<div class="a-site">' + siteCard(sites, news) + '</div>';
+  var cRem = '<div class="a-rem">' + (todos ? remTodoCard(todos) : scrollCard('⏰ 今日提醒', 168, remRows(), '', null, 'rem')) + '</div>';
+  var cWeek = week ? '<div class="a-week">' + weekCalCard(f.cal) + '</div>' : '';
+  var cNews = '<div class="a-news">' + newsCard(news) + '</div>';
+  var cWx = S.fc && S.fc.days && S.fc.days.length ? '<div class="a-wx">' + weekWeather(S.fc) + '</div>' : '';
+  var h = renderHero() + '<div class="wrap hub' + (week ? ' has-week' : '') + '">';
+  h += wide() ? '<div class="hubcols"><div>' + cSite + cRem + cWx + '</div><div>' + cWeek + cNews + '</div></div>' : cSite + cRem + cWeek + cNews + cWx;
   var sub = S.feedErr || (!f && !S.feedBusy ? '讀不到最新消息：網路好了按上面「⟳ 更新」' : '');
-  h += '<div class="card"><button class="big" style="margin:0" data-act="sync">' + (S.feedBusy ? '更新中…' : '⟳ 更新') + '</button>' +
+  h += '<div class="a-foot"><div class="card"><button class="big" style="margin:0" data-act="sync">' + (S.feedBusy ? '更新中…' : '⟳ 更新') + '</button>' +
     (sub ? '<div class="sub" style="margin-top:6px">' + esc(sub) + '</div>' : '') + '</div>';
   h += '<div class="sub" style="padding-left:4px">' + esc(s.name + (s.full ? '（' + s.full + '）' : '') + '・' + s.role) + '　網頁版 ' + WEB_VERSION + '</div>';
-  h += '<div class="note" style="padding:4px 4px 0">iPhone 網頁版沒有桌面小工具，App 關著時也不會跳通知；打開就會更新。</div>';
+  h += '<div class="note" style="padding:4px 4px 0">網頁版沒有桌面小工具，關著時也不會跳通知；打開就會更新。</div></div>';
   return h + '</div>';
 }
 
@@ -830,11 +865,13 @@ function renderSite() {
   var next = pourOrder(pours).filter(function (d) { return pourOf(d).pourDate && pourOf(d).pourDate >= t; })[0];
   var book = o && o.books && o.books[site];
   var cb = book ? contractBook(book) : null;
+  h += '<div class="tiles">';
   h += tile('施工日誌', '每天的日誌、施工人員傳的、照片', '#2F80ED', '📋', 'logs');
   h += tile('鋼筋施工單', sheets + ' 份', '#16A6A0', '📐', 'sheets');
   h += tile('混凝土灌漿數量', next ? '下一次 ' + rocDate(pourOf(next).pourDate) + '（' + (pourOf(next).part || '') + '）' + (pourOf(next).m3 ? ' ・ ' + pourOf(next).m3 + ' m³' : '') : pours.length + ' 份', '#F2994A', '🚚', 'pours');
   h += tile('發包', cb ? '未發包 ' + cb.todo.length + ' ・ 已發包 ' + cb.done.length : '還沒有發包資料', '#9B51E0', '🤝', 'contracts');
   if (S.feed && S.feed.todo) h += tile('待辦事項', todoLine(S.feed.todo[site]), '#1E8E5A', '✅', 'todo');
+  h += '</div>';
   if (o && S.officeErr) h += '<div class="sub">' + esc(S.officeErr) + '</div>';
   return h + '</div>';
 }
@@ -1007,6 +1044,7 @@ function renderCal() {
   var C = S.cal, t = todayYmd(), p = C.month.split('-');
   var h = topBar('行事曆', 'hub', C.loading ? '讀取中…' : '⟳ 更新', 'calreload') + '<div class="wrap">';
   if (C.err) h += '<div class="card" style="background:#FFF1F0;color:var(--red);font-size:14px;line-height:20px">' + esc(C.err) + '</div>';
+  h += '<div class="calgrid"><div>';   // 電腦：左邊月曆、右邊那天的行程
   h += '<div class="card"><div class="row"><button class="link" style="font-size:30px;color:var(--teal);padding:0 14px;font-weight:normal" data-act="calmonth" data-v="-1">‹</button>' +
     '<div class="grow" style="text-align:center;font-size:18px;font-weight:800">' + (+p[0] - 1911) + ' 年 ' + (+p[1]) + ' 月</div>' +
     '<button class="link" style="font-size:30px;color:var(--teal);padding:0 14px;font-weight:normal" data-act="calmonth" data-v="1">›</button></div><div class="mgrid">';
@@ -1021,13 +1059,13 @@ function renderCal() {
     h += '<div class="mcell"><button class="' + cls + '"' + (sun ? ' style="color:rgba(229,56,59,.85)"' : '') + ' data-act="calsel" data-v="' + d + '">' + n +
       '<span class="dots">' + new Array(Math.min(3, cnt) + 1).join('<i></i>') + '</span></button></div>';
   }
-  h += '</div></div>';
+  h += '</div></div></div><div>';
   var day = eventsOn(C.events, C.sel);
   h += '<div class="card"><div class="row"><span class="grow" style="font-size:18px;font-weight:800">' + calDay(C.sel) + '</span>' + (C.sel === t ? '<span style="font-size:13px;color:var(--teal);font-weight:bold">今天</span>' : '') + '</div>';
   if (!day.length) h += '<div class="sub" style="font-size:14.5px;padding:8px 0">' + (C.loading ? '讀取中…' : '這天沒有行程') + '</div>';
   day.forEach(function (e, i) { h += evRow(e, i); });
   h += '</div><button class="big" data-act="caladd">＋ 新增行程（' + md(C.sel) + '）</button>' +
-    '<div class="note">放在 Google 日曆「工地」：App、網頁改的，Google 日曆也看得到；Google 日曆改的，按「⟳ 更新」就有。施工人員看不到行事曆。</div></div>';
+    '<div class="note">放在 Google 日曆「工地」：App、網頁改的，Google 日曆也看得到；Google 日曆改的，按「⟳ 更新」就有。施工人員看不到行事曆。</div></div></div></div>';
   return h;
 }
 function evRow(e, i) {
@@ -1162,7 +1200,8 @@ function go(r) {
 
 /** 記住的代碼不能用了（管理者換了代碼或停用）：清掉，回登入畫面重新輸入 */
 function codeGone(msg) {
-  LS.set('code', ''); LS.set('feed', ''); LS.set('here', ''); LS.set('fc', ''); LS.set('seen', '');
+  LS.set('code', ''); LS.set('feed', ''); LS.set('here', ''); LS.set('fc', ''); LS.set('seen', ''); LS.set('sess', '');
+  LOGCACHE = {};
   S.saved = ''; S.code = ''; S.s = null; S.entries = []; S.codeInput = ''; S.feed = null; S.office = null; S.route = 'login'; S.modal = null; renderModal();
   S.err = msg || '這支手機記的代碼已經不能用（管理者換了代碼或停用），請輸入新的代碼。'; render();
 }
@@ -1184,7 +1223,7 @@ function refresh() {
     S.entries = r.entries || []; if (r.today) S.s.today = r.today; S.err = ''; S.loading = false; render();
   }).catch(function (e) { S.loading = false; var m = failMsg(e); if (m) { S.err = m; render(); } });
 }
-function openWork(from) { S.workFrom = from || 'hub'; S.entries = []; go('work'); refresh(); }
+function openWork(from) { S.workFrom = from || 'hub'; S.entries = []; go('work'); refresh(); prefetchLog(S.site, null, true); }
 
 function openEdit(e) {
   var days = windowDays(), s = S.s;
@@ -1293,16 +1332,50 @@ function openPdf(id) {
   }).catch(function (e) { if (S.pdf !== my) return; var m = failMsg(e); if (m) pdfStatus('打不開：' + m); });
 }
 
-/** 施工日誌（一次一天） */
-function openLogs(from) { S.logFrom = from; S.log = null; S.logBusy = '讀取中…'; go('logs'); loadLog(null); }
-function loadLog(date) {
-  S.logBusy = '讀取中…'; render();
-  var site = S.site, body = { site: site }; if (date) body.date = date;
-  api('logs', body).then(function (r) {
-    if (S.route !== 'logs' || S.site !== site) return;
+/**
+ * 施工日誌（一次一天）。快一點（使用者 2026-11-10「施工人員再開日誌也很慢」「全部人員都量過時間，優化速度」）：
+ * 一進「我的工作」或工地頁就在背景讀最新那天＋前幾張照片；看過的日子記 10 分鐘，1 分鐘內的不再問；看一天時先讀前一天。
+ */
+var LOGCACHE = {}, LOGRUN = {};
+function logKey(site, date) { return site + '|' + (date || 'latest'); }
+function logCached(site, date, maxAge) { var h = LOGCACHE[logKey(site, date)]; return h && Date.now() - h.at < (maxAge || 600000) ? h.day : null; }
+function logFetch(site, date) {
+  var body = { site: site }; if (date) body.date = date;
+  return api('logs', body).then(function (r) {
     var log = null; try { log = r.log ? JSON.parse(r.log) : null; } catch (e) { log = null; }
-    S.log = { date: r.date, dates: r.dates || [], log: log, workers: r.workers || [] }; S.logBusy = ''; render(); window.scrollTo(0, 0);
-  }).catch(function (e) { var m = failMsg(e); if (m) { S.logBusy = '讀不到：' + m; render(); } });
+    var day = { date: r.date, dates: r.dates || [], log: log, workers: r.workers || [] }, h = { day: day, at: Date.now() };
+    LOGCACHE[logKey(site, date)] = h; if (day.date) LOGCACHE[logKey(site, day.date)] = h;
+    return day;
+  });
+}
+function prefetchLog(site, date, photos) {
+  if (!site || site === UNFILED || !hasFeed()) return;
+  var k = logKey(site, date);
+  if (logCached(site, date, 120000) || LOGRUN[k]) return;
+  LOGRUN[k] = 1;
+  logFetch(site, date).then(function (day) { if (photos) prefetchPhotos(day, 6); }).catch(function () { }).then(function () { delete LOGRUN[k]; });
+}
+function prefetchOlder(site, day) {
+  var i = day.dates.indexOf(day.date), older = i >= 0 ? day.dates[i + 1] : day.dates.filter(function (d) { return d < day.date; })[0];
+  if (older) prefetchLog(site, older, false);
+}
+function prefetchPhotos(day, max) {
+  var n = 0;
+  ((day.log && day.log.photos) || []).forEach(function (p) { if (p.driveId && n++ < max && !S.photos['l:' + p.driveId]) loadPhoto('lid', 'l', p.driveId); });
+  (day.workers || []).forEach(function (e) { (e.photos || []).forEach(function (id) { if (n++ < max && !S.photos['w:' + id]) loadPhoto('pid', 'w', id); }); });
+}
+function openLogs(from) { S.logFrom = from; S.log = logCached(S.site, null); S.logBusy = S.log ? '' : '讀取中…'; go('logs'); loadLog(null); }
+function loadLog(date) {
+  var site = S.site, cached = logCached(site, date);
+  S.logWant = date || '';
+  if (cached) { S.log = cached; S.logBusy = ''; render(); } else { S.logBusy = '讀取中…'; render(); }
+  if (logCached(site, date, 60000)) { prefetchOlder(site, cached); return; }   // 1 分鐘內剛讀過：不用再問
+  logFetch(site, date).then(function (day) {
+    if (S.route !== 'logs' || S.site !== site || S.logWant !== (date || '')) return;
+    var moved = !S.log || S.log.date !== day.date;
+    S.log = day; S.logBusy = ''; render(); if (moved) window.scrollTo(0, 0);
+    prefetchOlder(site, day);
+  }).catch(function (e) { var m = failMsg(e); if (m && !cached) { S.logBusy = '讀不到：' + m; render(); } });
 }
 
 /** 待辦事項（一個工地） */
@@ -1339,9 +1412,21 @@ function openNotice(n) { markSeen([n.key]); S.modal = { type: 'nview', n: n, ask
 var ACT = {
   login: function () {
     var c = S.saved || (S.codeInput || '').trim().toUpperCase(); if (!c || S.busy) return;
-    S.code = c; S.busy = true; S.err = ''; render();
+    S.code = c; S.err = '';
+    // 快一點（使用者 2026-11-10「優化速度」）：記住的代碼＋上次的資料 → 直接進首頁，登入、最新消息在背景同時問；
+    // 代碼被換掉、停用（CODE）或鎖住（LOCKED）一樣會被請回登入畫面
+    var sess = S.saved ? LS.getJSON('sess') : null;
+    if (sess && sess.today && Number(sess.version) >= 7) {
+      S.s = sess; S.site = LS.get('site'); pickSite(sess);
+      loadSeen(); S.feed = LS.getJSON('feed'); S.here = LS.getJSON('here'); S.fc = LS.getJSON('fc');
+      go('hub'); loadFeed(false);
+      api('login').then(function (s) { if (S.code !== c) return; S.s = s; LS.setJSON('sess', s); pickSite(s); renderSoft(); })
+        .catch(function (e) { if (e && e.error === 'CODE') codeGone(); });
+      return;
+    }
+    S.busy = true; render();
     api('login').then(function (s) {
-      S.busy = false; S.s = s; S.saved = c; LS.set('code', c); S.site = LS.get('site'); pickSite(s);
+      S.busy = false; S.s = s; S.saved = c; LS.set('code', c); LS.setJSON('sess', s); S.site = LS.get('site'); pickSite(s);
       if (hasFeed()) {
         loadSeen(); S.feed = LS.getJSON('feed'); S.here = LS.getJSON('here'); S.fc = LS.getJSON('fc');
         go('hub'); loadFeed(false);
@@ -1375,7 +1460,7 @@ var ACT = {
   enter: function (v) {
     markSeen(shownNews().filter(function (n) { return n.site === v && n.isNew; }).map(function (n) { return n.key; }));
     setSite(v); S.siteOpen = false;
-    if (isOffice()) openOffice('site'); else openWork('hub');
+    if (isOffice()) { openOffice('site'); prefetchLog(v, null, true); } else openWork('hub');
   },
   rem: function (v) {
     var r = ((S.feed && S.feed.reminders) || [])[+v]; if (!r) return;
@@ -1417,7 +1502,7 @@ var ACT = {
   },
   // 我的工作
   reload: function () { refresh(); },
-  site: function (v) { S.site = v; LS.set('site', v); S.entries = []; render(); refresh(); },
+  site: function (v) { S.site = v; LS.set('site', v); S.entries = []; render(); refresh(); prefetchLog(v, null, true); },
   add: function () { openEdit(null); },
   logsfromwork: function () { openLogs('work'); },
   open: function (id) {
