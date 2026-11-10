@@ -33,6 +33,23 @@ button{font:inherit}
 .chip i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 #view{position:fixed;left:0;right:0;bottom:0;touch-action:none}
 #view canvas{display:block;width:100%;height:100%}
+/* 圈起來（使用者 2026-11-10「可以圈起來，哪裡需要改進」） */
+#pins{position:fixed;z-index:4;pointer-events:none;overflow:hidden}
+#pins .pin{position:absolute;pointer-events:auto;cursor:pointer}
+#pins .ring{position:absolute;border:3px solid #E03131;border-radius:50%;transform:translate(-50%,-50%);box-sizing:border-box;pointer-events:none}
+#pins .num{position:absolute;transform:translate(-50%,-50%);min-width:22px;height:22px;border-radius:11px;background:#E03131;color:#fff;font-size:12px;font-weight:700;text-align:center;line-height:22px;padding:0 4px;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+#pins .done .ring{border-color:#0F766E}#pins .done .num{background:#0F766E}
+#pins .on .ring{border-width:4px;border-color:#F2C230}#pins .draft .ring{border-style:dashed}
+#draw{position:fixed;z-index:7;touch-action:none;display:none;cursor:crosshair}
+#markBtn{position:fixed;z-index:6;border:0;border-radius:18px;padding:6px 12px;font-weight:700;background:#E03131;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;display:none}
+#markBtn.on{background:#fff;color:#E03131;border:2px solid #E03131}
+#markTip{position:fixed;z-index:7;left:50%;transform:translateX(-50%);background:#E03131;color:#fff;border-radius:12px;padding:6px 12px;font-size:13px;display:none;pointer-events:none;white-space:nowrap}
+.mk{border:1px solid var(--line);border-radius:12px;padding:7px 10px;margin:0 0 8px;cursor:pointer}
+.mk .no{display:inline-block;min-width:20px;height:20px;border-radius:10px;background:#E03131;color:#fff;font-size:12px;text-align:center;line-height:20px;margin-right:6px;padding:0 3px}
+.mk.done .no{background:#0F766E}.mk.on{border-color:#F2C230;background:#FFFBEA}
+.mk .who{color:var(--sub);font-size:12px}
+.st{font-size:11px;border-radius:5px;padding:0 5px;margin-left:4px}.st.o{background:#FFE3E3;color:#C92A2A}.st.d{background:#E6F4F1;color:#0F766E}
+textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10px;padding:8px;font:inherit;resize:vertical}
 #hint{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:4;background:rgba(31,41,51,.78);color:#fff;border-radius:12px;padding:7px 14px;font-size:13px;pointer-events:none;transition:opacity .6s;white-space:nowrap}
 #side{position:fixed;z-index:6;background:#fff;box-shadow:0 -4px 18px rgba(0,0,0,.12)}
 #side .hd{display:flex;align-items:center;gap:8px;padding:10px 14px 6px;font-weight:700}
@@ -84,6 +101,10 @@ button{font:inherit}
 <div id="view"></div>
 <div id="msg">載入中…</div>
 <div id="hint"></div>
+<div id="pins"></div>
+<svg id="draw"><path id="drawPath" fill="none" stroke="#E03131" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<button id="markBtn">✏️ 圈起來</button>
+<div id="markTip">用手指圈出要改進的地方（點一下也可以）</div>
 <div id="side" style="display:none">
   <div class="hd"><span id="sideTitle">🚚 灌漿區</span><button class="btn ghost tog" id="tog">收起</button></div>
   <div class="bd" id="sideBody"></div>
@@ -134,17 +155,20 @@ function errText(e) {
 }
 
 // ---------- 讀模型：記在這台（沒改就不重抓）；灌漿清單每次都問 ----------
-let M = null, pours = [];
+let M = null, pours = [], marks = [], me = null;
+const LOCAL = !!(P.get('demo') || P.get('file'));   // 本機測試：圈的只存在畫面上
 async function loadModel() {
   if (P.get('demo')) return demoModel();
   if (P.get('file')) {   // 本機測試：?file=結構3D.json&pourparts=基礎,2F
     pours = (P.get('pourparts') || '').split(',').filter(Boolean).map((p, i) => ({ id: 't' + i, date: '2026-11-' + (12 + i), part: p, m3: '', trucks: '' }));
+    me = { name: '測試', role: '管理者' };
     return fetch(P.get('file')).then(r => r.json());
   }
   let have = null;
   try { have = JSON.parse(ls('m3d.' + SITE) || 'null'); } catch (e) { have = null; }
   const r = await api('model3d', { site: SITE, have: have ? have.modified : '' });
   pours = (r.pours || []).map(p => { const pr = p.props || {}; return { id: p.id, date: pr.pourDate || '', part: pr.part || String(p.name || '').replace(/\.pdf$/i, ''), m3: pr.m3 || '', trucks: pr.trucks || '' }; });
+  marks = r.marks || []; me = r.me || null;
   if (r.same && have) return JSON.parse(have.text);
   if (!r.model) throw { error: 'NONE' };
   ls('m3d.' + SITE, JSON.stringify({ modified: r.modified || '', text: r.model }));
@@ -186,7 +210,7 @@ function start() {
   document.getElementById('made').textContent = M.made ? '（' + String(M.made).slice(0, 10) + ' 匯出）' : '';
   document.getElementById('hint').textContent = matchMedia('(pointer:fine)').matches ? '左鍵轉動・右鍵移動・滾輪縮放・點一下看構件' : '單指轉動・雙指縮放／移動・點一下看構件';
   document.getElementById('side').style.display = '';
-  build(); bindInput(); apply(); layout(); fitTo(visibleObjs(), false);
+  build(); bindInput(); bindMarking(); apply(); layout(); fitTo(visibleObjs(), false);
   say('');
   setTimeout(hideHint, 7000);
   shots();
@@ -369,6 +393,98 @@ function pick(x, y) {
   apply();
 }
 function hideHint() { const h = document.getElementById('hint'); if (h) h.style.opacity = 0; }
+
+// ---------- 圈起來（使用者 2026-11-10「可以圈起來，哪裡需要改進」；老闆、主任、公司、開發者都能圈，開發者按「已改好」） ----------
+const CAD2T = p => new THREE.Vector3(p[0], p[2], -p[1]);
+const T2CAD = v => [Math.round(v.x * 10) / 10, Math.round(-v.z * 10) / 10, Math.round(v.y * 10) / 10];
+let drawingPts = null;
+function markOrder() { return marks.slice().sort((a, b) => (a.at || 0) - (b.at || 0)); }
+function markNo(m) { return markOrder().indexOf(m) + 1; }
+function when(ms) {
+  if (!ms) return '';
+  const t = new Date(ms), n = new Date(), p = v => ('0' + v).slice(-2), hm = p(t.getHours()) + ':' + p(t.getMinutes());
+  const days = Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - new Date(t.getFullYear(), t.getMonth(), t.getDate())) / 86400000);
+  return days === 0 ? '今天 ' + hm : days === 1 ? '昨天 ' + hm : (t.getMonth() + 1) + '/' + t.getDate() + ' ' + hm;
+}
+function setMarking(on) {
+  st.marking = on;
+  const d = document.getElementById('draw'), b = document.getElementById('markBtn'), t = document.getElementById('markTip');
+  d.style.display = on ? 'block' : 'none'; t.style.display = on ? 'block' : 'none';
+  b.classList.toggle('on', on); b.textContent = on ? '取消圈' : '✏️ 圈起來';
+  document.getElementById('drawPath').setAttribute('d', '');
+}
+function bindMarking() {
+  const d = document.getElementById('draw'), path = document.getElementById('drawPath'), b = document.getElementById('markBtn');
+  b.style.display = 'block';
+  b.onclick = () => { st.draft = null; setMarking(!st.marking); renderSide(); layout(); };
+  d.addEventListener('pointerdown', e => { try { d.setPointerCapture(e.pointerId); } catch (x) { } drawingPts = [[e.clientX, e.clientY]]; path.setAttribute('d', ''); });
+  d.addEventListener('pointermove', e => {
+    if (!drawingPts) return;
+    drawingPts.push([e.clientX, e.clientY]);
+    const r = d.getBoundingClientRect();
+    path.setAttribute('d', 'M' + drawingPts.map(p => (p[0] - r.left).toFixed(1) + ' ' + (p[1] - r.top).toFixed(1)).join(' L'));
+  });
+  d.addEventListener('pointerup', () => { if (drawingPts) { const pts = drawingPts; drawingPts = null; finishCircle(pts); } });
+  d.addEventListener('pointercancel', () => { drawingPts = null; });
+}
+/** 圈好了：圈的中心往模型打一條線，碰到的地方就是位置；圈的大小換成模型上的半徑（轉動、縮放都跟著） */
+function finishCircle(pts) {
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const rpx = Math.max(20, Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 2);
+  const r = el.getBoundingClientRect();
+  if (!ray.r) ray.r = new THREE.Raycaster();
+  ray.r.setFromCamera(new THREE.Vector2((cx - r.left) / r.width * 2 - 1, -(cy - r.top) / r.height * 2 + 1), camera);
+  const hits = ray.r.intersectObjects(items.filter(it => it.mesh.visible && it.mesh.material.opacity !== 0.08).map(it => it.mesh), false);
+  const p = hits.length ? hits[0].point : ray.r.ray.at(camera.position.distanceTo(cam.target), new THREE.Vector3());
+  const dist = camera.position.distanceTo(p), wr = rpx * 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / r.height;
+  const hm = hits.length ? hits[0].object.userData.m : null, c = T2CAD(p);
+  st.draft = { pos: [c[0], c[1], c[2], Math.round(wr)], cam: { t: T2CAD(cam.target), d: Math.round(cam.dist), th: +cam.theta.toFixed(3), ph: +cam.phi.toFixed(3) },
+    member: hm ? (hm.f + ' ' + hm.k + ' ' + (hm.c || hm.n || '')).trim() : '' };
+  setMarking(false); st.sideMin = false; st.markSel = null; renderSide(); layout();
+  setTimeout(() => { const t = document.getElementById('markText'); if (t) t.focus(); }, 60);
+}
+/** 每次重畫畫面：圈的位置投影到螢幕上（擋在模型後面也照樣顯示，才找得到） */
+function updatePins() {
+  const box = document.getElementById('pins'); if (!box || !camera) return;
+  const r = el.getBoundingClientRect(), tanh = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const list = markOrder().map((m, i) => ({ m, no: i + 1 }));
+  if (st.draft) list.push({ m: { id: '_draft', pos: st.draft.pos }, no: '＋', draft: true });
+  let h = '';
+  list.forEach(({ m, no, draft }) => {
+    if (!m.pos || m.pos.length < 3) return;
+    const v = CAD2T(m.pos), q = v.clone().project(camera);
+    if (q.z > 1 || Math.abs(q.x) > 1.1 || Math.abs(q.y) > 1.1) return;
+    const d = camera.position.distanceTo(v), x = (q.x + 1) / 2 * r.width, y = (1 - q.y) / 2 * r.height;
+    const rad = Math.max(12, Math.min(r.height / 2, (m.pos[3] || 40) / (2 * d * tanh) * r.height));
+    h += '<div class="pin' + (m.done ? ' done' : '') + (st.markSel === m.id ? ' on' : '') + (draft ? ' draft' : '') + '" data-id="' + esc(m.id) + '" style="left:' + x.toFixed(1) + 'px;top:' + y.toFixed(1) + 'px">'
+      + '<div class="ring" style="width:' + (2 * rad).toFixed(0) + 'px;height:' + (2 * rad).toFixed(0) + 'px"></div><div class="num">' + no + '</div></div>';
+  });
+  box.innerHTML = h;
+  box.querySelectorAll('.pin').forEach(p => p.onclick = () => { if (p.dataset.id !== '_draft') selectMark(p.dataset.id, false); });
+}
+function selectMark(id, jump) {
+  const m = marks.find(x => x.id === id); if (!m) return;
+  st.markSel = id; st.sel = null; st.draft = null; st.sideMin = false;
+  if (jump && m.cam && m.cam.t) { cam.target = CAD2T(m.cam.t); cam.dist = m.cam.d || cam.dist; cam.theta = m.cam.th; cam.phi = m.cam.ph; placeCamera(); }
+  renderSide(); layout(); needs = true;
+}
+async function markApi(body) {
+  if (LOCAL) return { ok: true, local: true };
+  return api('mark3d', Object.assign({ site: SITE }, body));
+}
+async function reloadMarks() {
+  if (LOCAL) return;
+  try { const r = await api('mark3d', { op: 'list', site: SITE }); marks = r.marks || []; me = r.me || me; } catch (e) { }
+}
+function markSection() {
+  const head = '<div style="font-weight:700;margin:2px 0 6px">📍 要改進的地方' + (marks.length ? '（待處理 ' + marks.filter(m => !m.done).length + '）' : '') + '</div>';
+  if (!marks.length) return head + '<div class="muted" style="margin:0 0 10px">還沒有人圈。按畫面右上角「✏️ 圈起來」，用手指圈出要改進的地方。</div>';
+  return head + marks.slice().sort((a, b) => (a.done - b.done) || (b.at - a.at)).map(m =>
+    '<div class="mk' + (m.done ? ' done' : '') + (st.markSel === m.id ? ' on' : '') + '" data-mk="' + esc(m.id) + '"><span class="no">' + markNo(m) + '</span>' + esc(m.text)
+    + '<span class="st ' + (m.done ? 'd">已改好' : 'o">待處理') + '</span><div class="who">' + esc(m.by) + '・' + when(m.at)
+    + (m.done && m.doneBy ? ' → ' + esc(m.doneBy) + ' ' + when(m.doneAt) + ' 改好了' : '') + '</div></div>').join('') + '<div style="height:6px"></div>';
+}
 
 // ---------- 配筋（照配筋表的字和柱斷面圖長出鋼筋，示意） ----------
 // 顏色：主筋紅、加鐵橘、腰筋咖啡、箍筋藍；基礎版下層紅、上層紫
@@ -588,7 +704,25 @@ function renderSide() {
   side.classList.toggle('min', st.sideMin);
   document.getElementById('tog').textContent = st.sideMin ? '打開' : '收起';
   let h = '';
-  if (st.rebar) {
+  const mk = st.markSel ? marks.find(x => x.id === st.markSel) : null;
+  if (st.draft) {
+    T.textContent = '✏️ 圈起來：要改進什麼';
+    h += '<div class="card">' + (st.draft.member ? '<div class="muted">圈的地方：' + esc(st.draft.member) + '</div>' : '')
+      + '<textarea class="in" id="markText" maxlength="300" placeholder="例如：2F 這支梁的上層筋看起來不夠長，請確認"></textarea>'
+      + '<div class="muted">送出後老闆、主任、公司、開發者都看得到；開發者、老闆、主任會收到通知，開發者改好會按「已改好」。</div>'
+      + '<div class="row"><button class="btn solid" id="markSend">送出</button><button class="btn ghost" id="markCancel">取消</button><span class="muted" id="markErr"></span></div></div>';
+  } else if (mk) {
+    const dev = me && me.role === '管理者', mine = me && me.name === mk.by;
+    T.textContent = '📍 要改進的地方 ' + markNo(mk);
+    h += '<div class="card"><div class="t" style="font-size:16px">' + esc(mk.text) + '</div>'
+      + '<div class="muted" style="margin-top:4px">' + esc(mk.by) + '・' + when(mk.at) + (mk.member ? '・' + esc(mk.member) : '') + '</div>'
+      + '<div style="margin-top:6px">' + (mk.done ? '<span class="st d">已改好</span> <span class="muted">' + esc(mk.doneBy || '') + ' ' + when(mk.doneAt) + '</span>' : '<span class="st o">待處理</span>') + '</div>'
+      + '<div class="row"><button class="btn" id="markGo">轉到這裡</button>'
+      + (dev ? '<button class="btn solid" id="markDone">' + (mk.done ? '改回待處理' : '✅ 已改好') + '</button>' : '')
+      + (dev || mine ? '<button class="btn ghost" id="markDel">刪除</button>' : '')
+      + '<button class="btn ghost" id="markClose">關閉</button><span class="muted" id="markErr"></span></div></div>';
+    h += markSection();
+  } else if (st.rebar) {
     const m = st.rebar;
     const job = jobsOf(m).find(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
     T.textContent = '🔩 ' + (job && job.k !== '柱' ? job.n : m.f + ' ' + m.k + ' ' + (m.c || '')) + ' 的配筋';
@@ -615,11 +749,37 @@ function renderSide() {
       + '<div class="muted" style="margin-top:8px">' + legend() + '<br>上面換樓層、點「柱」「梁」「基礎」只看一種；點一支看它的配筋。</div>'
       + '<div class="row"><button class="btn solid" id="barsOff">關掉鋼筋</button></div></div>';
   } else {
-    T.textContent = '🚚 灌漿區';
-    h += pourList(true);
+    T.textContent = '📍 要改進的地方・🚚 灌漿區';
+    h += markSection() + pourList(true);
   }
   B.innerHTML = h;
   const on = (id, fn) => { const x = document.getElementById(id); if (x) x.onclick = fn; };
+  const err = t => { const x = document.getElementById('markErr'); if (x) x.textContent = t; };
+  on('markCancel', () => { st.draft = null; renderSide(); layout(); needs = true; });
+  on('markSend', async () => {
+    const text = (document.getElementById('markText').value || '').trim();
+    if (!text) { err('要寫哪裡要改進'); return; }
+    const d = st.draft; err('送出中…');
+    try {
+      const r = await markApi({ op: 'add', text, pos: d.pos, cam: d.cam, member: d.member });
+      if (r.local) marks.push({ id: 'L' + Date.now(), at: Date.now(), by: (me && me.name) || '我', text, pos: d.pos, cam: d.cam, member: d.member, done: false });
+      else await reloadMarks();
+      st.draft = null; st.markSel = r.id || (marks[marks.length - 1] || {}).id || null; renderSide(); layout(); needs = true;
+    } catch (e) { err('沒有送出：' + errText(e)); }
+  });
+  on('markGo', () => selectMark(st.markSel, true));
+  on('markClose', () => { st.markSel = null; renderSide(); layout(); needs = true; });
+  on('markDone', async () => {
+    const m = marks.find(x => x.id === st.markSel); if (!m) return; err('…');
+    try { const r = await markApi({ op: 'done', id: m.id, done: !m.done }); if (r.local) Object.assign(m, { done: !m.done, doneBy: me.name, doneAt: Date.now() }); else await reloadMarks(); renderSide(); needs = true; }
+    catch (e) { err(errText(e)); }
+  });
+  on('markDel', async () => {
+    if (!confirm('刪除這個標記？')) return;
+    try { const r = await markApi({ op: 'del', id: st.markSel }); if (r.local) marks = marks.filter(x => x.id !== st.markSel); else await reloadMarks(); st.markSel = null; renderSide(); layout(); needs = true; }
+    catch (e) { err(errText(e)); }
+  });
+  B.querySelectorAll('.mk').forEach(x => x.onclick = () => selectMark(x.dataset.mk, true));
   on('exitRebar', () => { st.rebar = null; apply(); fitTo(visibleObjs(), false); });
   on('showRebar', () => { st.rebar = st.sel; st.focus = focusOf(st.rebar); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); });
   on('unsel', () => { st.sel = null; apply(); });
@@ -679,13 +839,30 @@ function layout() {
   if (cam.target) placeCamera();
   const hint = document.getElementById('hint');
   hint.style.bottom = (WIDE() ? 18 : side.offsetHeight + 12) + 'px'; hint.style.left = (w / 2) + 'px';
+  // 圈起來：標記、畫圈的那一層跟 3D 畫面一樣大；按鈕在畫面右上角
+  const vr = view.getBoundingClientRect();
+  ['pins', 'draw'].forEach(id => { const e = document.getElementById(id); e.style.left = vr.left + 'px'; e.style.top = vr.top + 'px'; e.style.width = vr.width + 'px'; e.style.height = vr.height + 'px'; });
+  const dr = document.getElementById('draw'); dr.setAttribute('width', vr.width); dr.setAttribute('height', vr.height);
+  const mb = document.getElementById('markBtn'); mb.style.top = (vr.top + 10) + 'px'; mb.style.right = (innerWidth - vr.right + 12) + 'px';
+  const mt = document.getElementById('markTip'); mt.style.top = (vr.top + 52) + 'px'; mt.style.left = (vr.left + vr.width / 2) + 'px';
+  needs = true;
 }
-function frame() { if (needs) { needs = false; renderer.render(scene, camera); } requestAnimationFrame(frame); }
+function frame() { if (needs) { needs = false; renderer.render(scene, camera); updatePins(); } requestAnimationFrame(frame); }
 
 // ---------- 截圖、範例 ----------
 function shots() {
   const s = P.get('shot'); if (!s) return;
   hideHint(); document.getElementById('hint').style.display = 'none';
+  if (P.get('marks') === 'demo') {   // 截圖用：兩個標記（一個待處理、一個已改好）
+    const pick2 = k => (M.m || []).filter(m => m.k === k && m.b)[3] || (M.m || []).find(m => m.k === k && m.b);
+    const at = m => [(m.b[0] + m.b[3]) / 2, (m.b[1] + m.b[4]) / 2, (m.b[2] + m.b[5]) / 2, 90];
+    const b = pick2('梁'), c = pick2('柱');
+    if (b) marks.push({ id: 'd1', at: Date.now() - 3600e3, by: '測試老闆', text: '2F 這支梁的上層筋看起來不夠長，請確認', pos: at(b), member: b.f + ' 梁 ' + (b.c || ''), done: false });
+    if (c) marks.push({ id: 'd2', at: Date.now() - 86400e3, by: '測試主任', text: 'C3 箍筋間距再確認', pos: at(c), member: c.f + ' 柱 ' + (c.c || ''), done: true, doneBy: '開發者', doneAt: Date.now() - 7200e3 });
+    if (P.get('sel') === '1') st.markSel = 'd1';
+    if (P.get('draft') === '1' && b) st.draft = { pos: at(b), member: b.f + ' 梁 ' + (b.c || '') };
+    apply();
+  }
   const find = (k, f) => (M.m || []).find(m => m.k === k && (!f || m.f === f) && hasBars(m));
   if (s === 'pour') { const z = zoneList().find(x => x.g === (P.get('zone') || '')) || zoneList()[Math.min(2, zoneList().length - 1)]; if (z) { st.pour = z; apply(); fitTo(items.filter(it => inPour(it.m)).map(it => it.mesh), true); } }
   if (s === 'floor') { st.floor = floorsList()[1] || floorsList()[0]; apply(); fitTo(visibleObjs(), true); }
