@@ -686,7 +686,7 @@ function frame() { if (needs) { needs = false; renderer.render(scene, camera); }
 function shots() {
   const s = P.get('shot'); if (!s) return;
   hideHint(); document.getElementById('hint').style.display = 'none';
-  const find = (k, f) => (M.m || []).find(m => m.k === k && (!f || m.f === f) && m.r);
+  const find = (k, f) => (M.m || []).find(m => m.k === k && (!f || m.f === f) && hasBars(m));
   if (s === 'pour') { const z = zoneList().find(x => x.g === (P.get('zone') || '')) || zoneList()[Math.min(2, zoneList().length - 1)]; if (z) { st.pour = z; apply(); fitTo(items.filter(it => inPour(it.m)).map(it => it.mesh), true); } }
   if (s === 'floor') { st.floor = floorsList()[1] || floorsList()[0]; apply(); fitTo(visibleObjs(), true); }
   if (s === 'bars') {
@@ -695,9 +695,9 @@ function shots() {
     window.__barsN = rebarGroup.children.reduce((a, c) => a + (c.count || 0), 0);
     fitTo(visibleObjs(), true);
   }
-  if (s === 'sel' || s === 'rebar' || s === 'beam') {
-    const byCode = k => P.get('c') && (M.m || []).find(m => m.k === k && m.c === P.get('c') && (!P.get('f') || m.f === P.get('f')) && m.r);
-    const m = s === 'beam' ? (byCode('梁') || byCode('地梁') || find('梁', P.get('f')) || find('地梁')) : (byCode('柱') || find('柱', P.get('f')));
+  if (s === 'sel' || s === 'rebar' || s === 'beam' || s === 'foot') {
+    const byCode = k => P.get('c') && (M.m || []).find(m => m.k === k && m.c === P.get('c') && (!P.get('f') || m.f === P.get('f')) && hasBars(m));
+    const m = s === 'foot' ? (byCode('基礎') || find('基礎')) : s === 'beam' ? (byCode('梁') || byCode('地梁') || find('梁', P.get('f')) || find('地梁')) : (byCode('柱') || find('柱', P.get('f')));
     if (!m) return;
     st.sel = m; apply();
     if (s !== 'sel') { st.rebar = m; st.focus = focusOf(m); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); }
