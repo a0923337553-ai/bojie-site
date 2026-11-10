@@ -17,7 +17,7 @@
   2026-11-10 改版（使用者：「iphone版的線上網址他沒有做更新，依樣是舊版的」）：跟 Android App 0.9.36 用代碼登入的畫面一樣——
     首頁：問候＋所在地天氣、我的工地（進入）、今日提醒／待辦、這週行程、最新消息（＋注意事項）、這週天氣。
     施工人員：進入 → 我的工作（傳工作、照片、單據照片）＋看施工日誌。
-    老闆、主任、公司：進入 → 工地頁（施工日誌、鋼筋施工單、混凝土灌漿數量、發包、待辦事項）；行事曆可以看、新增、修改。
+    老闆、主任、公司：進入 → 工地頁（施工日誌、鋼筋施工單、混凝土灌漿數量、發包、待辦事項、3D 結構＝3d.html）；行事曆可以看、新增、修改。
   iPhone 網頁做不到的：桌面小工具、App 關著時的通知。
   放在自己的網址（不是嵌在 Google 頁面裡），iPhone 才記得住代碼；資料直接傳給收件服務（跟 App 同一套）。
   代碼：第一次輸入、登入成功後記在這支手機，之後鎖住不能改，只按「登入」。
@@ -228,7 +228,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10g';
+var WEB_VERSION = '11/10h';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
 var PCAPP = /[?&]app=pc\b/.test(location.search);
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -919,6 +919,8 @@ function renderSite() {
   h += tile('混凝土灌漿數量', next ? '下一次 ' + rocDate(pourOf(next).pourDate) + '（' + (pourOf(next).part || '') + '）' + (pourOf(next).m3 ? ' ・ ' + pourOf(next).m3 + ' m³' : '') : pours.length + ' 份', '#F2994A', '🚚', 'pours');
   h += tile('發包', cb ? '未發包 ' + cb.todo.length + ' ・ 已發包 ' + cb.done.length : '還沒有發包資料', '#9B51E0', '🤝', 'contracts');
   if (S.feed && S.feed.todo) h += tile('待辦事項', todoLine(S.feed.todo[site]), '#1E8E5A', '✅', 'todo');
+  // 3D 結構（使用者 2026-11-10：結構體、點一筆灌漿亮那幾區、點柱或梁看配筋；施工人員看不到）
+  h += tile('3D 結構', '柱梁版牆・灌漿區・配筋', '#4F6BD8', '🏗️', '3d');
   h += '</div>';
   if (o && S.officeErr) h += '<div class="sub">' + esc(S.officeErr) + '</div>';
   return h + '</div>';
@@ -1243,6 +1245,22 @@ function loadPhoto(attr, kind, id) {
 }
 
 // ---------- 動作 ----------
+/**
+ * 3D 結構（使用者 2026-11-10）：整頁蓋一個 3d.html（同一個網站，讀得到登入的代碼），關掉回到原本的工地頁。
+ * 手機往回滑、按返回鍵也是關掉 3D（先記一筆瀏覽紀錄）。
+ */
+function open3d() {
+  if ($('d3')) return;
+  var d = document.createElement('div'); d.id = 'd3';
+  d.style.cssText = 'position:fixed;inset:0;z-index:1000;background:#F4F6F7';
+  d.innerHTML = '<iframe src="3d.html?embed=1&site=' + encodeURIComponent(S.site) + (PCAPP ? '&app=pc' : '') + '" style="border:0;width:100%;height:100%;display:block" allow="fullscreen"></iframe>';
+  document.body.appendChild(d); document.body.style.overflow = 'hidden';
+  try { history.pushState({ d3: 1 }, ''); } catch (e) { }
+}
+function drop3d() { var d = $('d3'); if (d) { d.parentNode.removeChild(d); document.body.style.overflow = ''; } }
+window.close3d = function () { if (history.state && history.state.d3) history.back(); else drop3d(); };
+window.addEventListener('popstate', function () { drop3d(); });
+
 function go(r) {
   S.route = r; S.err = ''; render(); window.scrollTo(0, 0);
   if (r === 'hub' && S.feedStale) loadFeed(false);
@@ -1611,6 +1629,7 @@ var ACT = {
   tile: function (v) {
     if (v === 'logs') openLogs('site');
     else if (v === 'todo') openTodo('site');
+    else if (v === '3d') open3d();
     else openOffice(v);
   },
   officereload: function () { loadOffice(); },
