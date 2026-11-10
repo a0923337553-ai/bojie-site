@@ -42,6 +42,8 @@ button{font:inherit}
 .pour.on{border-color:var(--warn);background:#FFF4EC}
 .pour b{font-size:15px}
 .pour .m{color:var(--sub);font-size:13px}
+.pour .day{color:var(--warn);font-weight:700}
+.tip{background:#EEF3FF;border-radius:12px;padding:8px 10px;margin:0 0 10px;font-size:14px;color:#2F4A9E}
 .card{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:0 0 8px}
 .card .t{font-size:17px;font-weight:700}
 .card .k{display:inline-block;font-size:12px;border-radius:6px;padding:1px 7px;margin-right:6px;color:#fff;vertical-align:2px}
@@ -500,7 +502,7 @@ function renderSide() {
     h += pourList();
   } else {
     T.textContent = '🚚 灌漿區';
-    h += pourList();
+    h += pourList(true);
   }
   B.innerHTML = h;
   const on = (id, fn) => { const x = document.getElementById(id); if (x) x.onclick = fn; };
@@ -508,22 +510,41 @@ function renderSide() {
   on('showRebar', () => { st.rebar = st.sel; st.sel = null; apply(); fitTo([...rebarGroup.children], false); cam.phi = 1.2; cam.dist *= camera.aspect < 1 ? 0.7 : 1.05; placeCamera(); });
   on('unsel', () => { st.sel = null; apply(); });
   B.querySelectorAll('.pour').forEach(p => p.onclick = () => {
-    const pr = pours.find(x => x.id === p.dataset.id); st.pour = st.pour === pr ? null : pr; st.sel = null; st.rebar = null;
-    if (st.pour) { st.pour.groups = pourGroups(st.pour); st.floor = '全部'; }
+    const id = p.dataset.id, pr = zoneList().find(z => z.id === id) || pours.find(x => x.id === id);
+    st.pour = st.pour && st.pour.id === id ? null : pr; st.sel = null; st.rebar = null;
+    if (st.pour) { if (!st.pour.groups) st.pour.groups = pourGroups(st.pour); st.floor = '全部'; }
     apply();
     const hot = items.filter(it => inPour(it.m)).map(it => it.mesh);
     fitTo(st.pour && hot.length ? hot : visibleObjs(), true);
   });
 }
-function pourList() {
-  if (!pours.length) return '<div class="muted">這個工地還沒有上傳灌漿數量。</div>';
-  const t = new Date(); const today = t.getFullYear() + '-' + ('0' + (t.getMonth() + 1)).slice(-2) + '-' + ('0' + t.getDate()).slice(-2);
-  const list = pours.slice().sort((a, b) => (a.date >= today) !== (b.date >= today) ? (a.date >= today ? -1 : 1) : a.date >= today ? (a.date < b.date ? -1 : 1) : (a.date > b.date ? -1 : 1));
-  return '<div class="muted" style="margin:2px 0 8px">點一筆，3D 會把那次灌的地方亮起來（橘色）</div>' + list.map(p => {
-    const n = items.filter(it => pourGroups(p).includes(it.m.gp)).length;
-    return '<div class="pour' + (st.pour === p ? ' on' : '') + '" data-id="' + esc(p.id) + '"><b>' + esc(roc(p.date) || '沒寫日期') + '　' + esc(p.part) + '</b><div class="m">'
-      + [p.m3 ? p.m3 + ' m³' : '', p.trucks ? '約 ' + p.trucks + ' 車' : '', n ? n + ' 件' : '3D 裡找不到這一區'].filter(Boolean).join('・') + '</div></div>';
+/**
+ * 灌漿區（使用者 2026-11-10「也沒有根據混凝土灌漿位置」）：照 BricsCAD 算的分組（基礎、1F、2F…RF女兒牆）一區一列，
+ * 不用先上傳灌漿數量；有上傳的標灌漿日。一次灌好幾區（2F+3F）的另外列。
+ */
+let ZONES = null;
+function zoneList() {
+  if (ZONES) return ZONES;
+  const order = (M.groups || []).slice();
+  (M.m || []).forEach(m => { if (m.gp && !order.includes(m.gp)) order.push(m.gp); });
+  return ZONES = order.map(g => {
+    const its = items.filter(it => it.m.gp === g);
+    return { id: 'g:' + g, g, groups: [g], n: its.length, v: its.reduce((a, it) => a + (it.m.v || 0), 0), up: pours.filter(p => pourGroups(p).includes(g)) };
+  }).filter(z => z.n > 0);
+}
+function pourList(tip) {
+  let h = tip ? '<div class="tip">🔩 <b>看鋼筋</b>：點一支柱或梁，下面出現「看配筋」再按</div>' : '';
+  h += '<div class="muted" style="margin:2px 0 8px">點一區，3D 會把那一區亮起來（橘色）；分區跟 BricsCAD 灌漿數量一樣</div>';
+  h += zoneList().map(z => {
+    const days = z.up.map(p => roc(p.date)).filter(Boolean);
+    return '<div class="pour' + (st.pour && st.pour.id === z.id ? ' on' : '') + '" data-id="' + esc(z.id) + '"><b>' + esc(z.g) + '</b><div class="m">'
+      + z.n + ' 件' + (z.v ? '・' + z.v.toFixed(1) + ' m³' : '') + '・' + (days.length ? '<span class="day">灌漿日 ' + esc(days.join('、')) + '</span>' : '還沒上傳灌漿數量') + '</div></div>';
   }).join('');
+  const multi = pours.filter(p => pourGroups(p).length > 1);
+  if (multi.length) h += '<div class="muted" style="margin:10px 0 8px">一起灌的</div>' + multi.map(p =>
+    '<div class="pour' + (st.pour && st.pour.id === p.id ? ' on' : '') + '" data-id="' + esc(p.id) + '"><b>' + esc(p.part) + '</b><div class="m">'
+    + [roc(p.date) ? '<span class="day">灌漿日 ' + esc(roc(p.date)) + '</span>' : '', p.m3 ? p.m3 + ' m³' : '', p.trucks ? '約 ' + p.trucks + ' 車' : ''].filter(Boolean).join('・') + '</div></div>').join('');
+  return h;
 }
 document.getElementById('tog').onclick = () => { st.sideMin = !st.sideMin; renderSide(); layout(); };
 document.getElementById('reset').onclick = () => {
@@ -551,7 +572,7 @@ function shots() {
   const s = P.get('shot'); if (!s) return;
   hideHint(); document.getElementById('hint').style.display = 'none';
   const find = (k, f) => (M.m || []).find(m => m.k === k && (!f || m.f === f) && m.r);
-  if (s === 'pour' && pours.length) { const p = pours.find(x => items.some(it => pourGroups(x).includes(it.m.gp))) || pours[0]; p.groups = pourGroups(p); st.pour = p; apply(); fitTo(items.filter(it => inPour(it.m)).map(it => it.mesh), true); }
+  if (s === 'pour') { const z = zoneList().find(x => x.g === (P.get('zone') || '')) || zoneList()[Math.min(2, zoneList().length - 1)]; if (z) { st.pour = z; apply(); fitTo(items.filter(it => inPour(it.m)).map(it => it.mesh), true); } }
   if (s === 'floor') { st.floor = floorsList()[1] || floorsList()[0]; apply(); fitTo(visibleObjs(), true); }
   if (s === 'sel' || s === 'rebar' || s === 'beam') {
     const byCode = k => P.get('c') && (M.m || []).find(m => m.k === k && m.c === P.get('c') && (!P.get('f') || m.f === P.get('f')) && m.r);
