@@ -253,9 +253,15 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10k';
+var WEB_VERSION = '11/10l';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
 var PCAPP = /[?&]app=pc\b/.test(location.search);
+// 哪一種蘋果裝置（使用者 2026-11-10「ipad也要適配」「macbook pro 16也要」）：
+// iPad 的 Safari 會說自己是 Mac，要看有沒有觸控；Mac 沒有觸控
+var IPAD = /iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+var IOS = IPAD || /iPhone|iPod/.test(navigator.userAgent);
+var MAC = !IOS && /Macintosh|Mac OS X/.test(navigator.userAgent);
+var DEV = IPAD ? 'iPad' : 'iPhone';
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 var UNFILED = '未分組';
 var MAX_PHOTOS = 12, MAX_MATS = 9, MAX_RECEIPTS = 12;
@@ -518,7 +524,8 @@ function askGeo(cb) {
     LS.set('geo', (Math.round(pos.coords.latitude * 1000) / 1000) + ',' + (Math.round(pos.coords.longitude * 1000) / 1000));
     S.hereHint = ''; cb();
   }, function () {
-    S.hereHint = '📍 沒有允許位置：iPhone「設定」→「隱私權與安全性」→「定位服務」→「Safari 網站」改成「使用 App 期間」，再點這裡';
+    S.hereHint = MAC ? '📍 沒有允許位置：Mac「系統設定」→「隱私權與安全性」→「定位服務」→ 打開 Safari，再點這裡'
+      : '📍 沒有允許位置：' + DEV + '「設定」→「隱私權與安全性」→「定位服務」→「Safari 網站」改成「使用 App 期間」，再點這裡';
     cb();
   }, { enableHighAccuracy: false, timeout: 20000, maximumAge: 600000 });
 }
@@ -592,7 +599,6 @@ function closeModal() { S.modal = null; renderModal(); }
 // 網頁版不能放小工具，改用免費的 Scriptable App 跑「柏捷工地」小工具程式（bojie-widget.js，放在這個網站）。
 // 「複製安裝程式」：一小段程式（裡面是這支手機的代碼，用十六進位寫，看不出來），貼到 Scriptable 執行一次：
 // 下載 bojie-widget.js 存成「柏捷工地」、代碼存進 iPhone 的鑰匙圈。之後打開 Scriptable 它會自己更新。
-var IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 var WIDGET_URL = 'https://a0923337553-ai.github.io/bojie-site/bojie-widget.js';
 function widgetInstaller(code) {
   var k = String(code || '').split('').map(function (c) { return ('000' + c.charCodeAt(0).toString(16)).slice(-4); }).join('');
@@ -638,7 +644,16 @@ function widgetModal(m) {
     return '<div class="row" style="align-items:flex-start;gap:8px;margin:8px 0"><b style="font-size:20px;color:var(--teal);line-height:24px">' + n + '</b>' +
       '<div class="grow" style="font-size:16px;line-height:23px">' + t + (extra ? '<div style="margin-top:6px">' + extra + '</div>' : '') + '</div></div>';
   };
-  return '<h3>📱 iPhone 桌面小工具</h3>' +
+  // Mac：Scriptable 沒有 Mac 版 → 先在 iPhone 放好，Mac 用「iPhone 小工具」（macOS 14、iOS 17 以上，同一個 Apple 帳號）
+  if (MAC) return '<h3>🖥️ Mac 桌面小工具</h3>' +
+    '<div class="note" style="font-size:14px">Mac 的小工具是借 iPhone 的（Scriptable 沒有 Mac 版）。要有 iPhone，Mac 要 macOS 14 以上、iPhone 要 iOS 17 以上。</div>' +
+    step('①', '先在你的 <b>iPhone</b> 裝好小工具：iPhone 打開柏捷工地 → 首頁最下面「📱 放到 iPhone 桌面的小工具」照著做') +
+    step('②', 'Mac 和 iPhone 用<b>同一個 Apple 帳號</b>；iPhone 放在旁邊或連同一個 Wi-Fi') +
+    step('③', 'Mac：左上角  →「系統設定」→「桌面與 Dock」→ 小工具那段，打開「使用 iPhone 小工具」') +
+    step('④', '在 Mac 桌面空白處按右鍵 →「編輯小工具」→ 左邊找到 iPhone 的「Scriptable」→ 選大小拖到桌面 →「Script」選「柏捷工地」') +
+    '<div class="note" style="font-size:14px;margin-top:6px">在 Mac 上點小工具會請你到 iPhone 上看；要看完整內容，從 Dock 打開柏捷工地就好。</div>' +
+    '<div class="btns"><button data-act="mclose">關閉</button></div>';
+  return '<h3>📱 ' + DEV + ' 桌面小工具</h3>' +
     '<div class="note" style="font-size:14px">用免費的 App「Scriptable」放。設定一次，大約 3 分鐘。</div>' +
     step('①', '到 App Store 裝「Scriptable」（免費）',
       '<a class="pill" style="margin:0;display:inline-block;text-decoration:none" href="https://apps.apple.com/app/id1405459188" target="_blank" rel="noopener">打開 App Store</a>') +
@@ -646,9 +661,10 @@ function widgetModal(m) {
       '<button class="pill" style="margin:0" data-act="widgetcopy">' + (m.copied ? '已複製 ✓' : '複製安裝程式') + '</button>' +
       (m.err ? '<div style="color:var(--red);font-size:14px;margin-top:4px">' + esc(m.err) + '</div>' : '')) +
     step('③', '打開 Scriptable → 右上角「＋」→ 點一下中間空白 →「貼上」→ 按右下角「▶」。看到「✅ 裝好了」就好') +
-    step('④', '回到桌面：長按空白處 → 左上角「編輯」→「加入小工具」→ 搜尋「Scriptable」→ 選大小 →「加入小工具」') +
+    step('④', '回到主畫面：長按空白處 → 左上角「編輯」→「加入小工具」→ 搜尋「Scriptable」→ 選大小 →「加入小工具」') +
     step('⑤', '點一下剛放好的小工具 →「Script」選「柏捷工地」') +
-    '<div class="note" style="font-size:14px;margin-top:6px">小、中＝今日提醒；大＝月曆＋這週行程＋待辦。「Parameter」打「消息」＝最新消息。點小工具會打開完整清單（待辦可以打勾）。鎖定畫面也可以放。</div>' +
+    '<div class="note" style="font-size:14px;margin-top:6px">小、中＝今日提醒；大＝月曆＋這週行程＋待辦' + (IPAD ? '；<b>特大</b>（iPad 才有）＝左邊月曆、右邊今日提醒＋這週行程＋待辦' : '') +
+    '。「Parameter」打「消息」＝最新消息。點小工具會打開完整清單（待辦可以打勾）。鎖定畫面也可以放。</div>' +
     '<div class="note" style="font-size:14px;color:var(--red)">安裝程式裡有你的代碼（看不出來），只貼在自己的手機，不要傳給別人。</div>' +
     '<div class="btns"><button data-act="mclose">關閉</button></div>';
 }
@@ -680,10 +696,18 @@ function renderLogin() {
     '<button class="big" data-act="login" style="margin-top:12px"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? '登入中…' : '登入') + '</button>';
   h += S.saved ? '<div class="note">要換人或換代碼，請找管理者。</div>' : '<div class="note">代碼只給你自己用；打錯 3 次這支手機會先鎖 30 分鐘。</div>';
   h += '</div>';
-  if (!standalone()) h += '<div class="box phone-only"><b>iPhone 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按下面的「分享」⬆︎ →「加入主畫面」→ 之後都從桌面的「柏捷工地」圖示打開，在那裡輸入代碼（Safari 裡輸入的，圖示那邊不會記得）。</div></div>';
+  // iPhone、iPad：先加入主畫面（iPad 的「分享」在右上角）；Mac：Safari「檔案」→「加入 Dock」（macOS 14 以上）
+  if (IOS) {
+    if (!standalone()) h += '<div class="box"><b>' + DEV + ' 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按' + (IPAD ? '右上角' : '下面') +
+      '的「分享」⬆︎ →「加入主畫面」→ 之後都從主畫面的「柏捷工地」圖示打開，在那裡輸入代碼（Safari 裡輸入的，圖示那邊不會記得）。</div></div>';
+  } else if (MAC && !PCAPP) {
+    if (!standalone()) h += '<div class="box" style="border-color:var(--teal);background:#E9F7F6"><b>Mac 請先「加入 Dock」再登入</b><div>用 Safari 打開這個網頁 → 最上面選單「檔案」→「加入 Dock」→ 之後都從 Dock 的「柏捷工地」打開，在那裡輸入代碼（Safari 裡輸入的，Dock 那個不會記得）。要 macOS 14 以上；舊的 Mac 就直接用 Safari 打開、加到書籤。</div></div>';
+  } else {
+    if (!standalone()) h += '<div class="box phone-only"><b>iPhone 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按下面的「分享」⬆︎ →「加入主畫面」→ 之後都從桌面的「柏捷工地」圖示打開，在那裡輸入代碼（Safari 裡輸入的，圖示那邊不會記得）。</div></div>';
   // 電腦版程式（安裝檔，網址後面帶 ?app=pc；使用者 2026-11-10「電腦的部分我想做成安裝檔，不想給他們連結」）：不提網址
-  if (PCAPP) h += '<div class="box pc-only" style="border-color:var(--teal);background:#E9F7F6"><b>柏捷工地 電腦版</b><div>第一次輸入自己的代碼（找管理者拿），之後會記在這台電腦的「柏捷工地」程式裡。</div></div>';
+  if (PCAPP) h +='<div class="box pc-only" style="border-color:var(--teal);background:#E9F7F6"><b>柏捷工地 電腦版</b><div>第一次輸入自己的代碼（找管理者拿），之後會記在這台電腦的「柏捷工地」程式裡。</div></div>';
   else h += '<div class="box pc-only" style="border-color:var(--teal);background:#E9F7F6"><b>電腦也可以用</b><div>直接用這個網址打開就好；代碼會記在這台電腦的這個瀏覽器（換瀏覽器、清除瀏覽紀錄要重打）。可以把這頁加到書籤。</div></div>';
+  }
   return h + '<div class="sub" style="text-align:center">網頁版 ' + WEB_VERSION + '</div></div>';
 }
 
@@ -711,7 +735,8 @@ function renderHub() {
     (sub ? '<div class="sub" style="margin-top:6px">' + esc(sub) + '</div>' : '') + '</div>';
   h += '<div class="sub" style="padding-left:4px">' + esc(s.name + (s.full ? '（' + s.full + '）' : '') + '・' + s.role) + '　' + (PCAPP ? '電腦版' : '網頁版') + ' ' + WEB_VERSION + '</div>';
   // iPhone 桌面小工具（使用者 2026-11-10 選「甲」：用免費的 Scriptable）
-  if (IOS) h += '<button class="ghost" style="margin-top:8px" data-act="widgethelp">📱 放到 iPhone 桌面的小工具（教學）</button>' +
+  // iPad 一樣；Mac 借 iPhone 的小工具（macOS 14 以上可以把 iPhone 的小工具放到 Mac 桌面）
+  if (IOS || MAC) h += '<button class="ghost" style="margin-top:8px" data-act="widgethelp">' + (MAC ? '🖥️ 放到 Mac 桌面的小工具（教學）' : '📱 放到 ' + DEV + ' 桌面的小工具（教學）') + '</button>' +
     '<div class="note" style="padding:0 4px">網頁版關著時不會跳通知；打開就會更新。</div></div>';
   else h += '<div class="note" style="padding:4px 4px 0">網頁版沒有桌面小工具，關著時也不會跳通知；打開就會更新。</div></div>';
   return h + '</div>';
