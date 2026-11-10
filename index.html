@@ -8,77 +8,193 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="柏捷工地">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#1f3a5f">
+<meta name="theme-color" content="#16A6A0">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
 <!--
-  柏捷工地App「施工人員網頁版」（使用者 2026-11-08：iPhone 不能裝 App，用網頁＋Safari「加入主畫面」）。
-  跟 Android App 的施工人員模式一樣：代碼登入、選工地（或未分組自己打）、天氣、材料、做了什麼、拍照上傳、看 3 天內大家傳的。
+  柏捷工地App「iPhone 網頁版」（使用者 2026-11-08：iPhone 不能裝 App，用網頁＋Safari「加入主畫面」）。
+  2026-11-10 改版（使用者：「iphone版的線上網址他沒有做更新，依樣是舊版的」）：跟 Android App 0.9.36 用代碼登入的畫面一樣——
+    首頁：問候＋所在地天氣、我的工地（進入）、今日提醒／待辦、這週行程、最新消息（＋注意事項）、這週天氣。
+    施工人員：進入 → 我的工作（傳工作、照片、單據照片）＋看施工日誌。
+    老闆、主任、公司：進入 → 工地頁（施工日誌、鋼筋施工單、混凝土灌漿數量、發包、待辦事項）；行事曆可以看、新增、修改。
+  iPhone 網頁做不到的：桌面小工具、App 關著時的通知。
   放在自己的網址（不是嵌在 Google 頁面裡），iPhone 才記得住代碼；資料直接傳給收件服務（跟 App 同一套）。
   代碼：第一次輸入、登入成功後記在這支手機，之後鎖住不能改，只按「登入」。
   同一支手機打錯 3 次鎖 30 分鐘，之後再錯就一直鎖，要管理者在「人員管理」解除（收件服務第 5 版記錄）。
   這個檔案公開沒關係：裡面沒有任何代碼或密碼。
 -->
 <style>
-:root { --navy:#1f3a5f; --orange:#f28c28; --bg:#f4f5f7; --ink:#1d2330; --muted:#6b7383; --line:#c9cfd9; --green:#1e8e5a; --red:#d63b3b; --warn:#e0662b; }
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-size: 17px; }
-button { font-family: inherit; cursor: pointer; }
-.top { background: var(--navy); color: #fff; padding: 12px 10px; display: flex; align-items: center; gap: 6px; position: sticky; top: 0; z-index: 5; min-height: 54px; }
-.top h1 { font-size: 20px; margin: 0; flex: 1; }
-.top button { background: none; border: 0; color: #fff; font-size: 16px; padding: 6px 10px; }
-.top .back { font-size: 26px; line-height: 1; padding: 2px 10px; }
-.wrap { max-width: 640px; margin: 0 auto; padding: 12px 12px 40px; }
-.card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
-.label { font-size: 14px; color: var(--muted); margin: 2px 0 6px; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip { border: 1.5px solid var(--line); background: #fff; border-radius: 18px; padding: 7px 14px; font-size: 16px; color: var(--ink); }
-.chip.on { background: var(--orange); border-color: var(--orange); color: #fff; font-weight: bold; }
-.chip.small { padding: 5px 11px; font-size: 15px; }
-.big { display: block; width: 100%; border: 0; border-radius: 12px; background: var(--orange); color: #fff; font-size: 19px; font-weight: bold; padding: 15px; margin: 6px 0 10px; }
-.big:disabled { background: #cbd1db; }
-.ghost { display: block; width: 100%; border: 2px solid var(--navy); background: #fff; color: var(--navy); border-radius: 12px; font-size: 17px; font-weight: bold; padding: 12px; }
-.ghost.red { border-color: var(--red); color: var(--red); }
-.ghost.dim { border-color: var(--line); color: var(--muted); font-weight: normal; }
-input[type=text], textarea { width: 100%; font-size: 17px; padding: 10px; border: 1.5px solid var(--line); border-radius: 8px; font-family: inherit; background: #fff; color: var(--ink); }
-textarea { min-height: 76px; resize: vertical; }
-.entry { border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 10px; margin: 6px 0; display: flex; gap: 8px; align-items: center; background: #fafbfc; }
-.entry.mine { border-color: var(--orange); background: #fff8ef; }
-.entry .who { font-weight: bold; color: var(--navy); min-width: 2.2em; }
-.entry .body { flex: 1; min-width: 0; }
-.sub { font-size: 13px; color: var(--muted); }
-.note { font-size: 13px; color: var(--muted); line-height: 1.5; }
-.err { background: var(--warn); color: #fff; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; line-height: 1.45; }
-.box { background: #fff6ec; border: 2px solid var(--orange); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; line-height: 1.5; }
-.thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
-.thumb { position: relative; padding-top: 75%; background: #d5dae2; border-radius: 8px; overflow: hidden; }
-.thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.thumb .x { position: absolute; top: 3px; right: 3px; background: rgba(0,0,0,.6); color: #fff; border: 0; border-radius: 10px; padding: 1px 8px; font-weight: bold; }
-.thumb .new { position: absolute; left: 3px; bottom: 3px; background: var(--orange); color: #fff; font-size: 11px; border-radius: 6px; padding: 0 5px; }
-.row2 { display: flex; gap: 8px; }
-.row2 > * { flex: 1; }
-.mat { display: flex; gap: 6px; margin-bottom: 6px; }
-.mat input { padding: 8px; }
-.full img { width: 100%; border-radius: 10px; display: block; margin-bottom: 8px; background: #d5dae2; min-height: 120px; }
-.link { background: none; border: 0; color: var(--navy); font-weight: bold; font-size: 16px; padding: 6px 0; }
-.link.red { color: var(--red); font-weight: normal; font-size: 14px; }
-.hd { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+:root { --teal:#16A6A0; --blue:#2F80ED; --navy:#1C5D99; --orange:#F2994A; --bg:#F1F7F8; --ink:#183B56; --muted:#5D7486; --line:#C6D3DC;
+  --green:#1E9E6A; --todo:#1E8E5A; --red:#E5383B; --warn:#E0662B; --tealsoft:#D9F2F0; --bluesoft:#DCEBFB; --purple:#7A4BB0; --soft:#F1F5F7;
+  --grad:linear-gradient(120deg, #16A6A0, #2F80ED); }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-size:17px; -webkit-text-size-adjust:100%; }
+button { font-family:inherit; cursor:pointer; color:inherit; }
+.top { background:var(--grad); color:#fff; padding:10px 6px; padding-top:calc(10px + env(safe-area-inset-top)); display:flex; align-items:center; gap:2px; position:sticky; top:0; z-index:5; min-height:54px; }
+.top h1 { font-size:19px; margin:0 0 0 6px; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.top button { background:none; border:0; color:#fff; font-size:15px; padding:6px 10px; font-weight:bold; white-space:nowrap; }
+.top .back { font-size:30px; line-height:1; padding:0 10px 3px; font-weight:normal; }
+.wrap { max-width:680px; margin:0 auto; padding:12px 12px 48px; }
+.card { background:#fff; border-radius:16px; padding:13px 14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(24,59,86,.10); }
+.ttl { font-size:17px; font-weight:800; }
+.row { display:flex; align-items:center; gap:8px; }
+.grow { flex:1; min-width:0; }
+.label { font-size:13.5px; color:var(--muted); margin:2px 0 6px; font-weight:bold; }
+.sub { font-size:13px; color:var(--muted); }
+.note { font-size:13px; color:var(--muted); line-height:1.5; }
+.chips { display:flex; flex-wrap:wrap; gap:7px; }
+.chips.scroll { flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; scrollbar-width:none; }
+.chips.scroll::-webkit-scrollbar { display:none; }
+.chip { border:1.5px solid var(--line); background:#fff; border-radius:18px; padding:7px 14px; font-size:16px; white-space:nowrap; flex:none; }
+.chip.on { background:var(--teal); border-color:var(--teal); color:#fff; font-weight:bold; }
+.chip.small { padding:5px 11px; font-size:14.5px; }
+.chip.add { background:var(--todo); border-color:var(--todo); color:#fff; font-weight:bold; }
+.big { display:block; width:100%; border:0; border-radius:14px; background:var(--grad); color:#fff; font-size:18px; font-weight:bold; padding:14px; margin:4px 0 10px; }
+.big:disabled { background:#cbd5dc; }
+.ghost { display:block; width:100%; border:2px solid var(--navy); background:#fff; color:var(--navy); border-radius:12px; font-size:16.5px; font-weight:bold; padding:11px; margin-bottom:10px; }
+.ghost.red { border-color:var(--red); color:var(--red); }
+.ghost.dim { border-color:var(--line); color:var(--muted); font-weight:normal; }
+.pill { border:0; border-radius:14px; background:var(--grad); color:#fff; font-size:13.5px; font-weight:bold; padding:5px 11px; white-space:nowrap; margin-left:6px; }
+.pill:disabled { opacity:.45; }
+input[type=text], input[type=date], input[type=time], textarea { width:100%; font-size:17px; padding:10px; border:1.5px solid var(--line); border-radius:10px; font-family:inherit; background:#fff; color:var(--ink); -webkit-appearance:none; appearance:none; }
+input[type=date], input[type=time] { min-height:46px; }
+textarea { min-height:76px; resize:vertical; }
+.err { background:var(--warn); color:#fff; border-radius:12px; padding:10px 12px; margin-bottom:10px; line-height:1.45; }
+.box { background:#fff6ec; border:2px solid var(--orange); border-radius:12px; padding:10px 12px; margin-bottom:10px; line-height:1.5; }
+.div { height:1px; background:#EAF0F4; }
+.link { background:none; border:0; color:var(--navy); font-weight:bold; font-size:16px; padding:6px 0; }
+.link.red { color:var(--red); font-weight:normal; font-size:14.5px; }
+.badge { display:inline-block; background:var(--red); color:#fff; font-size:11px; font-weight:bold; border-radius:9px; padding:0 6px; margin-left:6px; line-height:17px; vertical-align:middle; }
+.newtag { display:inline-block; background:var(--red); color:#fff; font-size:10.5px; font-weight:bold; border-radius:5px; padding:0 5px; margin-left:6px; flex:none; }
+.tag { display:inline-block; color:#fff; font-size:11.5px; font-weight:bold; border-radius:5px; padding:1px 6px; flex:none; }
+.scard { overflow-y:auto; -webkit-overflow-scrolling:touch; margin-top:4px; }
+.chev { display:inline-block; width:26px; height:26px; border-radius:13px; background:var(--tealsoft); color:var(--teal); text-align:center; line-height:26px; font-size:12px; font-weight:bold; flex:none; }
+/* 首頁上面 */
+.hero { background:var(--grad); color:#fff; border-radius:0 0 26px 26px; position:relative; overflow:hidden; padding:16px 18px 18px; padding-top:calc(16px + env(safe-area-inset-top)); }
+.hero:before { content:''; position:absolute; width:72vw; height:72vw; max-width:420px; max-height:420px; border-radius:50%; background:rgba(255,255,255,.10); right:-26vw; top:-34vw; }
+.hero:after { content:''; position:absolute; width:40vw; height:40vw; max-width:240px; max-height:240px; border-radius:50%; background:rgba(255,255,255,.07); left:-18vw; bottom:-22vw; }
+.hero-in { max-width:680px; margin:0 auto; position:relative; z-index:1; }
+.wx { background:rgba(255,255,255,.18); border-radius:16px; padding:8px 12px; text-align:center; border:0; color:#fff; flex:none; margin-left:10px; }
+.hint { background:rgba(255,255,255,.18); border-radius:10px; padding:5px 10px; font-size:13.5px; display:inline-block; margin-top:10px; border:0; color:#fff; text-align:left; }
+.wxbar { background:rgba(0,0,0,.15); border-radius:12px; padding:8px 10px; font-size:14px; line-height:1.45; margin-top:12px; }
+/* 我的工地 */
+.sitebox { border:1.5px solid var(--line); border-radius:12px; padding:8px 12px; background:#fff; text-align:left; width:100%; display:block; }
+.siteopt { border:0; border-bottom:1px solid #EAF0F4; background:none; padding:10px 4px; text-align:left; width:100%; display:block; }
+.enter { border:0; border-radius:14px; background:var(--grad); color:#fff; font-size:16px; font-weight:bold; padding:14px; white-space:nowrap; flex:none; }
+.bar { height:6px; border-radius:4px; background:var(--bluesoft); margin-top:4px; overflow:hidden; }
+.bar > i { display:block; height:100%; background:var(--grad); border-radius:4px; }
+.rem { padding:7px 0; font-size:14.5px; line-height:1.4; }
+.rem.hot { color:var(--warn); font-weight:bold; }
+.tabs { display:flex; gap:6px; }
+.tab { flex:1; border:0; border-radius:12px; background:var(--soft); padding:8px 4px; font-size:15px; font-weight:bold; }
+.tab.on { background:var(--teal); color:#fff; }
+.tbox { width:22px; height:22px; border-radius:5px; border:2px solid #5D7486; background:#fff; color:#fff; font-size:14px; font-weight:800; display:flex; align-items:center; justify-content:center; flex:none; padding:0; }
+.tbox.done { background:#9AA8B4; border-color:#9AA8B4; }
+.trow { display:flex; align-items:flex-start; gap:6px; padding:4px 0; }
+.trow .t { font-size:15px; line-height:1.35; padding-top:2px; word-break:break-word; }
+.trow.done .t { color:#98A2B3; text-decoration:line-through; }
+.who { font-size:12.5px; color:var(--todo); font-weight:bold; display:block; }
+.news { display:flex; gap:10px; padding:8px 0; align-items:flex-start; }
+.ico { width:34px; height:34px; border-radius:17px; display:flex; align-items:center; justify-content:center; font-size:16px; flex:none; }
+.nsub { font-size:13px; color:#9A3412; background:#FFF6EC; border-radius:6px; padding:1px 6px; margin-top:2px; display:inline-block; }
+.days { display:flex; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-top:8px; }
+.day { min-width:74px; border-radius:12px; background:#F4F8F9; padding:8px 4px; text-align:center; flex:none; }
+.day.rain { background:#E6F0FB; }
+/* 工地頁、清單 */
+.tile { display:flex; align-items:center; gap:14px; width:100%; background:#fff; border:0; border-radius:18px; padding:13px 14px; margin-bottom:10px; box-shadow:0 1px 3px rgba(24,59,86,.12); text-align:left; }
+.tile .em { width:50px; height:50px; border-radius:25px; display:flex; align-items:center; justify-content:center; font-size:24px; flex:none; }
+.tile b { font-size:19px; display:block; }
+.arrow { color:var(--line); font-size:26px; flex:none; }
+.item { background:#fff; border-radius:12px; padding:10px 12px; margin-bottom:9px; box-shadow:0 1px 2px rgba(24,59,86,.10); display:flex; align-items:center; gap:10px; width:100%; border:0; text-align:left; font-size:16px; }
+.pdfph { width:60px; height:46px; border:1.5px solid #9AA3B0; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--muted); flex:none; background:#fff; }
+.key { flex:1; border:2px solid var(--navy); background:#fff; color:var(--navy); border-radius:10px; padding:9px; font-size:16px; font-weight:bold; }
+.key.on { background:var(--navy); color:#fff; }
+/* 我的工作 */
+.entry { border:1.5px solid var(--line); border-radius:10px; padding:9px 10px; margin:6px 0; display:flex; gap:8px; align-items:center; background:#fafcfd; }
+.entry.mine { border-color:var(--orange); background:#fff8ef; }
+.entry .who2 { font-weight:bold; color:var(--navy); min-width:2.2em; }
+.entry .body { flex:1; min-width:0; }
+.thumbs { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-bottom:8px; }
+.thumb { position:relative; padding-top:75%; background:#d5dde3; border-radius:8px; overflow:hidden; }
+.thumb img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.thumb .x { position:absolute; top:3px; right:3px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:10px; padding:1px 8px; font-weight:bold; }
+.thumb .new { position:absolute; left:3px; bottom:3px; background:var(--orange); color:#fff; font-size:11px; border-radius:6px; padding:0 5px; }
+.row2 { display:flex; gap:8px; }
+.row2 > * { flex:1; min-width:0; }
+.mat { display:flex; gap:6px; margin-bottom:6px; }
+.mat input { padding:8px; }
+.full img { width:100%; border-radius:10px; display:block; margin-bottom:8px; background:#d5dde3; min-height:120px; }
+.hd { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; }
+/* 日誌照片 */
+.pgrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+.pgrid .ph { position:relative; padding-top:75%; border-radius:8px; overflow:hidden; background:#DDE5EA; }
+.pgrid .ph img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+/* 月曆 */
+.mgrid { display:grid; grid-template-columns:repeat(7, 1fr); text-align:center; }
+.mgrid .h { font-size:12.5px; color:var(--muted); padding:4px 0; }
+.mcell { height:46px; display:flex; align-items:center; justify-content:center; }
+.mcell button { width:40px; height:42px; border:0; border-radius:11px; background:none; font-size:15.5px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.mcell button.today { background:var(--tealsoft); font-weight:800; }
+.mcell button.sel { background:var(--blue); color:#fff; font-weight:800; }
+.dots { height:6px; display:flex; gap:2px; justify-content:center; margin-top:2px; }
+.dots i { width:5px; height:5px; border-radius:3px; background:var(--orange); display:block; }
+.sel .dots i { background:#fff; }
+.ev { display:flex; gap:8px; padding:9px 0; border:0; border-top:1px solid #EAF0F4; width:100%; background:none; text-align:left; font-size:16px; }
+.sitechip { font-size:12px; color:#0F766E; background:var(--tealsoft); border-radius:6px; padding:1px 6px; font-weight:bold; margin-left:6px; }
+.stepper { display:flex; align-items:center; background:#F1F7F8; border-radius:10px; margin-top:8px; }
+.stepper > button { border:0; background:none; font-size:28px; color:var(--teal); padding:2px 14px; }
+.stepper > button:disabled { color:var(--line); }
+.stepper .mid { flex:1; text-align:center; color:var(--ink); }
+/* PDF */
+#pdfpages canvas { display:block; width:100%; height:auto; background:#fff; margin-bottom:8px; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+/* 跳出的視窗 */
+.mask { position:fixed; inset:0; background:rgba(10,30,45,.45); z-index:50; display:flex; align-items:center; justify-content:center; padding:14px; }
+.sheet { background:#fff; border-radius:20px; width:100%; max-width:540px; max-height:88vh; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:18px 16px 10px; }
+.sheet h3 { margin:0 0 10px; font-size:19px; }
+.btns { display:flex; justify-content:flex-end; gap:6px; margin-top:12px; position:sticky; bottom:-10px; background:#fff; padding:4px 0 6px; }
+.btns button { border:0; background:none; font-size:16.5px; padding:9px 12px; color:var(--navy); font-weight:bold; border-radius:10px; }
+.btns button:disabled { color:#b5c0c8; }
+.btns .dim { color:var(--muted); font-weight:normal; }
+.btns .redb { color:var(--red); }
 </style>
 </head>
 <body>
 <div id="app"></div>
+<div id="modal"></div>
 <input type="file" id="cam" accept="image/*" capture="environment" style="display:none">
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
+var WEB_VERSION = '11/10';
+var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 var UNFILED = '未分組';
-var MAX_PHOTOS = 12, MAX_MATS = 9;
-var S = { code: '', saved: '', s: null, site: '', entries: [], route: 'login', busy: false, loading: false, err: '', locked: '', progress: '', codeInput: '', d: null, view: null, wx: {}, photos: {} };
+var MAX_PHOTOS = 12, MAX_MATS = 9, MAX_RECEIPTS = 12;
+var OFFICE_ROLES = ['管理者', '老闆', '主任', '公司'];
+var OFFICE_KINDS = ['pour', 'sheet', 'contract', 'cal', 'todo'];
+var WEEK_HEAD = ['日', '一', '二', '三', '四', '五', '六'];
+var DEFAULT_CATS = ['放樣工程', '模板工程', '鐵筋工程', '鋼構工程', '水電消防', '灌漿雜項', '泥作工程', '機械設備', '搭架工程', '門窗工程', '雜項工程'];
+
+var S = {
+  code: '', saved: '', s: null, site: '', entries: [], route: 'login', busy: false, loading: false, err: '', locked: '', progress: '', codeInput: '',
+  d: null, view: null, wx: {}, photos: {}, pickFor: 'photo',
+  // 首頁
+  feed: null, here: null, fc: null, feedBusy: false, feedErr: '', feedStale: false, hereHint: '', seen: {}, localTodo: {},
+  hubTab: 0, todoSite: '', newsGroup: '全部', siteOpen: false,
+  // 工地頁
+  office: null, officeErr: '', officeBusy: false, contractTab: 0, pdf: null,
+  todoItems: null, todoBusy: '', todoErr: '', todoText: '', todoShowDone: false, todoFrom: 'site',
+  log: null, logBusy: '', logFrom: 'site', workFrom: 'hub',
+  cal: { month: '', sel: '', events: [], cache: {}, loading: false, err: '' },
+  modal: null
+};
+var PDF_CACHE = {};
 
 var LS = {
   get: function (k) { try { return localStorage.getItem('bojie.' + k) || ''; } catch (e) { return ''; } },
-  set: function (k, v) { try { if (v) localStorage.setItem('bojie.' + k, v); else localStorage.removeItem('bojie.' + k); } catch (e) { } }
+  set: function (k, v) { try { if (v) localStorage.setItem('bojie.' + k, v); else localStorage.removeItem('bojie.' + k); } catch (e) { } },
+  getJSON: function (k) { try { var t = LS.get(k); return t ? JSON.parse(t) : null; } catch (e) { return null; } },
+  setJSON: function (k, v) { try { LS.set(k, v == null ? '' : JSON.stringify(v)); } catch (e) { } }
 };
 
 /** 這支手機的編號：第一次打開時隨機產生，存在這支手機（收件服務用它算打錯幾次、鎖哪一支） */
@@ -97,6 +213,8 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
 }
 function $(id) { return document.getElementById(id); }
+function uniq(a) { var seen = {}, out = []; a.forEach(function (x) { if (x && !seen[x]) { seen[x] = 1; out.push(x); } }); return out; }
+function cmp(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
 
 /** 收件服務的錯誤 → 給人看的字（EXPIRED：… 這種只留後面） */
 function errText(r) {
@@ -104,6 +222,12 @@ function errText(r) {
   if (r.message) return r.message;
   var m = String(r.error || '');
   return /^[A-Z]+：/.test(m) ? m.split('：').slice(1).join('：') : (m || '收件服務回覆錯誤');
+}
+/** 錯誤：代碼不能用了 → 回登入；鎖住 → 鎖住的畫面；其他 → 回傳要顯示的字（空的＝不用顯示） */
+function failMsg(e) {
+  if (e && e.error === 'LOCKED') return '';
+  if (e && e.error === 'CODE') { codeGone(); return ''; }
+  return errText(e);
 }
 
 function api(action, body) {
@@ -119,15 +243,108 @@ function api(action, body) {
     }, function (e) { throw (e && e.error ? e : { error: '收件服務回覆看不懂，等一下再試' }); });
 }
 
-// ---------- 日期、字 ----------
+// ---------- 日期、時間 ----------
 function pad(n) { return ('0' + n).slice(-2); }
-function addDays(ymd, n) { var p = ymd.split('-'); var d = new Date(+p[0], +p[1] - 1, +p[2] + n, 12); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
-function md(d) { var p = String(d).split('-'); return p.length === 3 ? (+p[1]) + '/' + p[2] : d; }
-function dayName(d) {
-  var a = S.s.today.split('-'), b = String(d).split('-');
-  var diff = Math.round((new Date(+a[0], +a[1] - 1, +a[2]) - new Date(+b[0], +b[1] - 1, +b[2])) / 86400000);
-  return diff === 0 ? '今天' : diff === 1 ? '昨天' : diff === 2 ? '前天' : md(d);
+function ymdOf(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function todayYmd() { return ymdOf(new Date()); }
+function dateOf(ymd) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ymd || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3], 12) : null; }
+function addDays(ymd, n) { var d = dateOf(ymd); d.setDate(d.getDate() + n); return ymdOf(d); }
+function daysBetween(a, b) { return Math.round((dateOf(b) - dateOf(a)) / 86400000); }
+function md(ymd) { var d = dateOf(ymd); return d ? (d.getMonth() + 1) + '/' + d.getDate() : String(ymd || ''); }
+function calDay(ymd) { var d = dateOf(ymd); return d ? (d.getMonth() + 1) + '/' + d.getDate() + '（' + WEEK_HEAD[d.getDay()] + '）' : String(ymd || ''); }
+function rocDate(ymd) { var d = dateOf(ymd); return d ? (d.getFullYear() - 1911) + '.' + pad(d.getMonth() + 1) + '.' + pad(d.getDate()) : ''; }
+function weekday(ymd) { var d = dateOf(ymd); return d ? '週' + WEEK_HEAD[d.getDay()] : ''; }
+function monthEnd(ym) { var p = ym.split('-'); return ymdOf(new Date(+p[0], +p[1], 0, 12)); }
+function shiftMonth(ym, n) { var p = ym.split('-'); var d = new Date(+p[0], +p[1] - 1 + n, 1, 12); return d.getFullYear() + '-' + pad(d.getMonth() + 1); }
+function dayName(d) { var diff = daysBetween(d, S.s.today); return diff === 0 ? '今天' : diff === 1 ? '昨天' : diff === 2 ? '前天' : md(d); }
+/** 今天 14:05／昨天 09:30／11/7 16:00 */
+function timeWord(ms) {
+  if (!ms || ms <= 0) return '';
+  var t = new Date(ms), diff = daysBetween(ymdOf(t), todayYmd()), hm = pad(t.getHours()) + ':' + pad(t.getMinutes());
+  return diff === 0 ? '今天 ' + hm : diff === 1 ? '昨天 ' + hm : (t.getMonth() + 1) + '/' + t.getDate() + ' ' + hm;
 }
+function shortTime(iso) { var t = new Date(iso); return isNaN(t) ? '' : (t.getMonth() + 1) + '/' + t.getDate() + ' ' + pad(t.getHours()) + ':' + pad(t.getMinutes()); }
+/** 14:00 → 下午2:00（跟 App、收件服務一樣） */
+function ampm(hm) {
+  var m = /^(\d{1,2}):(\d{2})/.exec(hm || ''); if (!m) return hm;
+  var h = +m[1], w = h < 5 ? '凌晨' : h < 12 ? '上午' : h < 13 ? '中午' : h < 18 ? '下午' : '晚上';
+  return w + (h % 12 === 0 ? 12 : h % 12) + ':' + m[2];
+}
+/** 「主任 11/09 加」「老闆 11/10 完成」 */
+function todoWhen(who, ms, verb) {
+  if (!ms || ms <= 0) return who ? who + ' ' + verb : '';
+  var d = new Date(ms); return (who + ' ' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + verb).trim();
+}
+
+// ---------- 問候、天氣（跟 App 一樣，照台灣日出日落） ----------
+function dayOfYear(d) { return Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12) - new Date(d.getFullYear(), 0, 1, 12)) / 86400000) + 1; }
+/** 這一天的日出、日落（一天的第幾分鐘；台中；NOAA 簡化算法） */
+function riseSet(d) {
+  var lat = 24.15, lon = 120.67, g = 2 * Math.PI / 365 * (dayOfYear(d) - 1);
+  var eq = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+  var decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  var la = lat * Math.PI / 180;
+  var ha = Math.acos(Math.cos(90.833 * Math.PI / 180) / (Math.cos(la) * Math.cos(decl)) - Math.tan(la) * Math.tan(decl)) * 180 / Math.PI;
+  function at(u) { return ((Math.round(u + 480) % 1440) + 1440) % 1440; }
+  return [at(720 - 4 * (lon + ha) - eq), at(720 - 4 * (lon - ha) - eq)];
+}
+function dayPart(now) {
+  var rs = riseSet(now), t = now.getHours() * 60 + now.getMinutes();
+  if (t < 240) return 'LATE';
+  if (t < rs[0]) return 'DAWN';
+  if (t < 660) return 'MORNING';
+  if (t < 810) return 'NOON';
+  if (t < rs[1] - 40) return 'AFTERNOON';
+  if (t < rs[1] + 40) return 'DUSK';
+  if (t < 1260) return 'NIGHT';
+  return 'LATE';
+}
+function isDark(now) { var p = dayPart(now); return p === 'NIGHT' || p === 'LATE' || p === 'DAWN' || (now.getHours() * 60 + now.getMinutes()) >= riseSet(now)[1]; }
+function hello(now) { var p = dayPart(now); return p === 'DAWN' || p === 'MORNING' ? '早安' : p === 'NOON' || p === 'AFTERNOON' ? '午安' : p === 'DUSK' ? '傍晚好' : p === 'NIGHT' ? '晚安' : '夜深了'; }
+function warmGreeting(now) {
+  var part = dayPart(now), dow = now.getDay();
+  var pick = function (list) { return list[(dayOfYear(now) + now.getFullYear()) % list.length]; };
+  var day = ['DAWN', 'MORNING', 'NOON', 'AFTERNOON'].indexOf(part) >= 0;
+  if (dow === 1 && (part === 'DAWN' || part === 'MORNING')) return '新的一週開始了，一起平安順利';
+  if (dow === 5 && (part === 'NOON' || part === 'AFTERNOON')) return '週末快到了，再撐一下，辛苦了';
+  if ((dow === 6 || dow === 0) && day) return '假日還在忙，真的辛苦你了';
+  if (part === 'DAWN') return pick(['天還沒亮就出門，辛苦了，路上小心', '這麼早就開始，先吃點東西再上工']);
+  if (part === 'MORNING') return pick(['平安出門、平安回家，今天也一起加油', '先喝口水、吃個早餐，再開工喔', '今天也請小心作業，安全第一', '新的一天，一步一步慢慢來']);
+  if (part === 'NOON') return pick(['記得吃飯，找個陰涼處歇一下', '中午了，吃飽休息一下再繼續', '午休一下，下午才有精神']);
+  if (part === 'AFTERNOON') return pick(['辛苦了！下午也小心，安全第一', '喝口水休息一下，再繼續加油', '大家都辛苦了，謝謝你的用心']);
+  if (part === 'DUSK') return pick(['太陽下山了，收工前再檢查一下現場', '天快黑了，收拾好工具，平安回家', '今天辛苦了，收工路上小心']);
+  if (part === 'NIGHT') return pick(['今天辛苦了，好好休息、早點睡', '收工了嗎？謝謝你今天的努力', '回家路上小心，明天見']);
+  return pick(['夜深了，還在忙的話別太累，早點休息', '這麼晚了，辛苦了，明天再繼續']);
+}
+function weatherEmoji(w) { w = w || ''; return /颱風/.test(w) ? '🌀' : /雷/.test(w) ? '⛈️' : /雨/.test(w) ? '🌧️' : /陰/.test(w) ? '☁️' : /雲/.test(w) ? '⛅' : /晴/.test(w) ? '☀️' : '🌤️'; }
+function nightEmoji(e, now) { if (!isDark(now)) return e; return e === '☀️' ? '🌙' : (e === '⛅' || e === '🌤️') ? '☁️' : e; }
+function hasTemp(w) { return w && typeof w.temp === 'number' && isFinite(w.temp); }
+function weatherGreeting(w, now) {
+  if (!w) return '';
+  var t = hasTemp(w) ? w.temp : null, all = (w.weather || '') + (w.text || ''), part = dayPart(now);
+  var T = t == null ? '' : Math.round(t) + '°C';
+  if (part === 'DAWN') {
+    if (/颱風/.test(all)) return '🌀 颱風警報，出門前先確認工地狀況';
+    if (/雷/.test(all)) return '⛈️ 今天會打雷下雨，出門路上小心，高處作業先停';
+    if (/雨/.test(all)) return '🌧️ 今天會下雨，出門路上小心，工地注意防滑';
+    if (t != null && t >= 32) return '🥵 今天會很熱（' + T + '），記得帶水';
+    if (t != null && t <= 15) return '🧥 早上冷（' + T + '），出門多穿一件';
+    if (/陰/.test(all)) return '☁️ 陰天，出門路上小心';
+    if (/晴|雲/.test(all)) return '🌅 天快亮了，今天天氣不錯，出門路上小心';
+    return '';
+  }
+  var dark = isDark(now) || part === 'DUSK';
+  if (/颱風/.test(all)) return '🌀 颱風警報，工地做好防颱、注意安全';
+  if (/雷/.test(all)) return dark ? '⛈️ 晚上會打雷下雨，回家路上小心' : '⛈️ 會打雷下雨，高處作業、吊車先停，注意安全';
+  if (/雨/.test(all)) return dark ? '🌧️ 晚上會下雨，回家路上小心，材料記得蓋好' : '🌧️ 今天會下雨，工地注意防滑，材料記得蓋好';
+  if (t != null && t >= 32) return dark ? '🥵 晚上還很熱（' + T + '），多喝水、好好休息' : '🥵 今天很熱（' + T + '），記得多喝水、多休息';
+  if (t != null && t <= 15) return dark ? '🧥 晚上冷（' + T + '），注意保暖' : '🧥 天氣冷（' + T + '），注意保暖';
+  if (/陰/.test(all)) return dark ? '☁️ 晚上陰天，騎車注意安全' : '☁️ 今天陰天，施工注意安全';
+  if (/晴|雲/.test(all)) return dark ? '🌙 今晚天氣不錯，早點休息，明天見' : '☀️ 天氣不錯，適合施工，記得防曬';
+  return '';
+}
+
+// ---------- 我的工作（施工人員傳的）用的字 ----------
 function windowDays() { var n = S.s.role === '管理者' ? 7 : S.s.days; var out = []; for (var i = 0; i < n; i++) out.push(addDays(S.s.today, -i)); return out; }
 function hoursLabel(h) { h = String(h).trim(); return h === '1' || h === '1.0' ? '全天' : h === '0.5' ? '半天' : h + ' 工'; }
 function matText(m) { return m.vendor + '-' + m.qty + m.unit; }
@@ -140,23 +357,140 @@ function wxNote(w) {
   return t + '；不對就點別的';
 }
 
+// ---------- 首頁的資料 ----------
+function isOffice() { return !!S.s && (S.s.office === true || OFFICE_ROLES.indexOf(S.s.role) >= 0); }
+function hasFeed() { return !!S.s && Number(S.s.version) >= 7; }
+function feedSites() {
+  var f = S.feed;
+  if (f && f.sites && f.sites.length) return f.sites.map(function (x) { return typeof x === 'string' ? { name: x } : { name: x.name, start: x.start || '', end: x.end || '' }; });
+  return (S.s ? S.s.sites : []).map(function (n) { return { name: n }; });
+}
+function siteNames() { return feedSites().map(function (x) { return x.name; }); }
+/** 最新消息（行程不放；施工人員看不到灌漿、施工單、發包、待辦） */
+function shownNews() {
+  var f = S.feed; if (!f) return [];
+  var off = isOffice();
+  return (f.news || []).filter(function (n) { return (off || OFFICE_KINDS.indexOf(n.kind) < 0) && n.kind !== 'cal' && n.kind !== 'app'; })
+    .map(function (n) { var c = {}; for (var k in n) c[k] = n[k]; c.isNew = !S.seen[n.key] && !n.mine; return c; });
+}
+function siteDaysText(st) {
+  if (!st.start || !dateOf(st.start)) return '';
+  var t = todayYmd(), parts = ['已進行 ' + (daysBetween(st.start, t) + 1) + ' 天'];
+  if (st.end && dateOf(st.end)) parts.push('剩餘 ' + daysBetween(t, st.end) + ' 天');
+  return parts.join(' ・ ');
+}
+function siteProgress(st) {
+  if (!st.start || !st.end || !dateOf(st.start) || !dateOf(st.end)) return null;
+  var all = daysBetween(st.start, st.end); if (all <= 0) return null;
+  return Math.max(0, Math.min(1, daysBetween(st.start, todayYmd()) / all));
+}
+function loadSeen() { S.seen = {}; LS.get('seen').split('\n').forEach(function (k) { if (k) S.seen[k] = 1; }); }
+function markSeen(keys) {
+  if (!keys || !keys.length) return;
+  keys.forEach(function (k) { S.seen[k] = 1; });
+  var all = Object.keys(S.seen); if (all.length > 1500) all = all.slice(all.length - 1500);
+  LS.set('seen', all.join('\n'));
+}
+/** 首頁的待辦：還沒做的＋最近做完的；手機上剛打勾的先照手機的 */
+function homeTodos() {
+  var f = S.feed; if (!f || !f.todos) return null;
+  function mk(t, done) { return { id: t.id, site: t.site, text: t.text, done: done, by: t.by || '', at: t.at || 0, doneBy: t.doneBy || '', doneAt: t.doneAt || 0 }; }
+  var all = f.todos.map(function (t) { return mk(t, false); }).concat((f.todosDone || []).map(function (t) { return mk(t, true); }));
+  return all.map(function (t) {
+    var l = S.localTodo[t.id]; if (l === undefined || l === t.done) return t;
+    var c = mk(t, l); c.doneBy = l ? '你' : ''; c.doneAt = l ? Date.now() : 0; return c;
+  });
+}
+function settleTodos() {
+  var f = S.feed; if (!f) return;
+  var done = {}; (f.todosDone || []).forEach(function (t) { done[t.id] = 1; });
+  for (var id in S.localTodo) if (!!done[id] === S.localTodo[id]) delete S.localTodo[id];
+}
+function todoLine(c) {
+  if (!c || (!c[0] && !c[1])) return '還沒有待辦，點進去新增';
+  if (!c[0]) return '都做完了 👍 ・ 做完 ' + c[1];
+  return '還沒做 ' + c[0] + ' ・ 做完 ' + c[1];
+}
+function covers(e, d) { return d >= e.date && d <= (e.endDate || e.date); }
+/** 一天的行程：全天的在前，再照時間 */
+function eventsOn(events, d) {
+  return (events || []).filter(function (e) { return covers(e, d); })
+    .sort(function (a, b) { return (a.allDay === b.allDay ? 0 : a.allDay ? -1 : 1) || cmp(a.start || '', b.start || '') || cmp(a.title || '', b.title || ''); });
+}
+
+// 位置（所在地天氣、這週天氣）：按一次允許後記在這支手機，之後用記住的（iPhone 網頁每次問位置會一直跳視窗）
+function storedGeo() { var p = LS.get('geo').split(','); return p.length === 2 && isFinite(+p[0]) && isFinite(+p[1]) && p[0] !== '' ? { lat: +p[0], lon: +p[1] } : null; }
+function askGeo(cb) {
+  if (!navigator.geolocation) { S.hereHint = '這支手機的瀏覽器不能用位置'; cb(); return; }
+  S.hereHint = '📍 找位置中…'; render();
+  navigator.geolocation.getCurrentPosition(function (pos) {
+    LS.set('geo', (Math.round(pos.coords.latitude * 1000) / 1000) + ',' + (Math.round(pos.coords.longitude * 1000) / 1000));
+    S.hereHint = ''; cb();
+  }, function () {
+    S.hereHint = '📍 沒有允許位置：iPhone「設定」→「隱私權與安全性」→「定位服務」→「Safari 網站」改成「使用 App 期間」，再點這裡';
+    cb();
+  }, { enableHighAccuracy: false, timeout: 20000, maximumAge: 600000 });
+}
+
+/** 首頁：最新消息、今日提醒、所在地天氣、這週天氣（三個同時問，先回來的先顯示） */
+function loadFeed(fresh) {
+  if (!S.s || !hasFeed()) return;
+  if (S.feedBusy && !fresh) return;
+  S.feedBusy = true; S.feedStale = false; renderSoft();
+  var g = storedGeo(), body = { fresh: !!fresh };
+  if (g) { body.lat = g.lat; body.lon = g.lon; }
+  if (!g && !S.here) S.hereHint = S.hereHint || '📍 點這裡允許位置，顯示所在地今天的天氣和這週天氣';
+  var jobs = [
+    api('feed', body).then(function (f) { S.feed = f; S.feedErr = ''; LS.setJSON('feed', f); settleTodos(); renderSoft(); })
+      .catch(function (e) { var m = failMsg(e); if (m) { S.feedErr = '讀不到最新消息：' + m + '（網路好了按「⟳ 更新」）'; renderSoft(); } })
+  ];
+  if (g) {
+    jobs.push(api('here', { lat: g.lat, lon: g.lon }).then(function (h) { S.here = h; LS.setJSON('here', h); renderSoft(); }).catch(function () { }));
+    jobs.push(api('forecast', { lat: g.lat, lon: g.lon }).then(function (r) { S.fc = r; LS.setJSON('fc', r); renderSoft(); }).catch(function () { }));
+  }
+  Promise.all(jobs).then(function () { S.feedBusy = false; renderSoft(); });
+}
+
 // ---------- 畫面 ----------
 function chip(act, v, label, on, small) {
   return '<button class="chip' + (on ? ' on' : '') + (small ? ' small' : '') + '" data-act="' + act + '" data-v="' + esc(v) + '">' + esc(label) + '</button>';
 }
 function topBar(title, back, right, rightAct) {
-  return '<div class="top">' + (back ? '<button class="back" data-act="' + back + '">‹</button>' : '') + '<h1>' + esc(title) + '</h1>' +
-    (right ? '<button data-act="' + rightAct + '">' + esc(right) + '</button>' : '') + '</div>';
+  return '<div class="top">' + (back ? '<button class="back" data-act="nav" data-v="' + back + '">‹</button>' : '') + '<h1>' + esc(title) + '</h1>' +
+    (right ? '<button data-act="' + (rightAct || '') + '">' + esc(right) + '</button>' : '') + '</div>';
 }
+function badgeHtml(n) { return n > 0 ? '<span class="badge">' + (n > 99 ? '99+' : n) + '</span>' : ''; }
+
 function render() {
-  var h = S.route === 'login' ? renderLogin()
-    : (!S.s || !S.s.today) ? topBar('我的工作', null, '⟳ 更新', 'reload') + '<div class="wrap">' + (S.err ? '<div class="err">' + esc(S.err) + '</div>' : '<div class="card note" style="font-size:15px">讀取中…</div>') +
-      '<button class="ghost dim" data-act="tologin" style="margin-top:14px">回登入畫面</button></div>'
-    : S.route === 'edit' ? renderEdit() : S.route === 'view' ? renderView() : renderHome();
+  // 卡片裡面捲到哪裡：重畫後放回去
+  var keep = {}, els = document.querySelectorAll('[data-sk]');
+  for (var i = 0; i < els.length; i++) keep[els[i].getAttribute('data-sk')] = els[i].scrollTop;
+  var h;
+  if (S.route === 'login') h = renderLogin();
+  else if (!S.s || !S.s.today) h = topBar('柏捷工地', null) + '<div class="wrap">' + (S.err ? '<div class="err">' + esc(S.err) + '</div>' : '<div class="card note" style="font-size:15px">讀取中…</div>') +
+    '<button class="ghost dim" data-act="tologin" style="margin-top:14px">回登入畫面</button></div>';
+  else h = ({ hub: renderHub, work: renderWork, edit: renderEdit, view: renderView, site: renderSite, pours: renderPours, sheets: renderSheets,
+    pdf: renderPdf, contracts: renderContracts, todo: renderTodo, logs: renderLogs, calendar: renderCal }[S.route] || renderHub)();
   $('app').innerHTML = h;
   if (S.route === 'login') { var c = $('code'); if (c) c.value = S.codeInput; }
+  for (var k in keep) { var el = document.querySelector('[data-sk="' + k + '"]'); if (el) el.scrollTop = keep[k]; }
   fillPhotos();
 }
+/** 背景回來的資料：正在打字、在看 PDF 時先不重畫（不然鍵盤會收起來、PDF 會不見） */
+function renderSoft() {
+  if (S.route === 'pdf') return;
+  var a = document.activeElement;
+  if (a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && a.type !== 'file'))) return;
+  render();
+}
+function renderModal() {
+  var m = S.modal;
+  if (!m) { $('modal').innerHTML = ''; return; }
+  var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal }[m.type](m);
+  $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
+  fillPhotos();
+}
+function closeModal() { S.modal = null; renderModal(); }
 
 function standalone() { return !!(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)); }
 
@@ -166,40 +500,209 @@ function renderLogin() {
     return h + '<div class="card"><h2 style="margin:4px 0 10px;font-size:22px">🔒 這支手機鎖住了</h2><div class="err">' + esc(S.locked) + '</div>' +
       '<button class="ghost" data-act="retry">' + (S.busy ? '確認中…' : '再試一次') + '</button></div></div>';
   }
-  h += '<div class="card"><h2 style="margin:4px 0 10px;font-size:22px">施工人員登入</h2>';
+  h += '<div class="card"><h2 style="margin:4px 0 10px;font-size:22px">用代碼登入</h2>';
   if (S.saved) {
     // 代碼記住了：鎖住、不顯示、不能改，只按「登入」（使用者 2026-11-08）
     h += '<div class="label">這支手機的代碼（已記住，不能改）</div>' +
-      '<div style="font-size:28px;letter-spacing:8px;padding:8px 12px;border:1.5px solid var(--line);border-radius:8px;background:#f4f5f7;color:var(--muted)">🔒 ' + '●●●●●●' + '</div>';
+      '<div style="font-size:28px;letter-spacing:8px;padding:8px 12px;border:1.5px solid var(--line);border-radius:10px;background:#f4f7f8;color:var(--muted)">🔒 ●●●●●●</div>';
   } else {
     h += '<div class="label">輸入管理者給你的代碼</div>' +
       '<input type="text" id="code" data-f="codeInput" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="12" style="font-size:26px;letter-spacing:5px;text-transform:uppercase">';
   }
   h += (S.err ? '<div class="err" style="margin-top:10px">' + esc(S.err) + '</div>' : '') +
     '<button class="big" data-act="login" style="margin-top:12px"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? '登入中…' : '登入') + '</button>';
-  h += S.saved ? '<div class="note">要換人或換代碼，請找管理者。</div>'
-    : '<div class="note">代碼只給你自己用；打錯 3 次這支手機會先鎖 30 分鐘。</div>';
+  h += S.saved ? '<div class="note">要換人或換代碼，請找管理者。</div>' : '<div class="note">代碼只給你自己用；打錯 3 次這支手機會先鎖 30 分鐘。</div>';
   h += '</div>';
   if (!standalone()) h += '<div class="box"><b>iPhone 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按下面的「分享」⬆︎ →「加入主畫面」→ 之後都從桌面的「柏捷工地」圖示打開，在那裡輸入代碼（Safari 裡輸入的，圖示那邊不會記得）。</div></div>';
+  return h + '<div class="sub" style="text-align:center">網頁版 ' + WEB_VERSION + '</div></div>';
+}
+
+// ===================== 首頁 =====================
+function renderHub() {
+  var s = S.s, f = S.feed, off = isOffice(), sites = feedSites(), news = shownNews();
+  var h = renderHero() + '<div class="wrap">';
+  h += siteCard(sites, news);
+  var todos = off ? homeTodos() : null;
+  h += todos ? remTodoCard(todos) : scrollCard('⏰ 今日提醒', 168, remRows(), '', null, 'rem');
+  if (off && f && f.cal) h += weekCalCard(f.cal);
+  h += newsCard(news);
+  if (S.fc && S.fc.days && S.fc.days.length) h += weekWeather(S.fc);
+  var sub = S.feedErr || (!f && !S.feedBusy ? '讀不到最新消息：網路好了按上面「⟳ 更新」' : '');
+  h += '<div class="card"><button class="big" style="margin:0" data-act="sync">' + (S.feedBusy ? '更新中…' : '⟳ 更新') + '</button>' +
+    (sub ? '<div class="sub" style="margin-top:6px">' + esc(sub) + '</div>' : '') + '</div>';
+  h += '<div class="sub" style="padding-left:4px">' + esc(s.name + (s.full ? '（' + s.full + '）' : '') + '・' + s.role) + '　網頁版 ' + WEB_VERSION + '</div>';
+  h += '<div class="note" style="padding:4px 4px 0">iPhone 網頁版沒有桌面小工具，App 關著時也不會跳通知；打開就會更新。</div>';
   return h + '</div>';
 }
 
+function renderHero() {
+  var w = S.here, now = new Date();
+  var h = '<div class="hero"><div class="hero-in"><div class="row" style="gap:0">' +
+    '<div class="grow"><div style="font-size:15px;font-weight:bold;opacity:.88;letter-spacing:1px">柏捷營造</div>' +
+    '<div style="font-size:28px;font-weight:800;line-height:34px;margin-top:2px">' + hello(now) + ' 👷</div></div>';
+  if (w) h += '<button class="wx" data-act="here"><div style="font-size:26px;font-weight:800;white-space:nowrap">' + nightEmoji(weatherEmoji(w.weather || w.text), now) +
+    (hasTemp(w) ? ' ' + Math.round(w.temp) + '°' : '') + '</div><div style="font-size:13px;font-weight:bold">' + esc(w.text || w.weather) + '</div>' +
+    '<div style="font-size:11.5px;opacity:.85">' + esc(w.town || w.county) + '</div></button>';
+  h += '</div><div style="font-size:17px;font-weight:bold;line-height:23px;margin-top:6px">' + esc(warmGreeting(now)) + '</div>';
+  var g = weatherGreeting(w, now);
+  if (g) h += '<div class="wxbar">' + esc(g) + '</div>';
+  else if (!w && S.hereHint) h += '<button class="hint" data-act="here">' + esc(S.hereHint) + '</button>';
+  return h + '</div></div>';
+}
+
+function siteCard(sites, news) {
+  var cur = null;
+  sites.forEach(function (x) { if (x.name === S.site) cur = x; });
+  if (!cur) cur = sites[0] || null;
+  function badge(n) { var c = 0; news.forEach(function (x) { if (x.site === n && x.isNew) c++; }); return c; }
+  var others = 0; sites.forEach(function (x) { if (!cur || x.name !== cur.name) others += badge(x.name); });
+  var h = '<div class="card"><div class="row"><span class="label" style="margin:0">我的工地</span>' +
+    (others ? '<span style="font-size:12.5px;color:var(--red);font-weight:bold">其他工地有 ' + others + ' 則新的</span>' : '') + '</div>';
+  h += '<div class="row" style="margin-top:6px"><button class="sitebox grow" data-act="siteopen"><div class="row" style="gap:4px">' +
+    '<span style="font-size:21px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(cur ? cur.name : '還沒有工地') + '</span>' +
+    (cur ? badgeHtml(badge(cur.name)) : '') + '<span class="grow"></span><span class="chev">' + (S.siteOpen ? '▲' : '▼') + '</span></div>' + (cur ? progressHtml(cur) : '') + '</button>';
+  if (cur) h += '<button class="enter" data-act="enter" data-v="' + esc(cur.name) + '">進入 ›</button>';
+  h += '</div>';
+  if (S.siteOpen) {
+    h += '<div style="margin-top:8px;border-top:1px solid #EAF0F4">';
+    sites.forEach(function (x) {
+      h += '<button class="siteopt" data-act="enter" data-v="' + esc(x.name) + '"><div style="font-size:18px;font-weight:bold">' + esc(x.name) + badgeHtml(badge(x.name)) + '</div>' + progressHtml(x) + '</button>';
+    });
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+function progressHtml(st) {
+  var t = siteDaysText(st), p = siteProgress(st);
+  return (t ? '<div class="sub" style="font-size:12.5px">' + esc(t) + '</div>' : '') + (p != null ? '<div class="bar"><i style="width:' + Math.max(2, Math.round(p * 100)) + '%"></i></div>' : '');
+}
+
+function scrollCard(title, height, body, right, action, key, top) {
+  return '<div class="card"><div class="row" style="gap:0"><span class="ttl grow">' + esc(title) + '</span>' +
+    (right ? '<span style="font-size:12.5px;color:var(--red);font-weight:bold">' + esc(right) + '</span>' : '') +
+    (action ? '<button class="pill" data-act="' + action.act + '" data-v="' + esc(action.v || '') + '">' + esc(action.label) + '</button>' : '') + '</div>' +
+    (top || '') + '<div class="scard" data-sk="' + key + '" style="height:' + height + 'px">' + body + '</div></div>';
+}
+
+function remRows() {
+  var list = (S.feed && S.feed.reminders) || [];
+  if (!S.feed) return '<div class="sub" style="padding:6px 0;font-size:14px">' + (S.feedBusy ? '讀取中…' : '讀不到：網路好了按下面「⟳ 更新」') + '</div>';
+  if (!list.length) return '<div class="sub" style="padding:6px 0;font-size:14px">今天沒有要特別注意的事 👍</div>';
+  return list.map(function (r, i) {
+    var click = r.site || r.kind === 'cal';
+    return (i ? '<div class="div"></div>' : '') + '<div class="rem' + (r.hot ? ' hot' : '') + '"' + (click ? ' data-act="rem" data-v="' + i + '"' : '') + '>' + esc(r.text) + '</div>';
+  }).join('');
+}
+
+/** 今日提醒｜待辦（開發者、老闆、主任、公司） */
+function remTodoCard(all) {
+  var open = all.filter(function (t) { return !t.done; }), bySite = {}, order = [];
+  open.forEach(function (t) { if (!bySite[t.site]) { bySite[t.site] = []; order.push(t.site); } bySite[t.site].push(t); });
+  order.sort(function (a, b) { return bySite[b].length - bySite[a].length || cmp(a, b); });
+  if (S.todoSite && !bySite[S.todoSite]) S.todoSite = '';
+  var n = ((S.feed && S.feed.reminders) || []).length;
+  var h = '<div class="card"><div class="tabs"><button class="tab' + (S.hubTab === 0 ? ' on' : '') + '" data-act="hubtab" data-v="0">⏰ 今日提醒 ' + n + '</button>' +
+    '<button class="tab' + (S.hubTab === 1 ? ' on' : '') + '" data-act="hubtab" data-v="1">✅ 待辦 ' + open.length + '</button></div>';
+  if (S.hubTab !== 1) return h + '<div class="scard" data-sk="rem" style="height:232px">' + remRows() + '</div></div>';
+  h += '<div class="chips scroll" style="margin-top:8px"><button class="chip small add" data-act="todoadd">＋ 新增</button>' + chip('todosite', '', '全部 ' + open.length, !S.todoSite, true) +
+    order.map(function (s) { return chip('todosite', s, s + ' ' + bySite[s].length, S.todoSite === s, true); }).join('') + '</div>';
+  var body = open.length ? '' : '<div class="sub" style="padding:6px 0;font-size:14px">都做完了 👍　按「＋ 新增」加待辦</div>';
+  (S.todoSite ? [S.todoSite] : order).forEach(function (s) {
+    var list = bySite[s]; if (!list) return;
+    body += '<div class="row" style="padding:8px 0 2px" data-act="todoopen" data-v="' + esc(s) + '"><b class="grow" style="font-size:14px;color:var(--navy)">' + esc(s) + '</b>' +
+      '<span style="font-size:13px;color:var(--todo);font-weight:bold">' + list.length + ' 項 ›</span></div>';
+    list.slice().sort(function (a, b) { return a.at - b.at; }).forEach(function (t) { body += hubTodoRow(t); });
+  });
+  var done = all.filter(function (t) { return t.done && (!S.todoSite || t.site === S.todoSite); }).sort(function (a, b) { return b.doneAt - a.doneAt; });
+  if (done.length) { body += '<div style="font-size:13px;font-weight:bold;color:var(--muted);padding-top:10px">最近做完</div>'; done.forEach(function (t) { body += hubTodoRow(t); }); }
+  return h + '<div class="scard" data-sk="todo" style="height:196px">' + body + '</div></div>';
+}
+function hubTodoRow(t) {
+  return '<div class="trow' + (t.done ? ' done' : '') + '"><button class="tbox' + (t.done ? ' done' : '') + '" style="margin:3px 4px 0 2px" data-act="todotoggle" data-v="' + esc(t.id) + '">' + (t.done ? '✓' : '') + '</button>' +
+    '<div class="grow" data-act="todoopen" data-v="' + esc(t.site) + '"><div class="t">' + esc(t.text) + '</div>' +
+    (t.done ? '<span class="who">（' + esc(t.site) + '）— ' + esc(t.doneBy || '有人') + ' 完成</span>' : '') + '</div></div>';
+}
+
+/** 📅 這週行程：今天起 8 天，一天一段 */
+function weekCalCard(events) {
+  var t = todayYmd(), body = '', any = false;
+  for (var i = 0; i <= 7; i++) {
+    var d = addDays(t, i), list = eventsOn(events, d);
+    if (!list.length) continue;
+    body += (any ? '<div class="div"></div>' : '') + '<div class="row" style="align-items:flex-start;padding:6px 0" data-act="calopen" data-v="' + d + '">' +
+      '<div style="width:78px;flex:none;font-size:13.5px;font-weight:bold;color:' + (i === 0 ? 'var(--teal)' : 'var(--muted)') + '">' + (i === 0 ? '今天' : i === 1 ? '明天' : calDay(d)) + '</div><div class="grow">' +
+      list.map(function (e) { return '<div style="font-size:14.5px;line-height:20px">' + esc(e.title + (e.site ? '（' + e.site + '）' : '') + (e.allDay || !e.start ? '' : '（' + ampm(e.start) + '）')) + '</div>'; }).join('') + '</div></div>';
+    any = true;
+  }
+  if (!any) body = '<div class="sub" style="padding:6px 0;font-size:14px">這週沒有行程。按右上「打開」可以新增。</div>';
+  return scrollCard('📅 這週行程', 176, body, '', { label: '打開 ›', act: 'calopen', v: '' }, 'week');
+}
+
+var NEWS_GROUPS = [['全部', []], ['👷 施工人員', ['worker']], ['🚚 灌漿・施工單', ['pour', 'sheet']], ['🤝 發包', ['contract']], ['📢 注意事項', ['notice']], ['✅ 待辦', ['todo']]];
+var NEWS_ICON = { pour: ['🚚', '#F2994A'], sheet: ['📐', '#16A6A0'], contract: ['🤝', '#9B51E0'], worker: ['👷', '#2F80ED'], notice: ['📢', '#E5383B'], cal: ['📅', '#2F80ED'], todo: ['✅', '#1E8E5A'] };
+function newsTag(n) {
+  switch (n.kind) {
+    case 'cal': return n.tag === 'add' ? ['新增行程', '#1E9E6A'] : n.tag === 'del' ? ['行程取消', '#E5383B'] : n.tag === 'chg' ? ['行程改了', '#2F80ED'] : ['行程', '#2F80ED'];
+    case 'worker': return ['施工人員', '#1C5D99'];
+    case 'pour': return ['灌漿數量', '#F2994A'];
+    case 'sheet': return ['施工單', '#16A6A0'];
+    case 'contract': return ['發包', '#9B51E0'];
+    case 'notice': return ['注意事項', '#E0662B'];
+    case 'todo': return [n.tag === 'done' ? '待辦完成' : '新增待辦', '#1E8E5A'];
+    default: return ['消息', '#5D7486'];
+  }
+}
+function hexA(hex, a) { var n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')'; }
+function newsCard(news) {
+  var groups = NEWS_GROUPS.filter(function (g) { return g[0] === '全部' || news.some(function (n) { return g[1].indexOf(n.kind) >= 0; }); });
+  var cur = groups.filter(function (g) { return g[0] === S.newsGroup; })[0] || groups[0];
+  var list = cur[1].length ? news.filter(function (n) { return cur[1].indexOf(n.kind) >= 0; }) : news;
+  var chips = groups.length > 2;
+  var top = chips ? '<div class="chips scroll" style="margin-top:6px">' + groups.map(function (g) { return chip('newsgroup', g[0], g[0], g[0] === cur[0], true); }).join('') + '</div>' : '';
+  var newN = news.filter(function (n) { return n.isNew; }).length;
+  var body = list.length ? list.map(function (n, i) { return (i ? '<div class="div"></div>' : '') + newsRow(n); }).join('')
+    : '<div class="sub" style="padding:6px 0;font-size:14px">' + (!S.feed ? (S.feedBusy ? '讀取中…' : '讀不到：網路好了按下面「⟳ 更新」') : news.length ? '這一類最近沒有消息' : '最近 14 天沒有新消息') + '</div>';
+  return scrollCard('📣 最新消息', chips ? 254 : 300, body, newN ? '新的 ' + newN + ' 則' : '', { label: '＋ 注意事項', act: 'noticeadd' }, 'news', top);
+}
+function newsRow(n) {
+  var ic = NEWS_ICON[n.kind] || ['📱', '#1C5D99'], tg = newsTag(n), meta = [n.by, timeWord(n.at)].filter(Boolean).join(' ・ ');
+  return '<div class="news" data-act="news" data-v="' + esc(n.key) + '"><div class="ico" style="background:' + hexA(ic[1], 0.16) + '">' + ic[0] + '</div><div class="grow">' +
+    '<div class="row" style="gap:0"><span class="tag" style="background:' + tg[1] + '">' + tg[0] + '</span>' +
+    (n.site ? '<span style="font-size:12.5px;color:var(--muted);font-weight:bold;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(n.site) + '</span>' : '') +
+    (n.isNew ? '<span class="newtag">新</span>' : '') + '</div>' +
+    '<div style="font-size:14.5px;line-height:20px;margin-top:2px;' + (n.isNew || n.kind === 'cal' ? 'font-weight:bold;' : '') + (n.tag === 'del' ? 'color:var(--muted);' : '') + '">' + esc(n.text) + '</div>' +
+    (n.sub ? '<div class="nsub">' + esc(n.sub) + '</div>' : '') + (meta ? '<div class="sub" style="font-size:12px;margin-top:1px">' + esc(meta) + '</div>' : '') + '</div></div>';
+}
+function weekWeather(fc) {
+  var h = '<div class="card"><div class="row"><span class="ttl grow">🗓️ 這週天氣</span><span class="sub" style="font-size:12px">' + esc(fc.county || '') + '・中央氣象署</span></div><div class="days">';
+  fc.days.forEach(function (d) {
+    var rain = (d.pop || 0) >= 50;
+    var t = [d.min, d.max].filter(function (x) { return typeof x === 'number' && isFinite(x); }).map(Math.round).join('～');
+    h += '<div class="day' + (rain ? ' rain' : '') + '"><div style="font-size:13px;font-weight:bold">' + weekday(d.date) + '</div><div class="sub" style="font-size:11.5px">' + md(d.date) + '</div>' +
+      '<div style="font-size:24px;margin:2px 0">' + weatherEmoji(d.wx) + '</div><div style="font-size:12.5px">' + (t ? t + '°' : '') + '</div>' +
+      (d.pop != null ? '<div style="font-size:12px;' + (rain ? 'color:var(--blue);font-weight:bold' : 'color:var(--muted)') + '">☔ ' + d.pop + '%</div>' : '') + '</div>';
+  });
+  return h + '</div></div>';
+}
+
+// ===================== 我的工作（施工人員傳的；原本的畫面） =====================
 function entryRow(e) {
   var x = [];
   if (e.weather) x.push('天氣 ' + e.weather);
   if (e.materials && e.materials.length) x.push('材料 ' + e.materials.map(matText).join('、'));
-  return '<div class="entry' + (e.mine ? ' mine' : '') + '" data-act="open" data-v="' + esc(e.id) + '"><div class="who">' + esc(e.name) + '</div><div class="body">' +
+  var rc = (e.receipts || []).length;
+  return '<div class="entry' + (e.mine ? ' mine' : '') + '" data-act="open" data-v="' + esc(e.id) + '"><div class="who2">' + esc(e.name) + '</div><div class="body">' +
     '<div class="sub">' + esc(e.category + '｜' + hoursLabel(e.hours) + (e.proxy ? '｜管理者代填' : '')) + '</div>' +
     (e.site === UNFILED ? '<div class="sub" style="color:var(--warn);font-weight:bold">他打的工地：' + esc(e.siteText || '（沒打）') + '</div>' : '') +
     '<div>' + esc(e.text || '（沒寫內容）') + '</div>' +
     (x.length ? '<div class="sub" style="color:var(--navy)">' + esc(x.join('｜')) + '</div>' : '') +
     (e.reqStatus ? '<div class="sub" style="font-weight:bold;color:' + reqColor(e.reqStatus) + '">' + esc(reqLabel(e.reqStatus)) + '</div>' : '') +
-    '</div><div style="white-space:nowrap">📷' + (e.photos || []).length + (e.mine ? ' <b style="color:var(--orange)">✎</b>' : '') + '</div></div>';
+    '</div><div style="white-space:nowrap">📷' + (e.photos || []).length + (rc ? ' 🧾' + rc : '') + (e.mine ? ' <b style="color:var(--orange)">✎</b>' : '') + '</div></div>';
 }
 
-function renderHome() {
+function renderWork() {
   var s = S.s;
-  var h = topBar('我的工作', null, S.loading ? '更新中…' : '⟳ 更新', 'reload') + '<div class="wrap">';
+  var h = topBar('我的工作', hasFeed() ? S.workFrom : null, S.loading ? '更新中…' : '⟳ 更新', 'reload') + '<div class="wrap">';
   h += '<div class="card"><b style="font-size:18px">' + esc(s.name + (s.full ? '（' + s.full + '）' : '')) + '</b>' +
     '<div class="sub">' + (s.role === '管理者' ? '管理者：不受期限限制' : '可以傳 ' + md(addDays(s.today, -(s.days - 1))) + '～' + md(s.today) + ' 的工作（含今天 ' + s.days + ' 天）') + '</div>' +
     '<div class="label" style="margin-top:10px">工地</div><div class="chips">' +
@@ -207,6 +710,7 @@ function renderHome() {
     '<div class="note" style="margin-top:6px">沒有你的工地？選「未分組」，新增時自己打工地名稱，管理者會再歸到正確的工地。</div></div>';
   if (S.err) h += '<div class="err">' + esc(S.err) + '</div>';
   h += '<button class="big" data-act="add"' + (S.site ? '' : ' disabled') + '>＋ 新增我的工作</button>';
+  if (hasFeed() && S.site && S.site !== UNFILED) h += '<button class="ghost" data-act="logsfromwork">📋 看「' + esc(S.site) + '」的施工日誌</button>';
   var groups = {}, order = [];
   S.entries.forEach(function (e) { if (!groups[e.date]) { groups[e.date] = []; order.push(e.date); } groups[e.date].push(e); });
   order.sort().reverse();
@@ -220,9 +724,15 @@ function renderHome() {
   return h + '</div>';
 }
 
+function editOk() {
+  var d = S.d, n = d.remote.length + d.local.length + d.remoteR.length + d.localR.length;
+  var filled = d.mats.filter(function (m) { return (m.vendor || '').trim() || (m.qty || '').trim(); }).length;
+  return !S.busy && d.cat && (S.site !== UNFILED || d.siteText.trim()) && (d.text.trim() || n || filled);
+}
+
 function renderEdit() {
   var d = S.d, s = S.s, proxy = d.proxy && s.role !== '管理者';
-  var h = topBar(d.id ? '修改我的工作' : '新增我的工作', 'home') + '<div class="wrap">';
+  var h = topBar(d.id ? '修改我的工作' : '新增我的工作', 'work') + '<div class="wrap">';
   if (proxy) {
     h += '<div class="box"><b style="color:var(--warn)">這筆是管理者幫你填的</b><div>可以照你實際做的改；改的內容要等管理者按「同意」才會換（照片直接加）。</div>' +
       (d.reqStatus ? '<div style="font-weight:bold;color:' + reqColor(d.reqStatus) + '">' + esc(reqLabel(d.reqStatus)) + (d.pending ? '（下面是你上次改的）' : '') + '</div>' : '') +
@@ -251,18 +761,23 @@ function renderEdit() {
   });
   if (d.mats.length < MAX_MATS) h += '<button class="link" data-act="matadd">' + (d.mats.length ? '＋ 再加一筆' : '＋ 新增材料/機具') + '</button>';
   h += '</div>';
+  // 單據照片（材料單、重機具單；只有開發者、老闆、主任和自己看得到；App 0.9.20 起有）
+  var rn = d.remoteR.length + d.localR.length;
+  h += '<div class="card" style="background:#FFFBF0"><div class="label">🧾 單據照片（材料單、重機具單；' + rn + ' 張）</div>' + (rn ? '<div class="thumbs">' : '');
+  d.remoteR.forEach(function (id) { h += '<div class="thumb"><img data-pid="' + esc(id) + '" alt=""><button class="x" data-act="rmremoter" data-v="' + esc(id) + '">✕</button></div>'; });
+  d.localR.forEach(function (p, i) { h += '<div class="thumb"><img src="' + p.url + '" alt=""><button class="x" data-act="rmlocalr" data-v="' + i + '">✕</button><span class="new">未上傳</span></div>'; });
+  h += (rn ? '</div>' : '') + (rn < MAX_RECEIPTS ? '<div class="row2"><button class="ghost" style="margin:0" data-act="camr">📷 拍單據</button><button class="ghost" style="margin:0" data-act="pickr">🖼 從相簿選</button></div>' : '') +
+    '<div class="note" style="margin-top:6px">單據只有開發者、老闆、主任和你自己看得到。</div></div>';
   h += '<div class="card"><div class="label">做了什麼（位置、內容）</div><textarea data-f="text" placeholder="例：地梁綁紮（A 區）">' + esc(d.text) + '</textarea></div>';
   // 照片
   var n = d.remote.length + d.local.length;
   h += '<div class="card"><div class="label">照片（' + n + ' 張）</div><div class="thumbs">';
   d.remote.forEach(function (id) { h += '<div class="thumb"><img data-pid="' + esc(id) + '" alt=""><button class="x" data-act="rmremote" data-v="' + esc(id) + '">✕</button></div>'; });
   d.local.forEach(function (p, i) { h += '<div class="thumb"><img src="' + p.url + '" alt=""><button class="x" data-act="rmlocal" data-v="' + i + '">✕</button><span class="new">未上傳</span></div>'; });
-  h += '</div>' + (n < MAX_PHOTOS ? '<div class="row2"><button class="ghost" data-act="cam">📷 拍照</button><button class="ghost" data-act="pick">🖼 從相簿選</button></div>' : '') +
+  h += '</div>' + (n < MAX_PHOTOS ? '<div class="row2"><button class="ghost" style="margin:0" data-act="cam">📷 拍照</button><button class="ghost" style="margin:0" data-act="pick">🖼 從相簿選</button></div>' : '') +
     '<div class="note" style="margin-top:6px">照片會先縮小（長邊 1600）再上傳。</div></div>';
   if (S.err) h += '<div class="err">' + esc(S.err) + '</div>';
-  var filled = d.mats.filter(function (m) { return (m.vendor || '').trim() || (m.qty || '').trim(); }).length;
-  var ok = !S.busy && d.cat && (S.site !== UNFILED || d.siteText.trim()) && (d.text.trim() || n || filled);
-  h += '<button class="big" data-act="save"' + (ok ? '' : ' disabled') + '>' + (S.busy ? esc(S.progress || '上傳中…') : proxy ? '送出（等管理者同意）' : '上傳') + '</button>';
+  h += '<button class="big" data-act="save"' + (editOk() ? '' : ' disabled') + '>' + (S.busy ? esc(S.progress || '上傳中…') : proxy ? '送出（等管理者同意）' : '上傳') + '</button>';
   if (d.id && !proxy) h += '<button class="ghost red" data-act="del">刪除這一筆</button>';
   if (proxy) h += '<div class="note" style="text-align:center">管理者填的這筆不能刪；不是你做的請跟管理者說。</div>';
   h += '<div class="note" style="text-align:center;margin-top:10px">' + (s.role === '管理者' ? '管理者可以改任何一天。' : '傳了以後 ' + s.days + ' 天內還可以改；過了就只有管理者能改。') + '</div>';
@@ -270,66 +785,405 @@ function renderEdit() {
 }
 
 function renderView() {
-  var e = S.view, x = [];
-  var h = topBar(e.name + ' 的工作', 'home') + '<div class="wrap">';
+  var e = S.view;
+  var h = topBar(e.name + ' 的工作', 'work') + '<div class="wrap">';
   if (e.proxy) h += '<div class="box"><b style="color:var(--warn)">管理者幫' + esc(e.name) + '填的</b>' + (e.reqStatus ? '<div style="font-weight:bold;color:' + reqColor(e.reqStatus) + '">' + esc(reqLabel(e.reqStatus)) + '</div>' : '') + '</div>';
   h += '<div class="card"><div class="sub" style="font-size:15px">' + md(e.date) + '（' + dayName(e.date) + '）' + esc(e.site) + (e.siteText ? '（他打的：' + esc(e.siteText) + '）' : '') + '</div>' +
-    '<div style="font-weight:bold;margin-top:4px">' + esc(e.category + '｜' + hoursLabel(e.hours)) + '</div><div style="font-size:19px;margin-top:4px">' + esc(e.text || '（沒寫內容）') + '</div>' +
+    '<div style="font-weight:bold;margin-top:4px">' + esc(e.category + '｜' + hoursLabel(e.hours)) + '</div><div style="font-size:19px;margin-top:4px;white-space:pre-wrap">' + esc(e.text || '（沒寫內容）') + '</div>' +
     (e.weather ? '<div style="color:var(--navy);margin-top:6px">天氣：' + esc(e.weather) + '</div>' : '') +
     (e.materials && e.materials.length ? '<div style="color:var(--navy)">材料/機具：' + esc(e.materials.map(matText).join('、')) + '</div>' : '') + '</div>';
   h += '<div class="full">' + (e.photos || []).map(function (id) { return '<img data-pid="' + esc(id) + '" alt="">'; }).join('') + '</div>';
   if (!(e.photos || []).length) h += '<div class="card note">沒有照片</div>';
+  if ((e.receipts || []).length) h += '<div class="card"><div class="ttl">🧾 單據照片（' + e.receipts.length + ' 張）</div></div><div class="full">' + e.receipts.map(function (id) { return '<img data-pid="' + esc(id) + '" alt="">'; }).join('') + '</div>';
   return h + '</div>';
 }
 
-/** 雲端的照片：第一次跟收件服務拿，之後用記住的 */
-function fillPhotos() {
-  var imgs = document.querySelectorAll('img[data-pid]');
-  for (var i = 0; i < imgs.length; i++) {
-    var id = imgs[i].getAttribute('data-pid');
-    if (S.photos[id] && S.photos[id] !== 'loading') imgs[i].src = S.photos[id];
-    else if (!S.photos[id]) loadPhoto(id);
-  }
+// ===================== 工地頁（老闆、主任、公司） =====================
+function tile(title, sub, color, em, v) {
+  return '<button class="tile" data-act="tile" data-v="' + v + '"><span class="em" style="background:' + color + '">' + em + '</span><span class="grow"><b>' + esc(title) + '</b>' +
+    '<span class="sub" style="display:block;font-size:14px">' + esc(sub) + '</span></span><span class="arrow">›</span></button>';
 }
-function loadPhoto(id) {
-  S.photos[id] = 'loading';
-  api('photoget', { fileId: id }).then(function (r) {
-    S.photos[id] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.data;
-    var imgs = document.querySelectorAll('img[data-pid="' + id + '"]');
-    for (var i = 0; i < imgs.length; i++) imgs[i].src = S.photos[id];
-  }).catch(function () { delete S.photos[id]; });
+function pourOf(d) { return d.props || {}; }
+/** 灌漿數量排序：今天和之後的（最近的在最上面）→ 已經過的（新的在上面）→ 沒寫日期的 */
+function pourOrder(list) {
+  var t = todayYmd();
+  var dated = list.filter(function (d) { return dateOf(pourOf(d).pourDate); }), none = list.filter(function (d) { return !dateOf(pourOf(d).pourDate); });
+  var next = dated.filter(function (d) { return pourOf(d).pourDate >= t; }).sort(function (a, b) { return cmp(pourOf(a).pourDate, pourOf(b).pourDate); });
+  var past = dated.filter(function (d) { return pourOf(d).pourDate < t; }).sort(function (a, b) { return cmp(pourOf(b).pourDate, pourOf(a).pourDate); });
+  return next.concat(past, none.sort(function (a, b) { return cmp(b.modified || '', a.modified || ''); }));
+}
+function docTitle(d) { return String(d.name || '').replace(/\.pdf$/i, ''); }
+function contractBook(items) {
+  var live = (items || []).filter(function (c) { return !c.deleted; }).sort(function (a, b) { return ((a.order || 0) - (b.order || 0)) || cmp(a.name || '', b.name || ''); });
+  return { todo: live.filter(function (c) { return !c.done; }),
+    done: live.filter(function (c) { return c.done; }).sort(function (a, b) { return cmp(b.date || '', a.date || '') || ((a.order || 0) - (b.order || 0)); }) };
+}
+function money(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+function renderSite() {
+  var o = S.office, site = S.site, t = todayYmd();
+  var h = topBar(site, 'hub') + '<div class="wrap">';
+  if (!o) h += '<div class="sub" style="font-size:15px;margin:0 4px 10px">' + esc(S.officeErr || '讀取中…') + '</div>';
+  var sheets = o ? (o.sheets || []).filter(function (d) { return d.site === site; }).length : 0;
+  var pours = o ? (o.pours || []).filter(function (d) { return d.site === site; }) : [];
+  var next = pourOrder(pours).filter(function (d) { return pourOf(d).pourDate && pourOf(d).pourDate >= t; })[0];
+  var book = o && o.books && o.books[site];
+  var cb = book ? contractBook(book) : null;
+  h += tile('施工日誌', '每天的日誌、施工人員傳的、照片', '#2F80ED', '📋', 'logs');
+  h += tile('鋼筋施工單', sheets + ' 份', '#16A6A0', '📐', 'sheets');
+  h += tile('混凝土灌漿數量', next ? '下一次 ' + rocDate(pourOf(next).pourDate) + '（' + (pourOf(next).part || '') + '）' + (pourOf(next).m3 ? ' ・ ' + pourOf(next).m3 + ' m³' : '') : pours.length + ' 份', '#F2994A', '🚚', 'pours');
+  h += tile('發包', cb ? '未發包 ' + cb.todo.length + ' ・ 已發包 ' + cb.done.length : '還沒有發包資料', '#9B51E0', '🤝', 'contracts');
+  if (S.feed && S.feed.todo) h += tile('待辦事項', todoLine(S.feed.todo[site]), '#1E8E5A', '✅', 'todo');
+  if (o && S.officeErr) h += '<div class="sub">' + esc(S.officeErr) + '</div>';
+  return h + '</div>';
+}
+
+function renderPours() {
+  var site = S.site, o = S.office, t = todayYmd();
+  var h = topBar('混凝土灌漿數量', 'site', S.officeBusy ? '更新中…' : '⟳ 更新', 'officereload') + '<div class="wrap"><div class="label">' + esc(site) + ' ・ 一次灌漿一份（裡面有這次灌漿的各部位及米數）</div>';
+  if (S.officeErr) h += '<div class="err">' + esc(S.officeErr) + '</div>';
+  if (!o) return h + '<div class="sub">讀取中…</div></div>';
+  var list = pourOrder((o.pours || []).filter(function (d) { return d.site === site; }));
+  if (!list.length) h += '<div class="card sub" style="font-size:15px">這個工地還沒有灌漿數量。</div>';
+  list.forEach(function (d) {
+    var p = pourOf(d), day = dateOf(p.pourDate) ? p.pourDate : '';
+    var dt = !day ? '灌漿日期：沒有填' : day === t ? '今天灌漿 ' + rocDate(day) + '（' + weekday(day) + '）'
+      : day > t ? '灌漿日 ' + rocDate(day) + '（' + weekday(day) + '）・ ' + daysBetween(t, day) + ' 天後' : '灌漿日 ' + rocDate(day) + '（' + weekday(day) + '）・ 已過';
+    var col = day === t ? 'var(--warn)' : day > t ? 'var(--navy)' : 'var(--muted)';
+    var re = d.created && d.modified && (new Date(d.modified) - new Date(d.created)) >= 60000;
+    h += '<button class="item" data-act="pdfopen" data-v="' + esc(d.id) + '"' + (day === t ? ' style="border:2px solid var(--orange)"' : '') + '><span class="pdfph">PDF</span><span class="grow">' +
+      '<b style="font-size:17px;display:block">' + esc(p.part || docTitle(d)) + '</b>' +
+      '<span style="display:block;font-size:14px;color:' + col + ';' + (day && day >= t ? 'font-weight:bold' : '') + '">' + esc(dt) + '</span>' +
+      (p.m3 ? '<span style="display:block;font-size:14px">合計 ' + esc(p.m3) + ' m³' + (p.trucks ? ' ・ ' + esc(p.trucks) + ' 車' : '') + '</span>' : '') +
+      '<span class="sub" style="display:block;font-size:12.5px">上傳 ' + esc(shortTime(d.modified) || '─') + (re ? ' ・ 第一次 ' + esc(shortTime(d.created)) : '') + '</span></span><span class="arrow">›</span></button>';
+  });
+  return h + '<div class="note" style="margin-top:4px">同一份重新上傳會自動換成新的，第一次上傳的時間也會留著。</div></div>';
+}
+
+function renderSheets() {
+  var site = S.site, o = S.office;
+  var h = topBar('鋼筋施工單', 'site', S.officeBusy ? '更新中…' : '⟳ 更新', 'officereload') + '<div class="wrap"><div class="label">' + esc(site) + ' ・ 依群組，一個群組一份（跟列印出來的一樣）</div>';
+  if (S.officeErr) h += '<div class="err">' + esc(S.officeErr) + '</div>';
+  if (!o) return h + '<div class="sub">讀取中…</div></div>';
+  var list = (o.sheets || []).filter(function (d) { return d.site === site; }).sort(function (a, b) { return cmp(docTitle(a), docTitle(b)); });
+  if (!list.length) h += '<div class="card sub" style="font-size:15px">這個工地還沒有施工單。要看別的工地，回首頁換工地。</div>';
+  list.forEach(function (d) {
+    h += '<button class="item" data-act="pdfopen" data-v="' + esc(d.id) + '"><span class="pdfph">PDF</span><span class="grow"><b style="font-size:16px;display:block">' + esc(docTitle(d)) + '</b>' +
+      '<span class="sub" style="display:block">' + esc(shortTime(d.modified) || '─') + ' 列印</span></span><span class="arrow">›</span></button>';
+  });
+  return h + '<div class="note" style="margin-top:4px">同一個群組重新列印，就會自動換成新的。</div></div>';
+}
+
+function renderPdf() {
+  var p = S.pdf;
+  return topBar(p.title, p.from) + '<div class="wrap" style="max-width:none;padding:8px 8px 40px"><div id="pdfstatus" class="sub" style="font-size:14px;margin:4px 4px 8px">' + esc(p.status) + '</div>' +
+    '<div id="pdfpages"></div><div class="note" style="margin:8px 4px">兩指可以放大；看完按左上 ‹ 回去。</div></div>';
+}
+
+function renderContracts() {
+  var o = S.office, site = S.site, showMoney = !!(o && o.money);
+  var b = contractBook(o && o.books ? o.books[site] : []);
+  var h = topBar('發包', 'site') + '<div class="wrap"><div class="label">' + esc(site) + '</div>';
+  if (!o) return h + '<div class="sub">' + esc(S.officeErr || '讀取中…') + '</div></div>';
+  h += '<div class="row" style="margin-bottom:10px"><button class="key' + (S.contractTab === 0 ? ' on' : '') + '" data-act="ctab" data-v="0">未發包 ' + b.todo.length + '</button>' +
+    '<button class="key' + (S.contractTab === 1 ? ' on' : '') + '" data-act="ctab" data-v="1">已發包 ' + b.done.length + '</button></div>';
+  if (S.contractTab === 0) {
+    if (!b.todo.length) h += '<div class="card sub" style="font-size:15px">' + (b.done.length ? '全部都發包了。' : '還沒有發包資料。') + '</div>';
+    b.todo.forEach(function (c) { h += '<div class="item"><span class="grow">' + esc(c.name) + (c.note ? '<span class="sub" style="display:block">' + esc(c.note) + '</span>' : '') + '</span></div>'; });
+  } else {
+    if (!b.done.length) h += '<div class="card sub" style="font-size:15px">還沒有已發包的工項。</div>';
+    else if (showMoney) {
+      var total = 0, noAmt = 0; b.done.forEach(function (c) { if (c.amount != null) total += Number(c.amount) || 0; else noAmt++; });
+      h += '<div class="card" style="background:#F3ECFA"><div class="row"><span class="grow" style="font-size:15px">已發包合計</span><b style="font-size:19px;color:var(--purple)">NT$ ' + money(total) + '</b></div>' +
+        (noAmt ? '<div class="sub" style="font-size:12.5px">其中 ' + noAmt + ' 項還沒填金額</div>' : '') + '</div>';
+    }
+    b.done.forEach(function (c) {
+      h += '<div class="item"><span class="grow"><b style="display:block"><span style="color:var(--green)">✓ </span>' + esc(c.name) + '</b>' +
+        '<span style="display:block;font-size:14px">' + esc([c.vendor || '（沒填廠商）', dateOf(c.date) ? rocDate(c.date) : ''].filter(Boolean).join(' ・ ')) + '</span>' +
+        (c.note ? '<span class="sub" style="display:block">' + esc(c.note) + '</span>' : '') + '</span>' +
+        (showMoney ? (c.amount != null ? '<b style="color:var(--purple);font-size:15px;white-space:nowrap">NT$ ' + money(c.amount) + '</b>' : '<span class="sub">金額未填</span>') : '') + '</div>';
+    });
+  }
+  return h + '<div class="note" style="margin-top:4px">只有開發者可以修改發包。</div></div>';
+}
+
+// ===================== 待辦事項（一個工地） =====================
+function renderTodo() {
+  var items = S.todoItems;
+  var open = items ? items.filter(function (t) { return !t.done; }).sort(function (a, b) { return a.at - b.at; }) : [];
+  var done = items ? items.filter(function (t) { return t.done; }).sort(function (a, b) { return b.doneAt - a.doneAt; }) : [];
+  var h = topBar('✅ 待辦事項・' + S.site, S.todoFrom, S.todoBusy || '⟳ 更新', 'todoreload') + '<div class="wrap">';
+  h += '<div class="card row"><input type="text" id="todotext" data-f="todoText" enterkeyhint="done" maxlength="300" placeholder="＋ 新增待辦" value="' + esc(S.todoText) + '">' +
+    '<button class="pill" id="todoaddbtn" style="padding:12px 14px;font-size:16px;background:var(--todo)" data-act="todoaddpage"' + (S.todoText.trim() ? '' : ' disabled') + '>加入</button></div>';
+  if (S.todoErr) h += '<div class="err">' + esc(S.todoErr) + '</div>';
+  h += '<div class="card"><div class="label">' + (items ? '還沒做 ' + open.length + ' 項' : '讀取中…') + '</div>' +
+    (items && !open.length ? '<div class="sub" style="font-size:15px;padding:8px 0">都做完了 👍　上面可以新增</div>' : '') +
+    open.map(todoRowPage).join('<div class="div" style="margin-left:40px"></div>') + '</div>';
+  if (done.length) {
+    h += '<div class="card"><button class="row" style="width:100%;border:0;background:none;padding:4px 0" data-act="todoshowdone"><span class="label grow" style="margin:0;text-align:left">做完 ' + done.length + ' 項</span>' +
+      '<span class="chev">' + (S.todoShowDone ? '▲' : '▼') + '</span></button>' +
+      (S.todoShowDone ? done.map(todoRowPage).join('') + '<div class="note" style="color:#8A9BA8">做完超過 30 天的會自動收起來（雲端還留著）</div>' : '') + '</div>';
+  }
+  h += '<div class="note" style="padding:0 4px">開發者、老闆、主任、公司共用這一份，施工人員看不到。打勾＝完成。點字可以改或刪。</div>';
+  return h + '</div>';
+}
+function todoRowPage(t) {
+  return '<div class="trow' + (t.done ? ' done' : '') + '" style="padding:6px 0"><button class="tbox' + (t.done ? ' done' : '') + '" style="width:26px;height:26px;margin:2px 6px 0 2px" data-act="todocheck" data-v="' + esc(t.id) + '">' + (t.done ? '✓' : '') + '</button>' +
+    '<div class="grow" data-act="todoedit" data-v="' + esc(t.id) + '"><div class="t" style="font-size:17px">' + esc(t.text) + '</div>' +
+    '<div style="font-size:12px;color:#8A9BA8">' + esc(t.done ? todoWhen(t.doneBy, t.doneAt, '完成') : todoWhen(t.by, t.at, '加')) + '</div></div></div>';
+}
+
+// ===================== 施工日誌（只能看） =====================
+function logItem(log, c) {
+  if (!log || !log.items) return null;
+  var x = log.items.filter(function (i) { return i.category === c; })[0]; if (!x) return null;
+  var people = Number(x.people) || 0, hours = x.hours || '1';
+  var lines = (x.lines || []).map(function (l, i) {
+    if (l.full) return l.full;
+    var t = String(l.text || '').trim(); if (!t) return '';
+    return (i + 1) + '.' + t + (l.workers && l.workers.length ? '(' + l.workers.join('+') + ')' : '');
+  }).filter(Boolean);
+  if (!(people > 0) && !lines.length) return null;
+  return { vendor: x.vendor != null ? x.vendor : '柏捷', unit: x.unit != null ? x.unit : '工', qty: people > 0 ? people + '*' + hours : '', lines: lines };
+}
+/** 這天的照片：照大項的順序，先開發者日誌的（雲端有編號的），再施工人員傳的；單據放最後 */
+function dayPhotos(log, ws, cats, date) {
+  var roc = rocDate(date), out = [], photos = (log && log.photos) || [];
+  uniq(cats.concat(photos.map(function (p) { return p.category; }))).forEach(function (c) {
+    var it = logItem(log, c), vq = it ? [it.vendor, it.qty ? it.qty + it.unit : ''].filter(Boolean).join('-') : '';
+    photos.filter(function (p) { return p.category === c && p.driveId; }).forEach(function (p) { out.push({ id: p.driveId, cat: c, line: [vq, p.line].filter(Boolean).join('\n'), date: roc }); });
+    ws.filter(function (e) { return e.category === c; }).forEach(function (e) {
+      var first = String(e.text || '').split('\n').filter(function (x) { return x.trim(); })[0];
+      (e.photos || []).forEach(function (id) { out.push({ id: id, w: 1, cat: c, line: '👷 ' + e.name + (first ? '：' + first : ''), date: roc }); });
+    });
+  });
+  ws.forEach(function (e) { (e.receipts || []).forEach(function (id) { out.push({ id: id, w: 1, cat: '材料單據', line: '👷 ' + e.name + '（' + e.category + '）', date: roc }); }); });
+  return out;
+}
+function renderLogs() {
+  var L = S.log, s = S.s;
+  var h = topBar(S.site + ' 施工日誌', S.logFrom) + '<div class="wrap">';
+  if (!L) return h + '<div class="sub" style="font-size:15px">' + esc(S.logBusy || '讀取中…') + '</div></div>';
+  var i = L.dates.indexOf(L.date);
+  var older = i >= 0 ? L.dates[i + 1] : L.dates.filter(function (d) { return d < L.date; })[0];
+  var newer = i > 0 ? L.dates[i - 1] : L.dates.filter(function (d) { return d > L.date; }).slice(-1)[0];
+  h += '<div class="stepper" style="background:#fff;border-radius:20px;margin:0 0 10px"><button data-act="logdate" data-v="' + (older || '') + '"' + (older ? '' : ' disabled') + '>‹</button>' +
+    '<button class="mid" style="border:0;background:none;font-size:18px;font-weight:800;padding:8px 0" data-act="logdates">' + rocDate(L.date) + '（' + weekday(L.date) + '）' + (L.dates.length ? ' <span class="chev">▼</span>' : '') + '</button>' +
+    '<button data-act="logdate" data-v="' + (newer || '') + '"' + (newer ? '' : ' disabled') + '>›</button></div>';
+  if (S.logBusy) h += '<div class="sub" style="margin:0 4px 8px">' + esc(S.logBusy) + '</div>';
+  var log = L.log, ws = L.workers || [];
+  if (!log && !ws.length) return h + '<div class="card sub" style="font-size:15px">這天沒有日誌。按 ‹ › 看別天。</div></div>';
+  if (log && log.weather) h += '<div style="font-size:15px;font-weight:bold;margin:0 4px 10px">天氣：' + weatherEmoji(log.weather) + ' ' + esc(log.weather) + '</div>';
+  var cats = uniq((s.categories && s.categories.length ? s.categories : DEFAULT_CATS).concat(((log && log.items) || []).map(function (x) { return x.category; })).concat(ws.map(function (e) { return e.category; })));
+  cats.forEach(function (c) {
+    var item = logItem(log, c), wl = ws.filter(function (e) { return e.category === c; });
+    if (!item && !wl.length) return;
+    h += '<div class="card"><div class="ttl">' + esc(c) + '</div>';
+    if (item) {
+      var head = [item.vendor, item.qty ? item.qty + item.unit : ''].filter(Boolean).join(' ・ ');
+      if (head) h += '<div class="sub" style="font-size:14px">' + esc(head) + '</div>';
+      item.lines.forEach(function (l) { h += '<div style="font-size:15px;line-height:21px">' + esc(l) + '</div>'; });
+    }
+    wl.forEach(function (e) { h += '<div style="font-size:14.5px;color:var(--blue);line-height:20px;margin-top:3px;white-space:pre-wrap">👷 ' + esc(e.name + '（' + e.hours + '）：' + e.text) + '</div>'; });
+    var n = (log && log.photos ? log.photos.filter(function (p) { return p.category === c && p.driveId; }).length : 0) + wl.reduce(function (a, e) { return a + (e.photos || []).length; }, 0);
+    if (n) h += '<div style="font-size:13px;color:var(--warn);margin-top:3px">📷 ' + n + ' 張（在最下面）</div>';
+    h += '</div>';
+  });
+  var mats = ((log && log.materials) || []).filter(function (m) { return String(m.vendor || '').trim() || String(m.qty || '').trim(); });
+  if (mats.length) h += '<div class="card"><div class="ttl">材料／機具</div>' + mats.map(function (m) { return '<div style="font-size:15px">' + esc(m.vendor + '　' + m.qty + ' ' + m.unit) + '</div>'; }).join('') + '</div>';
+  if (log && String(log.discussion || '').trim()) h += '<div class="card"><div class="ttl">與業主、建築師討論</div><div style="font-size:15px;line-height:21px;white-space:pre-wrap">' + esc(log.discussion) + '</div></div>';
+  var ph = dayPhotos(log, ws, cats, L.date);
+  h += '<div class="card"><div class="ttl">📷 這天的照片（' + ph.length + ' 張）</div><div class="sub" style="font-size:12.5px">開發者拍的、施工人員傳的都在這裡（跟匯出的 PDF 一樣一排兩張）</div>' +
+    (ph.length ? '<div class="pgrid">' + ph.map(function (p) {
+      return '<div><div class="ph"><img ' + (p.w ? 'data-pid' : 'data-lid') + '="' + esc(p.id) + '" alt=""></div><div style="font-size:14px;font-weight:bold;margin-top:4px">' + esc(p.cat) + '</div>' +
+        (p.line ? '<div style="font-size:13px;line-height:17px;white-space:pre-wrap">' + esc(p.line) + '</div>' : '') + '<div class="sub" style="font-size:12px">' + esc(p.date) + '</div></div>';
+    }).join('') + '</div>' : '<div class="sub" style="padding:8px 0;font-size:14.5px">這天沒有照片</div>') + '</div>';
+  return h + '</div>';
+}
+
+// ===================== 行事曆（老闆、主任、公司） =====================
+function renderCal() {
+  var C = S.cal, t = todayYmd(), p = C.month.split('-');
+  var h = topBar('行事曆', 'hub', C.loading ? '讀取中…' : '⟳ 更新', 'calreload') + '<div class="wrap">';
+  if (C.err) h += '<div class="card" style="background:#FFF1F0;color:var(--red);font-size:14px;line-height:20px">' + esc(C.err) + '</div>';
+  h += '<div class="card"><div class="row"><button class="link" style="font-size:30px;color:var(--teal);padding:0 14px;font-weight:normal" data-act="calmonth" data-v="-1">‹</button>' +
+    '<div class="grow" style="text-align:center;font-size:18px;font-weight:800">' + (+p[0] - 1911) + ' 年 ' + (+p[1]) + ' 月</div>' +
+    '<button class="link" style="font-size:30px;color:var(--teal);padding:0 14px;font-weight:normal" data-act="calmonth" data-v="1">›</button></div><div class="mgrid">';
+  WEEK_HEAD.forEach(function (w, i) { h += '<div class="h"' + (i === 0 ? ' style="color:rgba(229,56,59,.7)"' : '') + '>' + w + '</div>'; });
+  var lead = dateOf(C.month + '-01').getDay(), len = +monthEnd(C.month).slice(8);
+  for (var k = 0; k < lead; k++) h += '<div class="mcell"></div>';
+  for (var n = 1; n <= len; n++) {
+    var d = C.month + '-' + pad(n);
+    var cnt = C.events.filter(function (e) { return covers(e, d); }).length;
+    var cls = d === C.sel ? 'sel' : d === t ? 'today' : '';
+    var sun = (lead + n - 1) % 7 === 0 && d !== C.sel;
+    h += '<div class="mcell"><button class="' + cls + '"' + (sun ? ' style="color:rgba(229,56,59,.85)"' : '') + ' data-act="calsel" data-v="' + d + '">' + n +
+      '<span class="dots">' + new Array(Math.min(3, cnt) + 1).join('<i></i>') + '</span></button></div>';
+  }
+  h += '</div></div>';
+  var day = eventsOn(C.events, C.sel);
+  h += '<div class="card"><div class="row"><span class="grow" style="font-size:18px;font-weight:800">' + calDay(C.sel) + '</span>' + (C.sel === t ? '<span style="font-size:13px;color:var(--teal);font-weight:bold">今天</span>' : '') + '</div>';
+  if (!day.length) h += '<div class="sub" style="font-size:14.5px;padding:8px 0">' + (C.loading ? '讀取中…' : '這天沒有行程') + '</div>';
+  day.forEach(function (e, i) { h += evRow(e, i); });
+  h += '</div><button class="big" data-act="caladd">＋ 新增行程（' + md(C.sel) + '）</button>' +
+    '<div class="note">放在 Google 日曆「工地」：App、網頁改的，Google 日曆也看得到；Google 日曆改的，按「⟳ 更新」就有。施工人員看不到行事曆。</div></div>';
+  return h;
+}
+function evRow(e, i) {
+  var sub = [];
+  if (!e.allDay && e.end) sub.push('到 ' + e.end);
+  if (e.endDate && e.endDate > e.date) sub.push('到 ' + calDay(e.endDate));
+  if (e.series) sub.push('🔁 重複的行程');
+  sub.push(!e.editBy ? 'Google 日曆' : (e.editBy !== e.by && e.by) ? e.by + ' 新增・' + e.editBy + ' 改過' : e.editBy + ' 新增');
+  var note = String(e.note || '').replace(/<[^>]+>/g, ' ').trim();
+  return '<button class="ev" data-act="calev" data-v="' + i + '"><span style="width:56px;flex:none;color:var(--blue);font-weight:bold;font-size:14.5px">' + esc(e.allDay ? '全天' : e.start) + '</span>' +
+    '<span class="grow"><span style="font-size:16px;font-weight:bold">' + esc(e.title) + '</span>' + (e.site ? '<span class="sitechip">' + esc(e.site) + '</span>' : '') +
+    '<span class="sub" style="display:block;font-size:12.5px">' + esc(sub.join(' ・ ')) + '</span>' +
+    (note ? '<span style="display:block;font-size:13.5px;line-height:18px;overflow:hidden;max-height:36px">' + esc(note) + '</span>' : '') + '</span></button>';
+}
+
+// ===================== 跳出的視窗 =====================
+var HM = /^([01]\d|2[0-3]):[0-5]\d$/;
+function calProblem(m) {
+  if (!m.title.trim()) return '要寫行程名稱';
+  if (!m.allDay && !HM.test(m.start)) return '開始時間要選（例如 09:30）';
+  if (!m.allDay && m.end && !HM.test(m.end)) return '結束時間不對（可以空著）';
+  return '';
+}
+function noticeOk(m) { var t = todayYmd(); return !m.busy && m.text.trim() && m.site && m.day && m.day >= t && m.day <= addDays(t, 90); }
+function modalOk(m) {
+  if (m.type === 'cal') return !m.busy && !calProblem(m);
+  if (m.type === 'notice') return noticeOk(m);
+  if (m.type === 'todoadd') return !!(m.text.trim() && m.site);
+  if (m.type === 'todoedit') return !!m.text.trim();
+  return true;
+}
+
+function noticeModal(m) {
+  var t = todayYmd();
+  var h = '<h3>📢 新增注意事項</h3><div class="label">哪個工地</div><div class="chips">' + siteNames().map(function (n) { return chip('mnsite', n, n, m.site === n, true); }).join('') + '</div>';
+  h += '<div class="label" style="margin-top:10px;' + (m.day ? '' : 'color:var(--red)') + '">' + (m.day ? '哪一天' : '哪一天（一定要選）') + '</div><div class="chips">' +
+    ['今天', '明天', '後天'].map(function (w, i) { var d = addDays(t, i); return chip('mnday', d, w + ' ' + md(d), !m.other && m.day === d, true); }).join('') +
+    chip('mnother', '', '其他日子' + (m.other ? ' 📅' : ''), m.other, true) + '</div>';
+  if (m.other) h += '<input type="date" data-f="m.day" style="margin-top:8px" min="' + t + '" max="' + addDays(t, 90) + '" value="' + esc(m.day || '') + '">' +
+    (m.day ? '<div class="sub" style="margin-top:4px">📅 ' + calDay(m.day) + '（點上面可以換日子）</div>' : '');
+  h += '<div class="label" style="margin-top:10px">要注意什麼／要帶什麼</div><textarea data-f="m.text" maxlength="300" placeholder="例如：要帶水管；2F 東側開口還沒圍，靠近要小心">' + esc(m.text) + '</textarea>';
+  if (m.photo) h += '<div class="thumb" style="padding-top:62%;margin-top:8px"><img src="' + m.photo.url + '" alt=""></div><button class="link red" data-act="mnphotodel">拿掉照片</button>';
+  else h += '<div class="row2" style="margin-top:8px"><button class="ghost" style="margin:0" data-act="mncam">📷 拍照</button><button class="ghost" style="margin:0" data-act="mnpick">🖼️ 相簿</button></div>';
+  h += '<div class="note" style="margin-top:8px">那一天和前一天會出現在大家的「今日提醒」；「最新消息」也看得到。</div>' + (m.err ? '<div style="color:var(--red);font-size:14px">' + esc(m.err) + '</div>' : '');
+  return h + '<div class="btns"><button class="dim" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button><button id="msave" data-act="mnsend"' + (noticeOk(m) ? '' : ' disabled') + '>' + (m.busy ? '送出中…' : '送出') + '</button></div>';
+}
+function nviewModal(m) {
+  var n = m.n;
+  var h = '<h3>📢 ' + esc(n.site) + '</h3>' + (n.sub ? '<div style="font-size:16px;font-weight:bold;color:var(--warn);margin-bottom:4px">' + esc(n.sub) + '</div>' : '') +
+    '<div style="font-size:17px;line-height:24px;white-space:pre-wrap">' + esc(n.text) + '</div><div class="sub" style="margin-top:4px">' + esc(timeWord(n.at)) + '</div>';
+  if (n.photo) h += '<div style="margin-top:8px;border-radius:10px;overflow:hidden;background:#EAF0F4;min-height:80px"><img data-nid="' + esc(n.id) + '" style="width:100%;display:block" alt=""></div>';
+  if (m.ask) h += '<div style="color:var(--red);margin-top:8px">要刪掉這則注意事項嗎？</div>';
+  if (m.err) h += '<div style="color:var(--red);margin-top:6px;font-size:14px">' + esc(m.err) + '</div>';
+  return h + '<div class="btns">' + (n.mine ? '<button class="' + (m.ask ? 'dim' : 'redb') + '" data-act="mnask">' + (m.ask ? '不要刪' : '刪除這則') + '</button>' : '') +
+    (m.ask ? '<button class="redb" data-act="mndel">' + (m.busy ? '刪除中…' : '刪除') + '</button>' : '<button data-act="mclose">關閉</button>') + '</div>';
+}
+function todoAddModal(m) {
+  var sites = uniq(siteNames().concat(((S.feed && S.feed.todos) || []).map(function (t) { return t.site; })));
+  return '<h3>✅ 新增待辦</h3><div class="label">哪個工地</div><div class="chips">' + sites.map(function (n) { return chip('mtsite', n, n, m.site === n, true); }).join('') + '</div>' +
+    '<textarea data-f="m.text" style="margin-top:10px" maxlength="300" placeholder="要做什麼">' + esc(m.text) + '</textarea>' + (m.err ? '<div style="color:var(--red);font-size:14px">' + esc(m.err) + '</div>' : '') +
+    '<div class="btns"><button class="dim" data-act="mclose">取消</button><button id="msave" data-act="mtadd"' + (modalOk(m) && !m.busy ? '' : ' disabled') + '>' + (m.busy ? '加入中…' : '加入') + '</button></div>';
+}
+function todoEditModal(m) {
+  var t = m.t;
+  return '<h3>✅ 改待辦</h3><textarea data-f="m.text" maxlength="300">' + esc(m.text) + '</textarea>' +
+    '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(todoWhen(t.by, t.at, '加') + (t.done ? '・' + todoWhen(t.doneBy, t.doneAt, '完成') : '')) + '</div>' +
+    '<button class="link red" style="margin-top:8px;' + (m.ask ? 'font-weight:bold' : '') + '" data-act="mtdel">' + (m.ask ? '確定要刪掉這一項嗎？（大家都看不到了）' : '刪掉這一項') + '</button>' +
+    (m.err ? '<div style="color:var(--red);font-size:14px">' + esc(m.err) + '</div>' : '') +
+    '<div class="btns"><button class="dim" data-act="mclose">取消</button><button id="msave" data-act="mtsave"' + (modalOk(m) && !m.busy ? '' : ' disabled') + '>存檔</button></div>';
+}
+function calModal(m) {
+  var ro = !!m.ev.series, sites = siteNames(), dis = ro ? ' disabled' : '';
+  if (m.ask) return '<h3>要刪除「' + esc(m.ev.title) + '」嗎？</h3><div style="line-height:1.5">Google 日曆「工地」裡的這個行程也會一起刪掉，大家都看不到了。</div>' +
+    (m.err ? '<div style="color:var(--red);font-size:14px;margin-top:6px">' + esc(m.err) + '</div>' : '') +
+    '<div class="btns"><button class="dim" data-act="mcalnodel">取消</button><button class="redb" data-act="mcaldel2"' + (m.busy ? ' disabled' : '') + '>' + (m.busy ? '刪除中…' : '刪除') + '</button></div>';
+  var h = '<h3>' + (ro ? '行程（重複的）' : m.isNew ? '新增行程' : '修改行程') + '</h3>';
+  if (ro) h += '<div class="note" style="color:var(--warn);margin-bottom:6px">這是在 Google 日曆設定的重複行程，要改請到 Google 日曆。</div>';
+  h += '<div class="label">行程</div><input type="text" data-f="m.title" value="' + esc(m.title) + '" placeholder="例如：巫紹安 2F 灌漿" maxlength="100"' + dis + '>';
+  h += '<div class="stepper"><button data-act="mcaldate" data-v="-1"' + dis + '>‹</button><div class="mid"><div style="font-size:18px;font-weight:800">' + calDay(m.date) + '</div>' +
+    '<div class="sub" style="font-size:12.5px">' + rocDate(m.date) + (m.span > 0 ? ' 起 ' + (m.span + 1) + ' 天（到 ' + calDay(addDays(m.date, m.span)) + '）' : '') + '</div></div>' +
+    '<button data-act="mcaldate" data-v="1"' + dis + '>›</button></div>';
+  h += '<div class="chips" style="margin-top:10px">' + chip('mallday', '1', '全天', m.allDay) + chip('mallday', '0', '指定時間', !m.allDay) + '</div>';
+  if (!m.allDay) h += '<div class="row2" style="margin-top:8px"><div><div class="label">開始</div><input type="time" data-f="m.start" value="' + esc(m.start) + '"' + dis + '></div>' +
+    '<div><div class="label">結束（可以空著）</div><input type="time" data-f="m.end" value="' + esc(m.end) + '"' + dis + '></div></div>';
+  h += '<div class="label" style="margin-top:10px">工地（可以不選）</div><div class="chips">' + chip('mcalsite', '', '不選', !m.site, true) +
+    sites.map(function (n) { return chip('mcalsite', n, n, m.site === n, true); }).join('') + (m.site && sites.indexOf(m.site) < 0 ? chip('mcalsite', m.site, m.site, true, true) : '') + '</div>';
+  h += '<div class="label" style="margin-top:10px">備註（可以空著）</div><textarea data-f="m.note" maxlength="1000"' + dis + '>' + esc(m.note) + '</textarea>';
+  if (!m.isNew) {
+    var who = [m.ev.by ? m.ev.by + ' 新增' : '', m.ev.editBy && m.ev.editBy !== m.ev.by ? m.ev.editBy + ' 最後改' : '', !m.ev.by && !m.ev.editBy ? 'Google 日曆加的' : ''].filter(Boolean).join(' ・ ');
+    if (who) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(who) + '</div>';
+  }
+  var msg = m.err || calProblem(m);
+  if (!ro) h += '<div id="mmsg" style="font-size:14px;margin-top:6px;color:' + (m.err ? 'var(--red)' : 'var(--muted)') + '">' + esc(msg) + '</div>';
+  if (!m.isNew && !ro) h += '<button class="link red" data-act="mcaldel">刪除這個行程</button>';
+  return h + '<div class="btns"><button class="dim" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>' + (ro ? '關閉' : '取消') + '</button>' +
+    (ro ? '' : '<button id="msave" data-act="mcalsave"' + (modalOk(m) ? '' : ' disabled') + '>' + (m.busy ? '存檔中…' : '存檔') + '</button>') + '</div>';
+}
+function datesModal() {
+  var L = S.log;
+  return '<h3>有資料的日子（' + L.dates.length + ' 天）</h3>' + L.dates.map(function (d) {
+    return '<button class="siteopt" style="font-size:17px;' + (d === L.date ? 'color:var(--teal);font-weight:800' : '') + '" data-act="mlogdate" data-v="' + d + '">' + rocDate(d) + '（' + weekday(d) + '）</button>';
+  }).join('') + '<div class="btns"><button class="dim" data-act="mclose">關閉</button></div>';
+}
+
+/** 雲端的照片：第一次跟收件服務拿，之後用記住的。data-pid＝施工人員傳的、data-lid＝日誌的、data-nid＝注意事項的 */
+function fillPhotos() {
+  [['pid', 'w'], ['lid', 'l'], ['nid', 'n']].forEach(function (kv) {
+    var imgs = document.querySelectorAll('img[data-' + kv[0] + ']');
+    for (var i = 0; i < imgs.length; i++) {
+      var id = imgs[i].getAttribute('data-' + kv[0]), key = kv[1] + ':' + id;
+      if (S.photos[key] && S.photos[key] !== 'loading') imgs[i].src = S.photos[key];
+      else if (!S.photos[key]) loadPhoto(kv[0], kv[1], id);
+    }
+  });
+}
+function loadPhoto(attr, kind, id) {
+  var key = kind + ':' + id;
+  S.photos[key] = 'loading';
+  var p = kind === 'w' ? api('photoget', { fileId: id }) : kind === 'l' ? api('logphoto', { id: id }) : api('notice', { op: 'photo', id: id });
+  p.then(function (r) {
+    S.photos[key] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.data;
+    var imgs = document.querySelectorAll('img[data-' + attr + '="' + id + '"]');
+    for (var i = 0; i < imgs.length; i++) imgs[i].src = S.photos[key];
+  }).catch(function () { delete S.photos[key]; });
 }
 
 // ---------- 動作 ----------
-function go(r) { S.route = r; S.err = ''; render(); window.scrollTo(0, 0); }
+function go(r) {
+  S.route = r; S.err = ''; render(); window.scrollTo(0, 0);
+  if (r === 'hub' && S.feedStale) loadFeed(false);
+}
 
 /** 記住的代碼不能用了（管理者換了代碼或停用）：清掉，回登入畫面重新輸入 */
 function codeGone(msg) {
-  LS.set('code', ''); S.saved = ''; S.code = ''; S.s = null; S.entries = []; S.codeInput = ''; S.route = 'login';
+  LS.set('code', ''); LS.set('feed', ''); LS.set('here', ''); LS.set('fc', ''); LS.set('seen', '');
+  S.saved = ''; S.code = ''; S.s = null; S.entries = []; S.codeInput = ''; S.feed = null; S.office = null; S.route = 'login'; S.modal = null; renderModal();
   S.err = msg || '這支手機記的代碼已經不能用（管理者換了代碼或停用），請輸入新的代碼。'; render();
 }
 
 /** 收件服務說這支手機鎖住了 */
-function lockedNow(msg) { S.locked = msg || '這支手機鎖住了，請找管理者'; S.busy = false; S.loading = false; S.route = 'login'; render(); }
+function lockedNow(msg) { S.locked = msg || '這支手機鎖住了，請找管理者'; S.busy = false; S.loading = false; S.route = 'login'; S.modal = null; renderModal(); render(); }
 
 function pickSite(s) {
   S.site = (s.sites.indexOf(S.site) >= 0 || S.site === UNFILED) ? S.site : (s.sites[0] || '');
   LS.set('site', S.site);
 }
+function setSite(v) { if (v && v !== S.site) { S.site = v; LS.set('site', v); S.entries = []; } }
 
-function relogin() {
-  S.loading = true; render();
-  return api('login').then(function (s) { S.s = s; pickSite(s); return refresh(); })
-    .catch(function (e) { S.loading = false; if (e.error === 'LOCKED') return; if (e.error === 'CODE') { codeGone(); return; } S.err = errText(e); render(); });
-}
-
+/** 我的工作：這個工地最近大家傳的 */
 function refresh() {
   if (!S.site) { S.loading = false; render(); return Promise.resolve(); }
   S.loading = true; render();
   return api('recent', { site: S.site, days: 7 }).then(function (r) {
     S.entries = r.entries || []; if (r.today) S.s.today = r.today; S.err = ''; S.loading = false; render();
-  }).catch(function (e) { S.loading = false; if (e.error === 'LOCKED') return; if (e.error === 'CODE') { codeGone(); return; } S.err = errText(e); render(); });
+  }).catch(function (e) { S.loading = false; var m = failMsg(e); if (m) { S.err = m; render(); } });
 }
+function openWork(from) { S.workFrom = from || 'hub'; S.entries = []; go('work'); refresh(); }
 
 function openEdit(e) {
   var days = windowDays(), s = S.s;
@@ -340,55 +1194,157 @@ function openEdit(e) {
     cat: src.category || '', hours: src.hours || s.hours[0], text: src.text || '', weather: src.weather || '',
     mats: (src.materials || []).map(function (m) { return { vendor: m.vendor || '', qty: m.qty || '', unit: m.unit || '' }; }),
     siteText: e ? (e.siteText || '') : '', remote: e ? (e.photos || []).slice() : [], removed: [], local: [],
+    remoteR: e ? (e.receipts || []).slice() : [], removedR: [], localR: [],
     touchedWx: false, lastAuto: '', proxy: !!(e && e.proxy), pending: pending, reqStatus: e ? (e.reqStatus || '') : '', orig: e
   };
   S.wx = {};
   go('edit');
   // 天氣自動帶入（今天即時、昨天前天用那天下午記的）
   if (S.site !== UNFILED && (!e || !e.weather)) {
-    api('weather', { site: S.site, dates: days }).then(function (r) { S.wx = r.days || {}; applyWx(); render(); }).catch(function () { });
+    api('weather', { site: S.site, dates: days }).then(function (r) { S.wx = r.days || {}; applyWx(); renderSoft(); }).catch(function () { });
   }
 }
-
 function applyWx() {
   var d = S.d; if (!d || d.touchedWx) return;
   if (!d.weather || d.weather === d.lastAuto) { var a = (S.wx[d.date] || {}).weather || ''; d.weather = a; d.lastAuto = a; }
 }
 
-/** 拍照、相簿選的 → 縮小成長邊 1600 的 JPEG */
-function shrink(file) {
+/** 拍照、相簿選的 → 縮小成 JPEG（工作照片長邊 1600；注意事項 1000、品質 65，不佔空間） */
+function shrink(file, max, q) {
+  max = max || 1600; q = q || 0.8;
   return new Promise(function (ok, bad) {
     var url = URL.createObjectURL(file), img = new Image();
     img.onload = function () {
-      var w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, 1600 / Math.max(w, h));
+      var w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, max / Math.max(w, h));
       var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
-      var du = c.toDataURL('image/jpeg', 0.8);
+      var du = c.toDataURL('image/jpeg', q);
       ok({ name: 'web_' + Date.now() + '_' + Math.floor(Math.random() * 1000) + '.jpg', url: du, data: du.split(',')[1] });
     };
     img.onerror = function () { URL.revokeObjectURL(url); bad(new Error('這張照片讀不出來')); };
     img.src = url;
   });
 }
-
-function addFiles(files) {
+function addFiles(files, receipt) {
   var d = S.d; if (!d) return;
   var list = Array.prototype.slice.call(files || []);
-  var room = MAX_PHOTOS - d.remote.length - d.local.length;
+  var room = receipt ? MAX_RECEIPTS - d.remoteR.length - d.localR.length : MAX_PHOTOS - d.remote.length - d.local.length;
   list = list.slice(0, Math.max(0, room));
   Promise.all(list.map(function (f) { return shrink(f).catch(function () { return null; }); })).then(function (ps) {
-    ps.forEach(function (p) { if (p) d.local.push(p); });
+    ps.forEach(function (p) { if (p) (receipt ? d.localR : d.local).push(p); });
     render();
   });
 }
+function pickPhoto(kind, camera) { S.pickFor = kind; var el = $(camera ? 'cam' : 'pick'); el.value = ''; el.click(); }
+
+/** 工地頁的資料（施工單、灌漿數量、發包） */
+function loadOffice() {
+  S.officeBusy = true; S.officeErr = ''; renderSoft();
+  return api('contracts').then(function (r) { S.office = r; S.officeBusy = false; renderSoft(); })
+    .catch(function (e) { S.officeBusy = false; var m = failMsg(e); if (m) { S.officeErr = '讀不到：' + m; renderSoft(); } });
+}
+function openOffice(r) { go(r); if (!S.office) loadOffice(); }
+
+function b64ToBytes(b64) { var s = atob(b64), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+var pdfLib = null;
+function loadPdfJs() {
+  if (pdfLib) return pdfLib;
+  pdfLib = new Promise(function (ok, bad) {
+    var sc = document.createElement('script'); sc.src = PDFJS + 'pdf.min.js';
+    sc.onload = function () { try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; ok(window.pdfjsLib); } catch (e) { bad(e); } };
+    sc.onerror = function () { pdfLib = null; bad({ error: '看 PDF 的工具載入失敗（網路有問題，等一下再試）' }); };
+    document.head.appendChild(sc);
+  });
+  return pdfLib;
+}
+function pdfStatus(t) { S.pdf.status = t; var el = $('pdfstatus'); if (el) el.textContent = t; }
+function openPdf(id) {
+  var o = S.office; if (!o) return;
+  var doc = (o.pours || []).concat(o.sheets || []).filter(function (d) { return d.id === id; })[0]; if (!doc) return;
+  var from = S.route, my = { doc: doc, from: from, title: (pourOf(doc).part || docTitle(doc)), status: '下載中…' };
+  S.pdf = my; go('pdf');
+  var key = doc.id + '|' + doc.modified;
+  var bytes = PDF_CACHE[key] ? Promise.resolve(PDF_CACHE[key]) : api('pdf', { id: doc.id }).then(function (r) { var b = b64ToBytes(r.data); PDF_CACHE[key] = b; return b; });
+  Promise.all([bytes, loadPdfJs()]).then(function (a) {
+    if (S.pdf !== my) return;
+    pdfStatus('畫圖中…');
+    return a[1].getDocument({ data: a[0].slice(0) }).promise.then(function (pdf) {
+      var n = pdf.numPages, i = 1, box = $('pdfpages');
+      function next() {
+        if (S.pdf !== my || S.route !== 'pdf' || !box) return;
+        if (i > n) { pdfStatus(n + ' 頁'); return; }
+        pdfStatus('第 ' + i + '/' + n + ' 頁畫圖中…');
+        return pdf.getPage(i).then(function (page) {
+          var v1 = page.getViewport({ scale: 1 });
+          var css = box.clientWidth || (window.innerWidth - 16);
+          var target = Math.min(2000, Math.max(1100, css * (window.devicePixelRatio || 2) * 1.5));
+          var scale = target / v1.width;
+          if (v1.width * v1.height * scale * scale > 4.2e6) scale = Math.sqrt(4.2e6 / (v1.width * v1.height));
+          var v = page.getViewport({ scale: scale });
+          var c = document.createElement('canvas'); c.width = Math.floor(v.width); c.height = Math.floor(v.height);
+          box.appendChild(c);
+          return page.render({ canvasContext: c.getContext('2d'), viewport: v }).promise;
+        }).then(function () { i++; return next(); });
+      }
+      return next();
+    });
+  }).catch(function (e) { if (S.pdf !== my) return; var m = failMsg(e); if (m) pdfStatus('打不開：' + m); });
+}
+
+/** 施工日誌（一次一天） */
+function openLogs(from) { S.logFrom = from; S.log = null; S.logBusy = '讀取中…'; go('logs'); loadLog(null); }
+function loadLog(date) {
+  S.logBusy = '讀取中…'; render();
+  var site = S.site, body = { site: site }; if (date) body.date = date;
+  api('logs', body).then(function (r) {
+    if (S.route !== 'logs' || S.site !== site) return;
+    var log = null; try { log = r.log ? JSON.parse(r.log) : null; } catch (e) { log = null; }
+    S.log = { date: r.date, dates: r.dates || [], log: log, workers: r.workers || [] }; S.logBusy = ''; render(); window.scrollTo(0, 0);
+  }).catch(function (e) { var m = failMsg(e); if (m) { S.logBusy = '讀不到：' + m; render(); } });
+}
+
+/** 待辦事項（一個工地） */
+function openTodo(from) { S.todoFrom = from; S.todoItems = null; S.todoErr = ''; S.todoText = ''; go('todo'); loadTodos(); }
+function loadTodos() {
+  S.todoBusy = '讀取中…'; renderSoft();
+  var site = S.site;
+  return api('todo', { op: 'list', site: site }).then(function (r) { if (S.site !== site) return; S.todoItems = r.items || []; S.todoBusy = ''; renderSoft(); })
+    .catch(function (e) { S.todoBusy = ''; var m = failMsg(e); if (m) { S.todoErr = '讀不到：' + m; renderSoft(); } });
+}
+function findTodo(id) { return (S.todoItems || []).filter(function (t) { return t.id === id; })[0]; }
+
+/** 行事曆 */
+function openCal(d) { d = d || todayYmd(); S.cal.sel = d; S.cal.month = d.slice(0, 7); S.cal.err = ''; S.cal.events = S.cal.cache[S.cal.month] || []; go('calendar'); loadCal(); }
+function loadCal() {
+  var C = S.cal, m = C.month;
+  if (C.cache[m]) C.events = C.cache[m];
+  C.loading = true; renderSoft();
+  api('cal', { op: 'list', from: addDays(m + '-01', -7), to: addDays(monthEnd(m), 14) }).then(function (r) {
+    C.cache[m] = r.events || []; if (C.month === m) { C.events = C.cache[m]; C.err = ''; }
+  }).catch(function (e) { var msg = failMsg(e); if (msg && C.month === m) C.err = msg; })
+    .then(function () { if (C.month === m) { C.loading = false; renderSoft(); } });
+}
+function openCalEdit(e) {
+  var ev = e ? JSON.parse(JSON.stringify(e)) : { id: '', title: '', allDay: true, date: S.cal.sel, endDate: S.cal.sel, start: '', end: '', site: '', note: '', by: '', editBy: '', series: false };
+  S.modal = { type: 'cal', ev: ev, isNew: !ev.id, title: ev.title || '', date: ev.date, allDay: e ? ev.allDay === true : true, start: ev.start || '09:00', end: ev.end || (e ? '' : '10:00'),
+    site: ev.site || '', note: String(ev.note || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ''), span: Math.max(0, ev.endDate ? daysBetween(ev.date, ev.endDate) : 0), busy: false, err: '', ask: false };
+  renderModal();
+}
+
+/** 看一則注意事項 */
+function openNotice(n) { markSeen([n.key]); S.modal = { type: 'nview', n: n, ask: false, busy: false, err: '' }; renderModal(); render(); }
 
 var ACT = {
   login: function () {
     var c = S.saved || (S.codeInput || '').trim().toUpperCase(); if (!c || S.busy) return;
     S.code = c; S.busy = true; S.err = ''; render();
     api('login').then(function (s) {
-      S.busy = false; S.s = s; S.saved = c; LS.set('code', c); S.site = LS.get('site'); pickSite(s); go('home'); refresh();
+      S.busy = false; S.s = s; S.saved = c; LS.set('code', c); S.site = LS.get('site'); pickSite(s);
+      if (hasFeed()) {
+        loadSeen(); S.feed = LS.getJSON('feed'); S.here = LS.getJSON('here'); S.fc = LS.getJSON('fc');
+        go('hub'); loadFeed(false);
+      } else openWork(null);
     }).catch(function (e) {
       S.busy = false; S.code = '';
       if (e.error === 'LOCKED') return;
@@ -407,14 +1363,66 @@ var ACT = {
     });
   },
   tologin: function () { S.route = 'login'; S.err = ''; render(); },
-  reload: function () { relogin(); },
+  nav: function (v) {
+    if (v === 'work' || v === 'site' || v === 'hub' || v === 'pours' || v === 'sheets') { if (S.busy) return; go(v); if (v === 'work') refresh(); }
+    else go(v);
+  },
+  // 首頁
+  sync: function () { loadFeed(true); },
+  here: function () { askGeo(function () { loadFeed(false); }); },
+  siteopen: function () { S.siteOpen = !S.siteOpen; render(); },
+  enter: function (v) {
+    markSeen(shownNews().filter(function (n) { return n.site === v && n.isNew; }).map(function (n) { return n.key; }));
+    setSite(v); S.siteOpen = false;
+    if (isOffice()) openOffice('site'); else openWork('hub');
+  },
+  rem: function (v) {
+    var r = ((S.feed && S.feed.reminders) || [])[+v]; if (!r) return;
+    if (r.kind === 'notice') {
+      var key = String(r.key || '').replace(/:[^:]*$/, '');
+      var n = ((S.feed && S.feed.news) || []).filter(function (x) { return x.key === key; })[0];
+      if (n) { openNotice(n); return; }
+    }
+    if (r.kind === 'cal' && isOffice()) { openCal(r.date); return; }
+    if (r.site) { setSite(r.site); if (isOffice() && r.kind === 'pour') openOffice('pours'); else render(); }
+  },
+  hubtab: function (v) { S.hubTab = +v; render(); },
+  todosite: function (v) { S.todoSite = v; render(); },
+  todoadd: function () { S.modal = { type: 'todoadd', site: S.todoSite || S.site, text: '', busy: false, err: '' }; renderModal(); },
+  todotoggle: function (id) {
+    var t = (homeTodos() || []).filter(function (x) { return x.id === id; })[0]; if (!t) return;
+    var d = !t.done; S.localTodo[id] = d; render();
+    api('todo', { op: 'check', id: id, done: d }).catch(function () { delete S.localTodo[id]; render(); }).then(function () { loadFeed(false); });
+  },
+  todoopen: function (v) { setSite(v); openTodo('hub'); },
+  calopen: function (v) {
+    markSeen(shownNews().filter(function (n) { return n.kind === 'cal' && n.isNew; }).map(function (n) { return n.key; }));
+    openCal(v || null);
+  },
+  newsgroup: function (v) { S.newsGroup = v; render(); },
+  noticeadd: function () { S.modal = { type: 'notice', site: S.site || siteNames()[0] || '', day: '', other: false, text: '', photo: null, busy: false, err: '' }; renderModal(); },
+  news: function (key) {
+    var n = shownNews().filter(function (x) { return x.key === key; })[0]; if (!n) return;
+    markSeen([key]);
+    switch (n.kind) {
+      case 'notice': openNotice(n); return;
+      case 'pour': setSite(n.site); openOffice('pours'); return;
+      case 'sheet': setSite(n.site); openOffice('sheets'); return;
+      case 'contract': setSite(n.site); openOffice('contracts'); return;
+      case 'todo': setSite(n.site); openTodo('hub'); return;
+      case 'worker': setSite(n.site); openWork('hub'); return;
+      default: render();
+    }
+  },
+  // 我的工作
+  reload: function () { refresh(); },
   site: function (v) { S.site = v; LS.set('site', v); S.entries = []; render(); refresh(); },
   add: function () { openEdit(null); },
+  logsfromwork: function () { openLogs('work'); },
   open: function (id) {
     var e = S.entries.filter(function (x) { return x.id === id; })[0]; if (!e) return;
     if (e.mine) openEdit(e); else { S.view = e; go('view'); }
   },
-  home: function () { if (S.busy) return; go('home'); },
   date: function (v) { S.d.date = v; applyWx(); render(); },
   wx: function (v) { S.d.weather = S.d.weather === v ? '' : v; S.d.touchedWx = true; render(); },
   cat: function (v) { S.d.cat = v; render(); },
@@ -425,8 +1433,12 @@ var ACT = {
   matu: function (v) { var i = +v.split('|')[0]; S.d.mats[i].unit = v.slice(v.indexOf('|') + 1); render(); },
   rmremote: function (v) { var d = S.d; d.remote = d.remote.filter(function (x) { return x !== v; }); d.removed.push(v); render(); },
   rmlocal: function (v) { S.d.local.splice(+v, 1); render(); },
-  cam: function () { $('cam').value = ''; $('cam').click(); },
-  pick: function () { $('pick').value = ''; $('pick').click(); },
+  rmremoter: function (v) { var d = S.d; d.remoteR = d.remoteR.filter(function (x) { return x !== v; }); d.removedR.push(v); render(); },
+  rmlocalr: function (v) { S.d.localR.splice(+v, 1); render(); },
+  cam: function () { pickPhoto('photo', true); },
+  pick: function () { pickPhoto('photo', false); },
+  camr: function () { pickPhoto('receipt', true); },
+  pickr: function () { pickPhoto('receipt', false); },
   save: function () {
     var d = S.d; if (S.busy) return;
     S.busy = true; S.err = ''; S.progress = '上傳內容…'; render();
@@ -434,23 +1446,136 @@ var ACT = {
     var entry = { date: d.date, site: S.site, category: d.cat, hours: d.hours, text: d.text.trim(), weather: d.weather, materials: mats, siteText: d.siteText.trim() };
     if (d.id) entry.id = d.id;
     var chain = api('save', { entry: entry }).then(function (r) { d.id = r.id; });
-    d.removed.slice().forEach(function (fid) {
-      chain = chain.then(function () { return api('delphoto', { id: d.id, fileId: fid }); }).then(function () { d.removed = d.removed.filter(function (x) { return x !== fid; }); });
+    d.removed.concat(d.removedR).forEach(function (fid) {
+      chain = chain.then(function () { return api('delphoto', { id: d.id, fileId: fid }); })
+        .then(function () { d.removed = d.removed.filter(function (x) { return x !== fid; }); d.removedR = d.removedR.filter(function (x) { return x !== fid; }); });
     });
-    var todo = d.local.slice();
-    todo.forEach(function (p, i) {
-      chain = chain.then(function () { S.progress = '上傳照片 ' + (i + 1) + '/' + todo.length + '…'; render(); return api('photo', { id: d.id, name: p.name, mime: 'image/jpeg', data: p.data }); })
-        .then(function (r) { d.remote.push(r.fileId); S.photos[r.fileId] = p.url; d.local = d.local.filter(function (x) { return x !== p; }); });
+    var todo = d.local.map(function (p) { return { p: p, r: false }; }).concat(d.localR.map(function (p) { return { p: p, r: true }; }));
+    todo.forEach(function (x, i) {
+      chain = chain.then(function () {
+        S.progress = (x.r ? '上傳單據 ' : '上傳照片 ') + (i + 1) + '/' + todo.length + '…'; render();
+        return api('photo', { id: d.id, name: (x.r ? '單據_' : '') + x.p.name, mime: 'image/jpeg', data: x.p.data, receipt: x.r });
+      }).then(function (r) {
+        S.photos['w:' + r.fileId] = x.p.url;
+        if (x.r) { d.remoteR.push(r.fileId); d.localR = d.localR.filter(function (y) { return y !== x.p; }); }
+        else { d.remote.push(r.fileId); d.local = d.local.filter(function (y) { return y !== x.p; }); }
+      });
     });
-    chain.then(function () { S.busy = false; S.progress = ''; go('home'); refresh(); })
-      .catch(function (e) { S.busy = false; S.progress = ''; S.err = errText(e) + (d.id && d.local.length ? '（已經傳上去的不會重複，再按一次會接著傳）' : ''); render(); });
+    chain.then(function () { S.busy = false; S.progress = ''; S.feedStale = true; go('work'); refresh(); })
+      .catch(function (e) { S.busy = false; S.progress = ''; var m = failMsg(e); if (m) { S.err = m + (d.id && (d.local.length || d.localR.length) ? '（已經傳上去的不會重複，再按一次會接著傳）' : ''); render(); } });
   },
   del: function () {
     var d = S.d; if (!d.id || S.busy) return;
     if (!confirm('要刪除這一筆嗎？內容和照片都會拿掉（管理者那邊會留紀錄）。')) return;
     S.busy = true; render();
-    api('delete', { id: d.id }).then(function () { S.busy = false; go('home'); refresh(); })
-      .catch(function (e) { S.busy = false; S.err = errText(e); render(); });
+    api('delete', { id: d.id }).then(function () { S.busy = false; S.feedStale = true; go('work'); refresh(); })
+      .catch(function (e) { S.busy = false; var m = failMsg(e); if (m) { S.err = m; render(); } });
+  },
+  // 工地頁
+  tile: function (v) {
+    if (v === 'logs') openLogs('site');
+    else if (v === 'todo') openTodo('site');
+    else openOffice(v);
+  },
+  officereload: function () { loadOffice(); },
+  pdfopen: function (id) { openPdf(id); },
+  ctab: function (v) { S.contractTab = +v; render(); },
+  // 待辦
+  todoreload: function () { S.todoErr = ''; loadTodos(); },
+  todoshowdone: function () { S.todoShowDone = !S.todoShowDone; render(); },
+  todoaddpage: function () {
+    var text = S.todoText.trim(), site = S.site; if (!text) return;
+    S.todoText = ''; S.todoErr = '';
+    (S.todoItems = S.todoItems || []).push({ id: 'tmp' + Date.now(), site: site, text: text, done: false, by: S.s.name, at: Date.now() });
+    render();
+    api('todo', { op: 'add', site: site, text: text }).then(function () { S.feedStale = true; return loadTodos(); })
+      .catch(function (e) { var m = failMsg(e); if (m) { S.todoErr = '沒有加進去：' + m; loadTodos(); } });
+  },
+  todocheck: function (id) {
+    var t = findTodo(id); if (!t || /^tmp/.test(id)) return;
+    t.done = !t.done; t.doneBy = t.done ? S.s.name : ''; t.doneAt = t.done ? Date.now() : 0; render();
+    api('todo', { op: 'check', id: id, done: t.done }).then(function () { S.feedStale = true; loadTodos(); })
+      .catch(function (e) { var m = failMsg(e); if (m) { S.todoErr = '沒有改到：' + m; loadTodos(); } });
+  },
+  todoedit: function (id) { var t = findTodo(id); if (!t || /^tmp/.test(id)) return; S.modal = { type: 'todoedit', t: t, text: t.text, ask: false, busy: false, err: '' }; renderModal(); },
+  // 日誌
+  logdate: function (v) { if (v) loadLog(v); },
+  logdates: function () { if (S.log && S.log.dates.length) { S.modal = { type: 'dates' }; renderModal(); } },
+  // 行事曆
+  calreload: function () { loadCal(); },
+  calmonth: function (v) {
+    var C = S.cal; C.month = shiftMonth(C.month, +v);
+    C.sel = C.month === todayYmd().slice(0, 7) ? todayYmd() : C.month + '-01';
+    C.events = C.cache[C.month] || []; C.err = ''; render(); loadCal();
+  },
+  calsel: function (v) { S.cal.sel = v; render(); },
+  calev: function (v) { var e = eventsOn(S.cal.events, S.cal.sel)[+v]; if (e) openCalEdit(e); },
+  caladd: function () { openCalEdit(null); },
+  // 跳出的視窗
+  mclose: function () { if (S.modal && S.modal.busy) return; closeModal(); render(); },
+  maskclose: function (v, el, ev) { if (ev.target === el && !(S.modal && S.modal.busy)) { closeModal(); render(); } },
+  mnsite: function (v) { S.modal.site = v; renderModal(); },
+  mnday: function (v) { S.modal.day = v; S.modal.other = false; renderModal(); },
+  mnother: function () { var m = S.modal; m.other = true; if (!m.day || m.day <= addDays(todayYmd(), 2)) m.day = addDays(todayYmd(), 3); renderModal(); },
+  mncam: function () { pickPhoto('notice', true); },
+  mnpick: function () { pickPhoto('notice', false); },
+  mnphotodel: function () { S.modal.photo = null; renderModal(); },
+  mnsend: function () {
+    var m = S.modal; if (!noticeOk(m)) return;
+    m.busy = true; m.err = ''; renderModal();
+    var body = { op: 'add', site: m.site, text: m.text.trim(), date: m.day }; if (m.photo) body.photo = m.photo.data;
+    api('notice', body).then(function () { S.modal = null; renderModal(); loadFeed(false); })
+      .catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '沒有送出：' + x; renderModal(); } });
+  },
+  mnask: function () { S.modal.ask = !S.modal.ask; renderModal(); },
+  mndel: function () {
+    var m = S.modal; if (m.busy) return; m.busy = true; renderModal();
+    api('notice', { op: 'del', id: m.n.id }).then(function () { S.modal = null; renderModal(); loadFeed(false); })
+      .catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '刪不掉：' + x; renderModal(); } });
+  },
+  mtsite: function (v) { S.modal.site = v; renderModal(); },
+  mtadd: function () {
+    var m = S.modal; if (!modalOk(m) || m.busy) return;
+    m.busy = true; renderModal();
+    api('todo', { op: 'add', site: m.site, text: m.text.trim() }).then(function () { S.modal = null; renderModal(); loadFeed(false); })
+      .catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '沒有加進去：' + x; renderModal(); } });
+  },
+  mtsave: function () {
+    var m = S.modal; if (!modalOk(m) || m.busy) return;
+    if (m.text.trim() === m.t.text) { closeModal(); return; }
+    m.busy = true; renderModal();
+    api('todo', { op: 'edit', id: m.t.id, text: m.text.trim() }).then(function () { S.modal = null; renderModal(); S.feedStale = true; loadTodos(); })
+      .catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '存不起來：' + x; renderModal(); } });
+  },
+  mtdel: function () {
+    var m = S.modal; if (m.busy) return;
+    if (!m.ask) { m.ask = true; renderModal(); return; }
+    m.busy = true; renderModal();
+    api('todo', { op: 'del', id: m.t.id }).then(function () { S.modal = null; renderModal(); S.feedStale = true; loadTodos(); })
+      .catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '刪不掉：' + x; renderModal(); } });
+  },
+  mlogdate: function (v) { closeModal(); if (v !== S.log.date) loadLog(v); },
+  mcaldate: function (v) { var m = S.modal; if (m.ev.series) return; m.date = addDays(m.date, +v); renderModal(); },
+  mallday: function (v) { var m = S.modal; if (m.ev.series) return; m.allDay = v === '1'; if (!m.allDay && !m.start) m.start = '09:00'; renderModal(); },
+  mcalsite: function (v) { var m = S.modal; if (m.ev.series) return; m.site = v; renderModal(); },
+  mcaldel: function () { S.modal.ask = true; S.modal.err = ''; renderModal(); },
+  mcalnodel: function () { S.modal.ask = false; S.modal.err = ''; renderModal(); },
+  mcalsave: function () {
+    var m = S.modal; if (!modalOk(m)) return;
+    m.busy = true; m.err = ''; renderModal();
+    var body = { op: m.isNew ? 'add' : 'edit', id: m.ev.id, title: m.title.trim(), allDay: m.allDay, date: m.date, endDate: addDays(m.date, m.span),
+      start: m.allDay ? '' : m.start, end: (m.allDay || !HM.test(m.end)) ? '' : m.end, site: m.site, note: m.note.trim() };
+    api('cal', body).then(function (r) {
+      var d = (r.event && r.event.date) || m.date;
+      S.modal = null; renderModal();
+      S.cal.sel = d; S.cal.month = d.slice(0, 7); S.cal.cache = {}; S.feedStale = true; render(); loadCal();
+    }).catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '存不起來：' + x; renderModal(); } });
+  },
+  mcaldel2: function () {
+    var m = S.modal; if (m.busy) return;
+    m.busy = true; m.err = ''; renderModal();
+    api('cal', { op: 'del', id: m.ev.id }).then(function () { S.modal = null; renderModal(); S.cal.cache = {}; S.feedStale = true; loadCal(); })
+      .catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '刪不掉：' + x; renderModal(); } });
   }
 };
 
@@ -458,26 +1583,49 @@ document.addEventListener('click', function (ev) {
   var el = ev.target.closest ? ev.target.closest('[data-act]') : null;
   if (!el || el.disabled) return;
   var a = el.getAttribute('data-act');
-  if (ACT[a]) { ev.preventDefault(); ACT[a](el.getAttribute('data-v'), el); }
+  if (ACT[a]) { if (a !== 'maskclose') ev.preventDefault(); ACT[a](el.getAttribute('data-v'), el, ev); }
 });
 document.addEventListener('input', function (ev) {
   var k = ev.target.getAttribute && ev.target.getAttribute('data-f'); if (!k) return;
   var v = ev.target.value;
   if (k === 'codeInput') { S.codeInput = v; return; }
+  if (k === 'todoText') { S.todoText = v; var tb = $('todoaddbtn'); if (tb) tb.disabled = !v.trim(); return; }
+  if (k.indexOf('m.') === 0) {
+    var m = S.modal; if (!m) return;
+    m[k.slice(2)] = v;
+    if (k === 'm.day') { renderModal(); return; }   // 選了日子：下面的「📅 11/12（四）」跟著換
+    var b = $('msave'); if (b) b.disabled = !modalOk(m) || !!m.busy;
+    var mm = $('mmsg'); if (mm && m.type === 'cal') mm.textContent = m.err || calProblem(m);
+    return;
+  }
   var d = S.d; if (!d) return;
   if (k === 'text' || k === 'siteText') { d[k] = v; }
   else if (k.indexOf('mat.') === 0) { var p = k.split('.'); d.mats[+p[1]][p[2]] = v; }
   // 上傳按鈕要不要亮：只改按鈕，不整個重畫（不然打字會跳掉）
-  var b = document.querySelector('[data-act="save"]');
-  if (b) {
-    var n = d.remote.length + d.local.length;
-    var filled = d.mats.filter(function (m) { return (m.vendor || '').trim() || (m.qty || '').trim(); }).length;
-    b.disabled = !(!S.busy && d.cat && (S.site !== UNFILED || d.siteText.trim()) && (d.text.trim() || n || filled));
-  }
+  var sb = document.querySelector('[data-act="save"]');
+  if (sb) sb.disabled = !editOk();
 });
-document.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && S.route === 'login' && ev.target.id === 'code') ACT.login(); });
-$('cam').addEventListener('change', function (ev) { addFiles(ev.target.files); });
-$('pick').addEventListener('change', function (ev) { addFiles(ev.target.files); });
+document.addEventListener('keydown', function (ev) {
+  if (ev.key !== 'Enter') return;
+  if (S.route === 'login' && ev.target.id === 'code') ACT.login();
+  if (ev.target.id === 'todotext') { ev.preventDefault(); ACT.todoaddpage(); }
+});
+function onPicked(ev) {
+  var files = ev.target.files;
+  if (S.pickFor === 'notice') {
+    var f = files && files[0], m = S.modal; if (!f || !m) return;
+    shrink(f, 1000, 0.65).then(function (p) { if (S.modal === m) { m.photo = p; renderModal(); } }).catch(function () { });
+  } else addFiles(files, S.pickFor === 'receipt');
+}
+$('cam').addEventListener('change', onPicked);
+$('pick').addEventListener('change', onPicked);
+
+// 首頁開著的時候每 1 分鐘自己更新（不用按「⟳ 更新」；問候語也跟著時間換）
+setInterval(function () { if (S.route === 'hub' && S.s && !S.modal && document.visibilityState !== 'hidden') loadFeed(false); }, 60000);
+// 從背景切回來（iPhone 把這個 App 叫回來）：首頁馬上更新
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'visible' && S.route === 'hub' && S.s && !S.modal) loadFeed(false);
+});
 
 // ---------- 開始 ----------
 // 記住的代碼：顯示鎖住的 ●●●●●●，按「登入」才進去（使用者 2026-11-08）
