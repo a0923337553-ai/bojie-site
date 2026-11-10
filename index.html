@@ -228,7 +228,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10h';
+var WEB_VERSION = '11/10i';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
 var PCAPP = /[?&]app=pc\b/.test(location.search);
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -723,7 +723,7 @@ function weekCalCard(events) {
 
 // 順序（使用者 2026-11-10「注意灌漿代辦發包，這樣排列」）：全部、注意事項、灌漿・施工單、待辦、發包；施工人員放最後（跟 App 一樣）
 var NEWS_GROUPS = [['全部', []], ['📢 注意事項', ['notice']], ['🚚 灌漿・施工單', ['pour', 'sheet']], ['✅ 待辦', ['todo']], ['🤝 發包', ['contract']], ['👷 施工人員', ['worker']]];
-var NEWS_ICON = { pour: ['🚚', '#F2994A'], sheet: ['📐', '#16A6A0'], contract: ['🤝', '#9B51E0'], worker: ['👷', '#2F80ED'], notice: ['📢', '#E5383B'], cal: ['📅', '#2F80ED'], todo: ['✅', '#1E8E5A'] };
+var NEWS_ICON = { pour: ['🚚', '#F2994A'], sheet: ['📐', '#16A6A0'], contract: ['🤝', '#9B51E0'], worker: ['👷', '#2F80ED'], notice: ['📢', '#E5383B'], cal: ['📅', '#2F80ED'], todo: ['✅', '#1E8E5A'], mark: ['📍', '#E03131'] };
 function newsTag(n) {
   switch (n.kind) {
     case 'cal': return n.tag === 'add' ? ['新增行程', '#1E9E6A'] : n.tag === 'del' ? ['行程取消', '#E5383B'] : n.tag === 'chg' ? ['行程改了', '#2F80ED'] : ['行程', '#2F80ED'];
@@ -733,6 +733,7 @@ function newsTag(n) {
     case 'contract': return ['發包', '#9B51E0'];
     case 'notice': return ['注意事項', '#E0662B'];
     case 'todo': return [n.tag === 'done' ? '待辦完成' : '新增待辦', '#1E8E5A'];
+    case 'mark': return [n.tag === 'done' ? '3D 改好了' : '3D 要改進', '#E03131'];
     default: return ['消息', '#5D7486'];
   }
 }
@@ -1564,6 +1565,7 @@ var ACT = {
       case 'sheet': setSite(n.site); openOffice('sheets'); return;
       case 'contract': setSite(n.site); openOffice('contracts'); return;
       case 'todo': setSite(n.site); openTodo('hub'); return;
+      case 'mark': setSite(n.site); open3d(); return;   // 3D 上圈要改進的地方
       case 'worker': setSite(n.site); openWork('hub'); return;
       default: render();
     }
