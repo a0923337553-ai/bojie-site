@@ -148,6 +148,31 @@ textarea { min-height:76px; resize:vertical; }
 .stepper .mid { flex:1; text-align:center; color:var(--ink); }
 /* PDF */
 #pdfpages canvas { display:block; width:100%; height:auto; background:#fff; margin-bottom:8px; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+/* 施工單記號（第 15 版）：每頁一個框，記號蓋在上面；下面一排按鈕 */
+#pdfpages .pgw { position:relative; margin-bottom:12px; }
+#pdfpages .pgw canvas { margin-bottom:0; }
+#pdfpages .pgw canvas.ov { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; background:transparent; box-shadow:none; }
+#pdfpages .pglab { position:absolute; left:4px; top:4px; background:rgba(42,47,54,.67); color:#fff; font-size:13px; font-weight:bold; border-radius:6px; padding:2px 7px; }
+#pdfpages .pgbar { display:flex; gap:8px; justify-content:flex-end; padding:6px 2px 0; }
+#pdfpages .pgbar button { border:0; border-radius:16px; padding:7px 14px; font-size:15px; font-weight:bold; }
+.snpen { background:#E03131; color:#fff; }
+.sncnt { background:#FFF3A0; color:#8A6D00; }
+/* 畫記號（整個畫面） */
+#ned { position:fixed; inset:0; z-index:60; background:#5A6270; display:flex; flex-direction:column; }
+#ned .top { flex:none; }
+#ned .stage { flex:1; position:relative; overflow:hidden; touch-action:none; }
+#ned .pbox { position:absolute; left:0; top:0; transform-origin:0 0; background:#fff; }
+#ned .pbox canvas { position:absolute; left:0; top:0; width:100%; height:100%; display:block; }
+#ned .tools { flex:none; background:#fff; padding:6px 8px calc(8px + env(safe-area-inset-bottom)); }
+#ned .tools .hint { font-size:12px; color:var(--muted); padding:0 4px 4px; }
+#ned .tools .row3 { display:flex; flex-wrap:wrap; gap:6px; }
+#ned .tk { border:1px solid var(--line); background:#fff; border-radius:18px; padding:7px 11px; font-size:14px; display:flex; align-items:center; gap:5px; }
+#ned .tk.on { border-width:2px; font-weight:bold; }
+#ned .tk i { width:12px; height:12px; border-radius:6px; display:inline-block; }
+#ned .tk:disabled { color:var(--line); }
+#ned .ndlg { position:absolute; left:12px; right:12px; top:70px; background:#fff; border-radius:16px; padding:14px; box-shadow:0 8px 24px rgba(0,0,0,.3); z-index:2; max-width:520px; margin:0 auto; }
+#ned .ndlg textarea { width:100%; box-sizing:border-box; min-height:70px; font-size:17px; border:1.5px solid var(--line); border-radius:10px; padding:8px; font-family:inherit; }
+#ned .busy { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); background:var(--red); color:#fff; border-radius:10px; padding:5px 10px; font-size:14px; }
 /* 電腦也能用（使用者 2026-11-10「我想要電腦也能打開的」「排法要舒適，不要那麼擠（手機才需要）」「電腦就是方便人員查看操控」）：
    手機照舊一欄；電腦整頁放大（--z：一般 1.05、24／27 吋 1.2、29 吋 21:9 與 40 吋長條 1.3）、間距拉開，
    首頁兩欄（長條螢幕三欄），卡片跟著螢幕高度拉長；清單、表單那幾頁窄一點比較好讀 */
@@ -228,7 +253,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10i';
+var WEB_VERSION = '11/10j';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
 var PCAPP = /[?&]app=pc\b/.test(location.search);
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -507,7 +532,7 @@ function loadFeed(fresh) {
   if (g) { body.lat = g.lat; body.lon = g.lon; }
   if (!g && !S.here) S.hereHint = S.hereHint || '📍 點這裡允許位置，顯示所在地今天的天氣和這週天氣';
   var jobs = [
-    api('feed', body).then(function (f) { S.feed = f; S.feedErr = ''; LS.setJSON('feed', f); settleTodos(); renderSoft(); })
+    api('feed', body).then(function (f) { S.feed = f; S.feedErr = ''; LS.setJSON('feed', f); settleTodos(); renderSoft(); if (!isOffice()) loadMyTasks(); })
       .catch(function (e) { var m = failMsg(e); if (m) { S.feedErr = '讀不到最新消息：' + m + '（網路好了按「⟳ 更新」）'; renderSoft(); } })
   ];
   if (g) {
@@ -528,6 +553,9 @@ function topBar(title, back, right, rightAct) {
 function badgeHtml(n) { return n > 0 ? '<span class="badge">' + (n > 99 ? '99+' : n) + '</span>' : ''; }
 
 function render() {
+  // 看 PDF 的時候不重畫（關掉跳出的視窗也是）：畫好的頁、記號才不會不見
+  if (S.route === 'pdf' && S.pdf && S.pdf.shown && $('pdfpages')) return;
+  if (S.route === 'pdf' && S.pdf) S.pdf.shown = true;
   // 卡片裡面捲到哪裡：重畫後放回去
   var keep = {}, els = document.querySelectorAll('[data-sk]');
   for (var i = 0; i < els.length; i++) keep[els[i].getAttribute('data-sk')] = els[i].scrollTop;
@@ -536,7 +564,7 @@ function render() {
   else if (!S.s || !S.s.today) h = topBar('柏捷工地', null) + '<div class="wrap">' + (S.err ? '<div class="err">' + esc(S.err) + '</div>' : '<div class="card note" style="font-size:15px">讀取中…</div>') +
     '<button class="ghost dim" data-act="tologin" style="margin-top:14px">回登入畫面</button></div>';
   else h = ({ hub: renderHub, work: renderWork, edit: renderEdit, view: renderView, site: renderSite, pours: renderPours, sheets: renderSheets,
-    pdf: renderPdf, contracts: renderContracts, todo: renderTodo, logs: renderLogs, calendar: renderCal }[S.route] || renderHub)();
+    pdf: renderPdf, contracts: renderContracts, todo: renderTodo, logs: renderLogs, calendar: renderCal, tasks: renderTasks }[S.route] || renderHub)();
   $('app').innerHTML = h;
   $('app').className = 'r-' + S.route;   // 電腦版：清單、表單那幾頁窄一點比較好讀
   if (S.route === 'login') { var c = $('code'); if (c) c.value = S.codeInput; }
@@ -553,7 +581,8 @@ function renderSoft() {
 function renderModal() {
   var m = S.modal;
   if (!m) { $('modal').innerHTML = ''; return; }
-  var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal }[m.type](m);
+  var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
+    task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
 }
@@ -605,6 +634,8 @@ function renderHub() {
   var cNews = '<div class="a-news">' + newsCard(news) + '</div>';
   var cWx = S.fc && S.fc.days && S.fc.days.length ? '<div class="a-wx">' + weekWeather(S.fc) + '</div>' : '';
   var h = renderHero() + '<div class="wrap hub' + (week ? ' has-week' : '') + '">';
+  // 派工（第 15 版）：施工人員首頁最上面「派給你的工作」
+  if (!off && S.myTasks && S.myTasks.length) h += myTaskCard();
   var n = hubCols();
   if (n === 1) h += cSite + cRem + cWeek + cNews + cWx;
   else if (n === 2) h += '<div class="hubcols"><div>' + cSite + cRem + cWx + '</div><div>' + cWeek + cNews + '</div></div>';
@@ -722,8 +753,9 @@ function weekCalCard(events) {
 }
 
 // 順序（使用者 2026-11-10「注意灌漿代辦發包，這樣排列」）：全部、注意事項、灌漿・施工單、待辦、發包；施工人員放最後（跟 App 一樣）
-var NEWS_GROUPS = [['全部', []], ['📢 注意事項', ['notice']], ['🚚 灌漿・施工單', ['pour', 'sheet']], ['✅ 待辦', ['todo']], ['🤝 發包', ['contract']], ['👷 施工人員', ['worker']]];
-var NEWS_ICON = { pour: ['🚚', '#F2994A'], sheet: ['📐', '#16A6A0'], contract: ['🤝', '#9B51E0'], worker: ['👷', '#2F80ED'], notice: ['📢', '#E5383B'], cal: ['📅', '#2F80ED'], todo: ['✅', '#1E8E5A'], mark: ['📍', '#E03131'] };
+var NEWS_GROUPS = [['全部', []], ['📢 注意事項', ['notice']], ['🚚 灌漿・施工單', ['pour', 'sheet', 'snote']], ['✅ 待辦', ['todo']], ['📋 派工', ['task']], ['🤝 發包', ['contract']], ['👷 施工人員', ['worker']]];
+var NEWS_ICON = { pour: ['🚚', '#F2994A'], sheet: ['📐', '#16A6A0'], contract: ['🤝', '#9B51E0'], worker: ['👷', '#2F80ED'], notice: ['📢', '#E5383B'], cal: ['📅', '#2F80ED'], todo: ['✅', '#1E8E5A'], mark: ['📍', '#E03131'],
+  task: ['📋', '#F28C28'], snote: ['📝', '#B08900'] };
 function newsTag(n) {
   switch (n.kind) {
     case 'cal': return n.tag === 'add' ? ['新增行程', '#1E9E6A'] : n.tag === 'del' ? ['行程取消', '#E5383B'] : n.tag === 'chg' ? ['行程改了', '#2F80ED'] : ['行程', '#2F80ED'];
@@ -734,6 +766,8 @@ function newsTag(n) {
     case 'notice': return ['注意事項', '#E0662B'];
     case 'todo': return [n.tag === 'done' ? '待辦完成' : '新增待辦', '#1E8E5A'];
     case 'mark': return [n.tag === 'done' ? '3D 改好了' : '3D 要改進', '#E03131'];
+    case 'task': return [n.tag === 'got' ? '收到' : n.tag === 'done' ? '做好了' : '派工', '#F28C28'];
+    case 'snote': return [n.tag === 'give' ? '給你看' : '施工單記號', '#B08900'];
     default: return ['消息', '#5D7486'];
   }
 }
@@ -920,8 +954,10 @@ function renderSite() {
   h += tile('混凝土灌漿數量', next ? '下一次 ' + rocDate(pourOf(next).pourDate) + '（' + (pourOf(next).part || '') + '）' + (pourOf(next).m3 ? ' ・ ' + pourOf(next).m3 + ' m³' : '') : pours.length + ' 份', '#F2994A', '🚚', 'pours');
   h += tile('發包', cb ? '未發包 ' + cb.todo.length + ' ・ 已發包 ' + cb.done.length : '還沒有發包資料', '#9B51E0', '🤝', 'contracts');
   if (S.feed && S.feed.todo) h += tile('待辦事項', todoLine(S.feed.todo[site]), '#1E8E5A', '✅', 'todo');
-  // 3D 結構（使用者 2026-11-10：結構體、點一筆灌漿亮那幾區、點柱或梁看配筋；施工人員看不到）
-  h += tile('3D 結構', '柱梁版牆・灌漿區・配筋', '#4F6BD8', '🏗️', '3d');
+  // 派工（第 15 版）：公司、主任、老闆、開發者派給指定的施工人員
+  h += tile('派工', taskLine(site), '#F28C28', '📋', 'tasks');
+  // 3D 結構（使用者 2026-11-10：結構體、點一筆灌漿亮那幾區、點柱或梁看配筋）：開發者、老闆、主任（「3d不提供給公司跟施工人員」）
+  if (isLead()) h += tile('3D 結構', '柱梁版牆・灌漿區・配筋', '#4F6BD8', '🏗️', '3d');
   h += '</div>';
   if (o && S.officeErr) h += '<div class="sub">' + esc(S.officeErr) + '</div>';
   return h + '</div>';
@@ -1148,6 +1184,7 @@ function modalOk(m) {
   if (m.type === 'notice') return noticeOk(m);
   if (m.type === 'todoadd') return !!(m.text.trim() && m.site);
   if (m.type === 'todoedit') return !!m.text.trim();
+  if (m.type === 'task') return !m.busy && !!m.text.trim() && m.to.length > 0;
   return true;
 }
 
@@ -1371,20 +1408,36 @@ function pdfStatus(t) { S.pdf.status = t; var el = $('pdfstatus'); if (el) el.te
 function openPdf(id) {
   var o = S.office; if (!o) return;
   var doc = (o.pours || []).concat(o.sheets || []).filter(function (d) { return d.id === id; })[0]; if (!doc) return;
-  var from = S.route, my = { doc: doc, from: from, title: (pourOf(doc).part || docTitle(doc)), status: '下載中…' };
+  // 施工單記號（第 15 版）：主任、老闆、開發者看得到、可以畫
+  openPdfDoc(doc, { notes: (o.sheets || []).indexOf(doc) >= 0 && isLead() });
+}
+/**
+ * 看 PDF。opt.notes＝蓋上施工單記號（每頁下面「✏️ 畫記號」「📝 幾筆」）；opt.worker＝施工人員：只畫給他的那幾頁；opt.start＝先捲到第幾頁（0 起算）
+ */
+function openPdfDoc(doc, opt) {
+  opt = opt || {};
+  var from = opt.from || S.route, my = { doc: doc, from: from, title: (pourOf(doc).part || docTitle(doc)), status: '下載中…', notes: !!opt.notes || !!opt.worker,
+    worker: !!opt.worker, start: opt.start || 0, cv: {} };
   S.pdf = my; go('pdf');
   var key = doc.id + '|' + doc.modified;
   var bytes = PDF_CACHE[key] ? Promise.resolve(PDF_CACHE[key]) : api('pdf', { id: doc.id }).then(function (r) { var b = b64ToBytes(r.data); PDF_CACHE[key] = b; return b; });
-  Promise.all([bytes, loadPdfJs()]).then(function (a) {
+  var notes = my.notes ? loadSnotes(doc.site).catch(function () { return null; }) : null;
+  Promise.all([bytes, loadPdfJs(), notes]).then(function (a) {
     if (S.pdf !== my) return;
     pdfStatus('畫圖中…');
     return a[1].getDocument({ data: a[0].slice(0) }).promise.then(function (pdf) {
-      var n = pdf.numPages, i = 1, box = $('pdfpages');
+      var n = pdf.numPages, box = $('pdfpages');
+      // 施工人員：只有給他的那幾頁（加上消息說的那頁）
+      var list = [];
+      if (my.worker) { snotesOf(doc).forEach(function (x) { if (list.indexOf(x.page) < 0) list.push(x.page); }); if (list.indexOf(my.start) < 0) list.push(my.start); list = list.filter(function (p) { return p < n; }).sort(function (x, y) { return x - y; }); }
+      else for (var p = 0; p < n; p++) list.push(p);
+      var k = 0;
       function next() {
         if (S.pdf !== my || S.route !== 'pdf' || !box) return;
-        if (i > n) { pdfStatus(n + ' 頁'); return; }
-        pdfStatus('第 ' + i + '/' + n + ' 頁畫圖中…');
-        return pdf.getPage(i).then(function (page) {
+        if (k >= list.length) { pdfStatus(my.worker ? '給你看的 ' + list.length + ' 頁' : n + ' 頁'); return; }
+        var pi = list[k];
+        pdfStatus('第 ' + (k + 1) + '/' + list.length + ' 頁畫圖中…');
+        return pdf.getPage(pi + 1).then(function (page) {
           var v1 = page.getViewport({ scale: 1 });
           var css = box.clientWidth || (window.innerWidth - 16);
           var target = Math.min(2000, Math.max(1100, css * (window.devicePixelRatio || 2) * 1.5));
@@ -1392,9 +1445,11 @@ function openPdf(id) {
           if (v1.width * v1.height * scale * scale > 4.2e6) scale = Math.sqrt(4.2e6 / (v1.width * v1.height));
           var v = page.getViewport({ scale: scale });
           var c = document.createElement('canvas'); c.width = Math.floor(v.width); c.height = Math.floor(v.height);
-          box.appendChild(c);
-          return page.render({ canvasContext: c.getContext('2d'), viewport: v }).promise;
-        }).then(function () { i++; return next(); });
+          if (my.notes) box.appendChild(snPageWrap(my, pi, c)); else box.appendChild(c);
+          return page.render({ canvasContext: c.getContext('2d'), viewport: v }).promise.then(function () {
+            if (my.notes) { snDrawPage(my, pi); if (pi === my.start && my.start > 0) { var w = $('pg' + pi); if (w) w.scrollIntoView({ block: 'start' }); } }
+          });
+        }).then(function () { k++; return next(); });
       }
       return next();
     });
@@ -1565,7 +1620,9 @@ var ACT = {
       case 'sheet': setSite(n.site); openOffice('sheets'); return;
       case 'contract': setSite(n.site); openOffice('contracts'); return;
       case 'todo': setSite(n.site); openTodo('hub'); return;
-      case 'mark': setSite(n.site); open3d(); return;   // 3D 上圈要改進的地方
+      case 'mark': if (isLead()) { setSite(n.site); open3d(); } return;   // 3D 上圈要改進的地方
+      case 'task': if (isOffice()) { setSite(n.site); openTasks('hub'); } else { loadMyTasks(); render(); } return;   // 派工
+      case 'snote': openSheetNote(n); return;   // 施工單記號：打開那份、跳到那一頁
       case 'worker': setSite(n.site); openWork('hub'); return;
       default: render();
     }
@@ -1632,6 +1689,7 @@ var ACT = {
     if (v === 'logs') openLogs('site');
     else if (v === 'todo') openTodo('site');
     else if (v === '3d') open3d();
+    else if (v === 'tasks') openTasks('site');
     else openOffice(v);
   },
   officereload: function () { loadOffice(); },
@@ -1769,9 +1827,9 @@ document.addEventListener('keydown', function (ev) {
 });
 function onPicked(ev) {
   var files = ev.target.files;
-  if (S.pickFor === 'notice') {
+  if (S.pickFor === 'notice' || S.pickFor === 'task') {
     var f = files && files[0], m = S.modal; if (!f || !m) return;
-    shrink(f, 1000, 0.65).then(function (p) { if (S.modal === m) { m.photo = p; renderModal(); } }).catch(function () { });
+    shrink(f, 1000, 0.65).then(function (p) { if (S.modal === m) { m.photo = p; m.nophoto = false; renderModal(); } }).catch(function () { });
   } else addFiles(files, S.pickFor === 'receipt');
 }
 $('cam').addEventListener('change', onPicked);
@@ -1783,6 +1841,395 @@ setInterval(function () { if (S.route === 'hub' && S.s && !S.modal && document.v
 document.addEventListener('visibilitychange', function () {
   if (document.visibilityState === 'visible' && S.route === 'hub' && S.s && !S.modal) loadFeed(false);
 });
+
+// ===================== 第 15 版：派工、施工單記號、3D 只給開發者老闆主任（使用者 2026-11-10） =====================
+function isLead() { return !!S.s && ['管理者', '老闆', '主任'].indexOf(S.s.role) >= 0; }
+S.tasks = null; S.taskCache = {}; S.taskErr = ''; S.taskBusy = false; S.taskFrom = 'site'; S.taskWorkers = null; S.myTasks = null;
+S.snotes = {}; S.snMe = null; S.snWorkers = null;
+
+// ---------- 派工 ----------
+function taskLine(site) {
+  var l = S.taskCache[site];
+  if (!l) return '派工給指定的施工人員';
+  if (!l.length) return '還沒有派工，點進去派';
+  var done = l.filter(function (t) { return t.done; }).length;
+  return '還沒做好 ' + (l.length - done) + ' ・ 做好 ' + done;
+}
+function taskWhen(ms) { if (!ms) return ''; var d = new Date(+ms); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+function findTask(id) { return (S.tasks || []).concat(S.myTasks || []).filter(function (t) { return t.id === id; })[0]; }
+function openTasks(from) {
+  S.taskFrom = from; S.taskErr = ''; S.tasks = S.taskCache[S.site] || null; go('tasks'); loadTasks();
+  if (!S.taskWorkers) api('task', { op: 'workers' }).then(function (r) { S.taskWorkers = r.workers || []; if (S.modal && S.modal.type === 'task') renderModal(); }).catch(function () { });
+}
+function loadTasks() {
+  var site = S.site; S.taskBusy = true; renderSoft();
+  return api('task', { op: 'list', site: site }).then(function (r) {
+    S.taskCache[site] = r.items || []; if (S.site === site) S.tasks = r.items || []; S.taskBusy = false; S.taskErr = ''; renderSoft();
+  }).catch(function (e) { S.taskBusy = false; var m = failMsg(e); if (m) { S.taskErr = '讀不到：' + m; renderSoft(); } });
+}
+/** 施工人員：派給自己的（還沒做好的在前；做好超過一天的不列） */
+function loadMyTasks() {
+  return api('task', { op: 'list' }).then(function (r) {
+    var me = S.s.name, day = Date.now() - 86400000;
+    S.myTasks = (r.items || []).filter(function (t) { var x = t.rep[me] || {}; return !x.done || x.done > day; })
+      .sort(function (a, b) { var da = !!(a.rep[me] || {}).done, db = !!(b.rep[me] || {}).done; return (da - db) || cmp(a.date || '9', b.date || '9') || (b.at - a.at); });
+    renderSoft();
+  }).catch(function () { });
+}
+function renderTasks() {
+  var site = S.site, list = S.tasks;
+  var h = topBar('派工', S.taskFrom, S.taskBusy ? '讀取中…' : '⟳ 更新', 'taskreload') + '<div class="wrap"><div class="label">' + esc(site) + ' ・ 派給指定的施工人員（被派到的人和辦公室的人看得到、跳通知）</div>';
+  h += '<button class="big" data-act="taskadd" style="margin-bottom:10px">＋ 派一個工作</button>';
+  if (S.taskErr) h += '<div class="err">' + esc(S.taskErr) + '</div>';
+  if (!list) return h + '<div class="sub">讀取中…</div></div>';
+  if (!list.length) h += '<div class="card sub" style="font-size:15px">還沒有派工。按上面「＋ 派一個工作」。</div>';
+  list.filter(function (t) { return !t.done; }).concat(list.filter(function (t) { return t.done; })).forEach(function (t) { h += taskCardHtml(t); });
+  return h + '</div>';
+}
+function taskCardHtml(t) {
+  var h = '<div class="card" style="margin-bottom:10px' + (t.done ? ';opacity:.78' : '') + '">';
+  h += '<div style="font-size:17px;font-weight:bold;line-height:23px;white-space:pre-wrap">' + (t.done ? '✅ ' : '') + esc(t.text) + '</div>';
+  var meta = [t.date ? '📅 ' + calDay(t.date) : '', t.by + ' 派的 ' + taskWhen(t.at)].filter(Boolean);
+  h += '<div class="sub" style="font-size:13.5px;margin-top:3px">' + esc(meta.join(' ・ ')) + '</div><div style="margin-top:6px">';
+  t.to.forEach(function (n) {
+    var r = t.rep[n] || {};
+    h += '<div style="font-size:14.5px;line-height:21px">👷 ' + esc(n) + '：' + (r.done ? '<b style="color:var(--green)">做好了 ' + taskWhen(r.done) + '</b>' :
+      r.got ? '<b style="color:var(--blue)">收到了 ' + taskWhen(r.got) + '</b>' : '<span style="color:var(--muted)">還沒收到</span>') + '</div>';
+  });
+  h += '</div><div class="row" style="margin-top:8px;gap:8px;justify-content:flex-end">' + (t.photo ? '<button class="key" data-act="taskphoto" data-v="' + esc(t.id) + '">📷 照片</button>' : '') +
+    '<button class="key" data-act="taskedit" data-v="' + esc(t.id) + '">✏️ 改／取消</button></div>';
+  return h + '</div>';
+}
+function myTaskCard() {
+  var me = S.s.name;
+  var h = '<div class="card" style="border:2px solid #F28C28;margin-bottom:12px"><div class="ttl" style="margin-bottom:2px">📋 派給你的工作</div>';
+  S.myTasks.forEach(function (t, i) {
+    var r = t.rep[me] || {};
+    h += '<div style="padding:8px 0;' + (i ? 'border-top:1px solid #EAF0F4;' : '') + (r.done ? 'opacity:.7' : '') + '"><div style="font-size:16.5px;font-weight:bold;line-height:22px;white-space:pre-wrap">' + esc(t.text) + '</div>' +
+      '<div class="sub" style="font-size:13px">' + esc([t.site, t.date ? '📅 ' + calDay(t.date) : '', t.by + ' 派的'].filter(Boolean).join(' ・ ')) + '</div>' +
+      '<div class="row" style="gap:8px;margin-top:6px;flex-wrap:wrap"><button class="key' + (r.got ? ' on' : '') + '" data-act="taskack" data-v="' + esc(t.id) + '|got">' + (r.got ? '👌 已收到' : '👌 收到') + '</button>' +
+      '<button class="key' + (r.done ? ' on' : '') + '" data-act="taskack" data-v="' + esc(t.id) + '|done">' + (r.done ? '✅ 已做好' : '✅ 做好了') + '</button>' +
+      (t.photo ? '<button class="key" data-act="taskphoto" data-v="' + esc(t.id) + '">📷 照片</button>' : '') + '</div></div>';
+  });
+  return h + '<div class="sub" style="font-size:12.5px">按「收到」「做好了」，派工的人會收到通知；按錯再按一次可以取消。</div></div>';
+}
+function taskModal(m) {
+  var ws = S.taskWorkers, t = todayYmd();
+  var h = '<h3>' + (m.id ? '📋 改派工' : '📋 派一個工作') + '（' + esc(m.site) + '）</h3>';
+  h += '<div class="label"' + (m.text.trim() ? '' : ' style="color:var(--red)"') + '>要做什麼' + (m.text.trim() ? '' : '（一定要寫）') + '</div><textarea data-f="m.text" maxlength="300" placeholder="例如：2F 柱筋綁好、4 號柱箍筋補 3 支">' + esc(m.text) + '</textarea>';
+  h += '<div class="label" style="margin-top:10px;' + (m.to.length ? '' : 'color:var(--red)') + '">派給誰' + (m.to.length ? '（可以選好幾個）' : '（一定要選）') + '</div><div class="chips" style="flex-wrap:wrap">' +
+    (ws ? (ws.length ? ws.map(function (w) { return chip('mtkw', w.name, w.name, m.to.indexOf(w.name) >= 0, true); }).join('') : '<span class="sub">沒有施工人員</span>') : '<span class="sub">讀取施工人員名單中…</span>') + '</div>';
+  h += '<div class="label" style="margin-top:10px">哪一天做（可以不填）</div><div class="chips" style="flex-wrap:wrap">' +
+    [['', '不指定'], [t, '今天'], [addDays(t, 1), '明天'], [addDays(t, 2), '後天']].map(function (d) { return chip('mtkd', d[0], d[1], m.date === d[0], true); }).join('') + '</div>' +
+    '<input type="date" data-f="m.date" style="margin-top:6px" value="' + esc(m.date || '') + '">' + (m.date ? '<div class="sub" style="margin-top:2px">📅 ' + calDay(m.date) + '</div>' : '');
+  h += '<div class="label" style="margin-top:10px">照片（可以不附）</div>';
+  if (m.photo) h += '<div class="thumb" style="padding-top:62%"><img src="' + m.photo.url + '" alt=""></div><button class="link red" data-act="mtkphotodel">拿掉照片</button>';
+  else if (m.hadPhoto && !m.nophoto) h += '<div class="sub">原本有一張照片（拍新的會換掉）</div><div class="row2" style="margin-top:6px"><button class="ghost" style="margin:0" data-act="mtkcam">📷 換一張</button><button class="ghost red" style="margin:0" data-act="mtkphotodel">拿掉照片</button></div>';
+  else h += '<div class="row2"><button class="ghost" style="margin:0" data-act="mtkcam">📷 拍照</button><button class="ghost" style="margin:0" data-act="mtkpick">🖼️ 相簿</button></div>';
+  if (m.id) h += '<button class="link red" style="margin-top:8px;' + (m.ask ? 'font-weight:bold' : '') + '" data-act="mtkdel">' + (m.ask ? '確定要取消這個派工嗎？（大家都看不到了）' : '取消這個派工') + '</button>';
+  h += m.err ? '<div style="color:var(--red);font-size:14px">' + esc(m.err) + '</div>' : '';
+  return h + '<div class="btns"><button class="dim" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button><button id="msave" data-act="mtksave"' + (modalOk(m) ? '' : ' disabled') + '>' + (m.busy ? '存檔中…' : m.id ? '存檔' : '派出去') + '</button></div>';
+}
+function taskPhotoModal(m) {
+  return '<h3>📷 派工的照片</h3>' + (m.url ? '<img src="' + m.url + '" style="width:100%;border-radius:10px" alt="">' : '<div class="sub">' + esc(m.err || '照片載入中…') + '</div>') +
+    '<div class="btns"><button data-act="mclose">關閉</button></div>';
+}
+ACT.taskreload = function () { loadTasks(); };
+ACT.taskadd = function () { S.modal = { type: 'task', id: null, site: S.site, text: '', to: [], date: '', photo: null, hadPhoto: false, nophoto: false, busy: false, err: '', ask: false }; renderModal(); };
+ACT.taskedit = function (id) {
+  var t = findTask(id); if (!t) return;
+  S.modal = { type: 'task', id: t.id, site: t.site, text: t.text, to: t.to.slice(), date: t.date || '', photo: null, hadPhoto: !!t.photo, nophoto: false, busy: false, err: '', ask: false }; renderModal();
+};
+ACT.mtkw = function (v) { var m = S.modal, i = m.to.indexOf(v); if (i >= 0) m.to.splice(i, 1); else m.to.push(v); renderModal(); };
+ACT.mtkd = function (v) { S.modal.date = v; renderModal(); };
+ACT.mtkcam = function () { pickPhoto('task', true); };
+ACT.mtkpick = function () { pickPhoto('task', false); };
+ACT.mtkphotodel = function () { var m = S.modal; m.photo = null; if (m.hadPhoto) m.nophoto = true; renderModal(); };
+ACT.mtksave = function () {
+  var m = S.modal; if (!modalOk(m)) return;
+  m.busy = true; m.err = ''; renderModal();
+  var body = { op: m.id ? 'edit' : 'add', id: m.id || undefined, site: m.site, text: m.text.trim(), to: m.to, date: m.date || '' };
+  if (m.photo) body.photo = m.photo.data; else if (m.nophoto) body.nophoto = true;
+  api('task', body).then(function () { S.modal = null; renderModal(); S.feedStale = true; loadTasks(); })
+    .catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '沒有存到：' + x; renderModal(); } });
+};
+ACT.mtkdel = function () {
+  var m = S.modal; if (m.busy) return;
+  if (!m.ask) { m.ask = true; renderModal(); return; }
+  m.busy = true; renderModal();
+  api('task', { op: 'del', id: m.id }).then(function () { S.modal = null; renderModal(); S.feedStale = true; loadTasks(); })
+    .catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '取消不了：' + x; renderModal(); } });
+};
+ACT.taskack = function (v) {
+  var p = String(v).split('|'), t = findTask(p[0]), me = S.s.name; if (!t) return;
+  var r = t.rep[me] = t.rep[me] || {}, undo = !!r[p[1]];
+  if (undo) delete r[p[1]]; else r[p[1]] = Date.now();
+  render();
+  api('task', { op: 'ack', id: t.id, kind: p[1], undo: undo }).then(function () { loadMyTasks(); }, function (e) { var x = failMsg(e); if (x) alert('沒有送出：' + x); loadMyTasks(); });
+};
+ACT.taskphoto = function (id) {
+  var m = { type: 'tphoto', id: id, url: '', err: '' }; S.modal = m; renderModal();
+  api('task', { op: 'photo', id: id }).then(function (r) { if (S.modal === m) { m.url = 'data:image/jpeg;base64,' + r.data; renderModal(); } })
+    .catch(function (e) { if (S.modal === m) { m.err = '看不到照片：' + (failMsg(e) || ''); renderModal(); } });
+};
+
+// ---------- 施工單記號（主任、老闆、開發者看全部、可以畫；開發者給指定的施工人員看） ----------
+var SN_PEN = { r: '#E03131', b: '#1C6FD1', k: '#1F2933', y: 'rgba(255,212,59,0.42)' };
+function loadSnotes(site) {
+  return api('snote', { op: 'list', site: site }).then(function (r) { S.snotes[site] = r.items || []; if (r.me) S.snMe = r.me; return S.snotes[site]; });
+}
+function snotesOf(doc) { return (S.snotes[doc.site] || []).filter(function (n) { return n.file === doc.name; }); }
+/** 便條的字排好（字的大小跟頁寬成比例；中文一個字一個字換行） */
+function snLayout(ctx, t, W) {
+  var fs = W * 0.026, maxW = W * 0.42, lines = [], cur = '', words = Array.from('📝 ' + t);
+  ctx.font = 'bold ' + fs + 'px -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif';
+  words.forEach(function (ch) { if (ch === '\n') { lines.push(cur); cur = ''; return; } if (cur && ctx.measureText(cur + ch).width > maxW) { lines.push(cur); cur = ch; } else cur += ch; });
+  if (cur) lines.push(cur);
+  var w = 0; lines.forEach(function (l) { w = Math.max(w, ctx.measureText(l).width); });
+  return { fs: fs, lines: lines, w: w, h: lines.length * fs * 1.25, pad: W * 0.006 };
+}
+function snNoteRect(ctx, n, W, H) { var L = snLayout(ctx, n.t, W), x = n.x / 10000 * W, y = n.y / 10000 * H; return { x: x - L.pad, y: y - L.pad, w: L.w + 2 * L.pad, h: L.h + 2 * L.pad, L: L }; }
+function snDraw(ctx, d, W, H, alpha) {
+  ctx.save(); ctx.globalAlpha = alpha == null ? 1 : alpha; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  (d.s || []).forEach(function (s) {
+    var p = s.p || []; if (p.length < 2) return;
+    ctx.strokeStyle = SN_PEN[s.c] || SN_PEN.r; ctx.lineWidth = (s.w || 4) / 1000 * W;
+    ctx.beginPath(); ctx.moveTo(p[0] / 10000 * W, p[1] / 10000 * H);
+    if (p.length === 2) ctx.lineTo(p[0] / 10000 * W + 0.5, p[1] / 10000 * H);
+    for (var i = 2; i + 1 < p.length; i += 2) ctx.lineTo(p[i] / 10000 * W, p[i + 1] / 10000 * H);
+    ctx.stroke();
+  });
+  (d.n || []).forEach(function (n) {
+    var r = snNoteRect(ctx, n, W, H);
+    ctx.fillStyle = 'rgba(255,243,160,0.96)'; ctx.strokeStyle = '#E0B800'; ctx.lineWidth = Math.max(1, W * 0.0015);
+    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(r.x, r.y, r.w, r.h, r.L.pad); else ctx.rect(r.x, r.y, r.w, r.h); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#183B56'; ctx.textBaseline = 'top';
+    r.L.lines.forEach(function (l, i) { ctx.fillText(l, n.x / 10000 * W, n.y / 10000 * H + i * r.L.fs * 1.25 + r.L.fs * 0.1); });
+  });
+  ctx.restore();
+}
+/** PDF 一頁的框：底圖、記號那一層、P.幾、下面的按鈕 */
+function snPageWrap(my, pi, c) {
+  var w = document.createElement('div'); w.className = 'pgw'; w.id = 'pg' + pi;
+  w.appendChild(c); my.cv[pi] = c;
+  var ov = document.createElement('canvas'); ov.className = 'ov'; ov.width = c.width; ov.height = c.height; w.appendChild(ov);
+  var lab = document.createElement('span'); lab.className = 'pglab'; lab.textContent = 'P.' + (pi + 1); w.appendChild(lab);
+  var bar = document.createElement('div'); bar.className = 'pgbar'; bar.id = 'pgbar' + pi; w.appendChild(bar);
+  return w;
+}
+function snDrawPage(my, pi) {
+  var w = $('pg' + pi); if (!w) return;
+  var ov = w.querySelector('canvas.ov'), ctx = ov.getContext('2d'), list = snotesOf(my.doc).filter(function (n) { return n.page === pi; });
+  ctx.clearRect(0, 0, ov.width, ov.height);
+  list.forEach(function (n) { snDraw(ctx, n.data || {}, ov.width, ov.height); });
+  var bar = $('pgbar' + pi);
+  if (bar) bar.innerHTML = (list.length ? '<button class="sncnt" data-act="snlist" data-v="' + pi + '">📝 ' + list.length + ' 筆記號</button>' : '') +
+    (isLead() ? '<button class="snpen" data-act="snedit" data-v="' + pi + '">✏️ 畫記號</button>' : '');
+}
+function snDrawAll() { var my = S.pdf; if (!my || !my.notes) return; Object.keys(my.cv).forEach(function (pi) { snDrawPage(my, +pi); }); }
+/** 最新消息「施工單記號」：打開那份、跳到那一頁（施工人員只看得到給他的那幾頁） */
+function openSheetNote(n) {
+  setSite(n.site);
+  if (!n.fileId) { alert('找不到這份施工單（可能重新列印換了名字）'); return; }
+  var known = S.office && (S.office.sheets || []).filter(function (d) { return d.id === n.fileId; })[0];
+  var doc = known || { id: n.fileId, name: n.file, site: n.site, modified: 'n' + n.at, props: {} };
+  openPdfDoc(doc, { notes: isLead(), worker: !isOffice(), start: n.page || 0, from: 'hub' });
+}
+ACT.snlist = function (v) { var my = S.pdf; if (!my) return; S.modal = { type: 'snlist', page: +v, ask: '', err: '' }; renderModal(); };
+ACT.snedit = function (v) { closeModal(); openNoteEditor(+v); };
+function snListModal(m) {
+  var my = S.pdf, me = (S.snMe && S.snMe.name) || S.s.name, dev = S.s.role === '管理者' || (S.snMe && S.snMe.role === '管理者');
+  var list = my ? snotesOf(my.doc).filter(function (n) { return n.page === m.page; }).sort(function (a, b) { return b.editAt - a.editAt; }) : [];
+  var h = '<h3>📝 P.' + (m.page + 1) + ' 的記號</h3>';
+  if (!list.length) h += '<div class="sub">這一頁還沒有記號</div>';
+  list.forEach(function (n) {
+    var d = n.data || {}, what = [(d.s || []).length ? '畫了 ' + d.s.length + ' 筆' : '', (d.n || []).length ? '便條 ' + d.n.length + ' 張' : ''].filter(Boolean).join('、');
+    h += '<div class="card" style="margin:0 0 8px;box-shadow:none;border:1px solid var(--line)"><b>' + esc(n.by) + (n.by === me ? '（我）' : '') + ' ・ ' + esc(taskWhen(n.editAt)) + '</b>' +
+      (what ? '<div class="sub" style="font-size:13px">' + esc(what) + '</div>' : '') +
+      (d.n || []).map(function (t) { return '<div style="font-size:14.5px">📝 ' + esc(t.t) + '</div>'; }).join('') +
+      (n.to && n.to.length ? '<div style="font-size:13px;color:var(--green);font-weight:bold">👷 給 ' + esc(n.to.join('、')) + ' 看了</div>' : '');
+    if (isLead()) h += '<div class="row" style="gap:8px;margin-top:6px">' + (dev ? '<button class="key" data-act="sngive" data-v="' + esc(n.id) + '">👷 ' + (n.to && n.to.length ? '改給誰看' : '給施工人員看') + '</button>' : '') +
+      ((dev || n.by === me) ? '<button class="key" style="color:var(--red)" data-act="sndel" data-v="' + esc(n.id) + '">' + (m.ask === n.id ? '確定刪除？' : '刪除') + '</button>' : '') + '</div>';
+    h += '</div>';
+  });
+  h += m.err ? '<div style="color:var(--red);font-size:14px">' + esc(m.err) + '</div>' : '';
+  return h + '<div class="btns">' + (isLead() ? '<button data-act="snedit" data-v="' + m.page + '">✏️ 畫記號</button>' : '') + '<button data-act="mclose">關閉</button></div>';
+}
+function snGiveModal(m) {
+  var ws = S.snWorkers;
+  var h = '<h3>👷 給哪幾個施工人員看？</h3><div class="sub">選到的人會跳通知，只看得到有給他的那幾頁；都不選＝收回。</div><div class="chips" style="flex-wrap:wrap;margin-top:8px">' +
+    (ws ? ws.map(function (w) { return chip('sngw', w.name, w.name, m.to.indexOf(w.name) >= 0, true); }).join('') : '<span class="sub">讀取施工人員名單中…</span>') + '</div>';
+  h += m.err ? '<div style="color:var(--red);font-size:14px">' + esc(m.err) + '</div>' : '';
+  return h + '<div class="btns"><button class="dim" data-act="snlistback">取消</button><button data-act="sngivesave"' + (m.busy ? ' disabled' : '') + '>' + (m.busy ? '存檔中…' : '確定') + '</button></div>';
+}
+ACT.sngive = function (id) {
+  var my = S.pdf, n = my && snotesOf(my.doc).filter(function (x) { return x.id === id; })[0]; if (!n) return;
+  S.modal = { type: 'sngive', id: id, page: n.page, to: (n.to || []).slice(), busy: false, err: '' }; renderModal();
+  if (!S.snWorkers) api('snote', { op: 'workers' }).then(function (r) { S.snWorkers = r.workers || []; if (S.modal && S.modal.type === 'sngive') renderModal(); }).catch(function () { });
+};
+ACT.sngw = function (v) { var m = S.modal, i = m.to.indexOf(v); if (i >= 0) m.to.splice(i, 1); else m.to.push(v); renderModal(); };
+ACT.snlistback = function () { var m = S.modal; S.modal = { type: 'snlist', page: m.page, ask: '', err: '' }; renderModal(); };
+ACT.sngivesave = function () {
+  var m = S.modal, my = S.pdf; if (m.busy || !my) return;
+  m.busy = true; renderModal();
+  api('snote', { op: 'give', id: m.id, to: m.to }).then(function () { return loadSnotes(my.doc.site); })
+    .then(function () { S.modal = { type: 'snlist', page: m.page, ask: '', err: '' }; renderModal(); snDrawAll(); })
+    .catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '沒有給到：' + x; renderModal(); } });
+};
+ACT.sndel = function (id) {
+  var m = S.modal, my = S.pdf; if (!my) return;
+  if (m.ask !== id) { m.ask = id; renderModal(); return; }
+  api('snote', { op: 'del', id: id }).then(function () { return loadSnotes(my.doc.site); })
+    .then(function () { m.ask = ''; renderModal(); snDrawAll(); })
+    .catch(function (e) { var x = failMsg(e); if (x) { m.err = '刪不掉：' + x; renderModal(); } });
+};
+
+/**
+ * 畫記號（一頁，整個畫面）：一指畫、兩指放大縮小移動（電腦：滾輪放大、右鍵拖曳移動）；
+ * 下面一排：紅筆、藍筆、黑筆、螢光筆、📝 便條、🧽 橡皮擦、↶ 復原；上面「💾 存檔」。
+ */
+function openNoteEditor(pi) {
+  var my = S.pdf; if (!my || !my.cv[pi]) return;
+  var src = my.cv[pi], me = (S.snMe && S.snMe.name) || S.s.name;
+  var onPage = snotesOf(my.doc).filter(function (n) { return n.page === pi; });
+  var mine = onPage.filter(function (n) { return n.by === me; })[0];
+  var others = onPage.filter(function (n) { return n.by !== me; });
+  var start = JSON.stringify(mine ? mine.data : { s: [], n: [] });
+  var E = { data: JSON.parse(start), undo: [], tool: 'r', s: 1, tx: 0, ty: 0, live: null, busy: '', dlg: null };
+  var root = document.createElement('div'); root.id = 'ned';
+  root.innerHTML = '<div class="top"><button class="back" data-ned="back">‹</button><h1>P.' + (pi + 1) + ' 畫記號</h1><button data-ned="save">💾 存檔</button></div>' +
+    '<div class="stage"><div class="pbox"><canvas class="bg"></canvas><canvas class="fg"></canvas></div></div><div class="tools"></div>';
+  document.body.appendChild(root); document.body.style.overflow = 'hidden';
+  var stage = root.querySelector('.stage'), pbox = root.querySelector('.pbox'), bg = root.querySelector('canvas.bg'), fg = root.querySelector('canvas.fg'), tools = root.querySelector('.tools');
+  bg.width = fg.width = src.width; bg.height = fg.height = src.height;
+  bg.getContext('2d').drawImage(src, 0, 0);
+  var W = 0, H = 0;   // 頁面在畫面上的大小（沒放大時）
+  function fit() {
+    var r = stage.getBoundingClientRect(); W = r.width; H = W * src.height / src.width;
+    pbox.style.width = W + 'px'; pbox.style.height = H + 'px';
+    if (E.s === 1 && E.tx === 0) E.ty = Math.max(0, (r.height - H) / 2);
+    place();
+  }
+  function place() { pbox.style.transform = 'translate(' + E.tx + 'px,' + E.ty + 'px) scale(' + E.s + ')'; }
+  function redraw() {
+    var ctx = fg.getContext('2d'); ctx.clearRect(0, 0, fg.width, fg.height);
+    others.forEach(function (n) { snDraw(ctx, n.data || {}, fg.width, fg.height, 0.55); });
+    snDraw(ctx, E.data, fg.width, fg.height);
+    if (E.live) snDraw(ctx, { s: [E.live], n: [] }, fg.width, fg.height);
+  }
+  function changed() { return JSON.stringify(E.data) !== start; }
+  function push(nd) { E.undo.push(JSON.stringify(E.data)); if (E.undo.length > 80) E.undo.shift(); E.data = nd; redraw(); drawTools(); }
+  var TOOLS = [['r', '紅筆', SN_PEN.r], ['b', '藍筆', SN_PEN.b], ['k', '黑筆', SN_PEN.k], ['y', '螢光筆', '#FFD43B'], ['n', '📝 便條', ''], ['e', '🧽 橡皮擦', '']];
+  function drawTools() {
+    var hint = E.tool === 'n' ? '點一下要貼便條的地方（點已經有的便條可以改、刪）；兩指放大縮小' : E.tool === 'e' ? '手指擦過要擦掉的線、便條（只擦得到自己的）' : '一指畫線、圈起來；兩指放大縮小、移動';
+    tools.innerHTML = '<div class="hint">' + hint + '</div><div class="row3">' + TOOLS.map(function (t) {
+      return '<button class="tk' + (E.tool === t[0] ? ' on' : '') + '" data-ned="tool" data-v="' + t[0] + '" style="' + (E.tool === t[0] ? 'border-color:' + (t[2] || '#E0B800') + ';background:' + (t[2] ? t[2].replace(/^#(..)(..)(..)$/, function (x, a, b, c) { return 'rgba(' + parseInt(a, 16) + ',' + parseInt(b, 16) + ',' + parseInt(c, 16) + ',.14)'; }) : '#FFF8D6') : '') + '">' +
+        (t[2] ? '<i style="background:' + t[2] + '"></i>' : '') + t[1] + '</button>';
+    }).join('') + '<button class="tk" data-ned="undo"' + (E.undo.length ? '' : ' disabled') + '>↶ 復原</button></div>' +
+      (E.busy ? '<div class="busy">' + esc(E.busy) + '</div>' : '');
+  }
+  function close() { window.removeEventListener('resize', fit); root.parentNode && root.parentNode.removeChild(root); document.body.style.overflow = ''; }
+  function save() {
+    if (E.busy === '存檔中…') return;
+    E.busy = '存檔中…'; drawTools();
+    api('snote', { op: 'save', site: my.doc.site, file: my.doc.name, page: pi, data: E.data }).then(function () { return loadSnotes(my.doc.site); })
+      .then(function () { close(); snDrawPage(my, pi); S.feedStale = true; })
+      .catch(function (e) { E.busy = '沒有存到：' + (failMsg(e) || ''); drawTools(); });
+  }
+  function local(cx, cy) { var r = stage.getBoundingClientRect(); return { x: (cx - r.left - E.tx) / E.s, y: (cy - r.top - E.ty) / E.s }; }
+  function norm(cx, cy) { var l = local(cx, cy); return [Math.max(0, Math.min(10000, Math.round(l.x / W * 10000))), Math.max(0, Math.min(10000, Math.round(l.y / H * 10000)))]; }
+  function noteAt(cx, cy) {
+    var l = local(cx, cy), k = fg.width / W, ctx = fg.getContext('2d');
+    for (var i = E.data.n.length - 1; i >= 0; i--) { var r = snNoteRect(ctx, E.data.n[i], fg.width, fg.height); if (l.x * k >= r.x && l.x * k <= r.x + r.w && l.y * k >= r.y && l.y * k <= r.y + r.h) return i; }
+    return -1;
+  }
+  var erased = false;
+  function erase(cx, cy) {
+    var l = local(cx, cy), thr = 18 / E.s, ctx = fg.getContext('2d'), k = fg.width / W;
+    var keepS = E.data.s.filter(function (s) {
+      for (var i = 0; i + 1 < s.p.length; i += 2) if (Math.hypot(s.p[i] / 10000 * W - l.x, s.p[i + 1] / 10000 * H - l.y) < thr + s.w / 2000 * W) return false;
+      return true;
+    });
+    var keepN = E.data.n.filter(function (n) { var r = snNoteRect(ctx, n, fg.width, fg.height); return !(l.x * k >= r.x - thr && l.x * k <= r.x + r.w + thr && l.y * k >= r.y - thr && l.y * k <= r.y + r.h + thr); });
+    if (keepS.length !== E.data.s.length || keepN.length !== E.data.n.length) {
+      if (!erased) { E.undo.push(JSON.stringify(E.data)); erased = true; }
+      E.data = { s: keepS, n: keepN }; redraw(); drawTools();
+    }
+  }
+  function noteDialog(pos, idx) {
+    var old = idx >= 0 ? E.data.n[idx] : null;
+    var d = document.createElement('div'); d.className = 'ndlg';
+    d.innerHTML = '<div style="font-weight:bold;font-size:17px;margin-bottom:6px">' + (old ? '📝 改便條' : '📝 貼一張便條') + '</div><textarea maxlength="200" placeholder="例如：這排先綁、#5 改 #6"></textarea>' +
+      '<div class="btns" style="position:static">' + (old ? '<button data-ned="ndel" style="color:var(--red)">刪除</button>' : '') + '<button class="dim" data-ned="ncancel">取消</button><button data-ned="nok">確定</button></div>';
+    stage.appendChild(d); E.dlg = { el: d, pos: pos, idx: idx };
+    var ta = d.querySelector('textarea'); ta.value = old ? old.t : ''; setTimeout(function () { ta.focus(); }, 50);
+  }
+  root.addEventListener('click', function (ev) {
+    var el = ev.target.closest('[data-ned]'); if (!el || el.disabled) return;
+    var a = el.getAttribute('data-ned');
+    if (a === 'back') { if (!changed() || confirm('還沒存檔，剛剛畫的要丟掉嗎？\n（按「取消」回去繼續畫）')) close(); }
+    else if (a === 'save') save();
+    else if (a === 'tool') { E.tool = el.getAttribute('data-v'); drawTools(); }
+    else if (a === 'undo') { if (E.undo.length) { E.data = JSON.parse(E.undo.pop()); redraw(); drawTools(); } }
+    else if (a === 'ncancel' || a === 'nok' || a === 'ndel') {
+      var g = E.dlg; if (!g) return;
+      var t = g.el.querySelector('textarea').value.trim();
+      var nn = E.data.n.slice();
+      if (a === 'nok' && t) { var o = g.idx >= 0 ? nn[g.idx] : null; var nt = { x: o ? o.x : g.pos[0], y: o ? o.y : g.pos[1], t: t }; if (g.idx >= 0) nn[g.idx] = nt; else nn.push(nt); push({ s: E.data.s, n: nn }); }
+      if (a === 'ndel' && g.idx >= 0) { nn.splice(g.idx, 1); push({ s: E.data.s, n: nn }); }
+      g.el.parentNode.removeChild(g.el); E.dlg = null;
+    }
+  });
+  // 手勢：一指（滑鼠左鍵）畫／擦／貼便條；兩指放大縮小移動；滑鼠右鍵拖曳＝移動；滾輪＝放大縮小
+  var P = new Map(), g0 = null;
+  stage.addEventListener('pointerdown', function (ev) {
+    if (E.dlg || ev.target.closest('.ndlg')) return;
+    try { stage.setPointerCapture(ev.pointerId); } catch (x) { }
+    P.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (P.size === 1) {
+      g0 = { x: ev.clientX, y: ev.clientY, moved: false, multi: false, pan: ev.pointerType === 'mouse' && ev.button !== 0 };
+      erased = false;
+      if (!g0.pan && 'rbky'.indexOf(E.tool) >= 0) { E.live = { c: E.tool, w: E.tool === 'y' ? 24 : 4, p: norm(ev.clientX, ev.clientY) }; redraw(); }
+      else if (!g0.pan && E.tool === 'e') erase(ev.clientX, ev.clientY);
+    } else { if (g0) g0.multi = true; E.live = null; redraw(); }
+  });
+  stage.addEventListener('pointermove', function (ev) {
+    if (!P.has(ev.pointerId)) return;
+    var prev = P.get(ev.pointerId), cur = { x: ev.clientX, y: ev.clientY };
+    if (P.size >= 2) {
+      var ids = Array.from(P.keys()), a = P.get(ids[0]), b = P.get(ids[1]);
+      var a2 = ev.pointerId === ids[0] ? cur : a, b2 = ev.pointerId === ids[1] ? cur : b;
+      var d1 = Math.hypot(a.x - b.x, a.y - b.y), d2 = Math.hypot(a2.x - b2.x, a2.y - b2.y), r = stage.getBoundingClientRect();
+      var cx = (a2.x + b2.x) / 2 - r.left, cy = (a2.y + b2.y) / 2 - r.top, ns = Math.max(0.6, Math.min(8, E.s * (d1 > 0 ? d2 / d1 : 1))), k = ns / E.s;
+      E.tx = cx - (cx - E.tx) * k + ((a2.x + b2.x) - (a.x + b.x)) / 2; E.ty = cy - (cy - E.ty) * k + ((a2.y + b2.y) - (a.y + b.y)) / 2; E.s = ns; place();
+    } else if (g0 && !g0.multi) {
+      if (Math.hypot(cur.x - g0.x, cur.y - g0.y) > 8) g0.moved = true;
+      if (g0.pan) { E.tx += cur.x - prev.x; E.ty += cur.y - prev.y; place(); }
+      else if (E.live) { var q = norm(cur.x, cur.y), p = E.live.p; if (Math.hypot(p[p.length - 2] - q[0], p[p.length - 1] - q[1]) >= 12) { p.push(q[0], q[1]); redraw(); } }
+      else if (E.tool === 'e') erase(cur.x, cur.y);
+    }
+    P.set(ev.pointerId, cur);
+  });
+  function up(ev) {
+    if (!P.has(ev.pointerId)) return;
+    P.delete(ev.pointerId);
+    if (P.size > 0 || !g0) return;
+    var g = g0; g0 = null;
+    if (!g.multi && !g.pan) {
+      if (E.live && E.live.p.length >= 2) { var st = E.live; E.live = null; push({ s: E.data.s.concat([st]), n: E.data.n }); }
+      else if (E.tool === 'n' && !g.moved) { var i = noteAt(g.x, g.y); noteDialog(norm(g.x, g.y), i); }
+    }
+    E.live = null; redraw();
+  }
+  stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', function (ev) { E.live = null; up(ev); });
+  stage.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
+  stage.addEventListener('wheel', function (ev) {
+    ev.preventDefault(); var r = stage.getBoundingClientRect(), cx = ev.clientX - r.left, cy = ev.clientY - r.top;
+    var ns = Math.max(0.6, Math.min(8, E.s * Math.exp(-ev.deltaY * 0.0015))), k = ns / E.s; E.tx = cx - (cx - E.tx) * k; E.ty = cy - (cy - E.ty) * k; E.s = ns; place();
+  }, { passive: false });
+  window.addEventListener('resize', fit);
+  drawTools(); fit(); redraw();
+}
 
 // ---------- 開始 ----------
 // 記住的代碼：顯示鎖住的 ●●●●●●，按「登入」才進去（使用者 2026-11-08）
