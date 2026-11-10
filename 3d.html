@@ -43,7 +43,14 @@ button{font:inherit}
 #draw{position:fixed;z-index:7;touch-action:none;display:none;cursor:crosshair}
 #markBtn{position:fixed;z-index:6;border:0;border-radius:18px;padding:6px 12px;font-weight:700;background:#E03131;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;display:none}
 #markBtn.on{background:#fff;color:#E03131;border:2px solid #E03131}
-#markTip{position:fixed;z-index:7;left:50%;transform:translateX(-50%);background:#E03131;color:#fff;border-radius:12px;padding:6px 12px;font-size:13px;display:none;pointer-events:none;white-space:nowrap}
+#markForm{position:fixed;z-index:8;left:8px;right:8px;top:var(--topH,110px);margin-top:6px;background:#fff;border:2px solid #E03131;border-radius:14px;padding:10px 12px;box-shadow:0 6px 18px rgba(0,0,0,.2);display:none}
+#markForm textarea{margin:6px 0 2px;min-height:58px;font-size:16px}
+@media (min-width:900px){#markForm{left:auto;right:calc(var(--side) + 16px);width:440px}}
+/* 圈的時候上面那條：先「✋ 轉動」轉到要的位置、放大，再按「⭕ 畫圈」（使用者 2026-11-10「進入圈選應該要讓使用者可以放大縮小轉向至要的位置再框選」） */
+#markBar{position:fixed;z-index:8;transform:translateX(-50%);background:#fff;border:2px solid #E03131;border-radius:14px;padding:6px 8px;box-shadow:0 4px 12px rgba(0,0,0,.18);display:none;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;max-width:calc(100vw - 16px);box-sizing:border-box}
+#markBar .t{flex:1 1 100%;text-align:center;font-size:13px;color:#C92A2A;font-weight:700}
+#markBar button{border:1px solid #CBD5DC;background:#fff;border-radius:14px;padding:6px 14px;font:inherit;font-size:15px;font-weight:700;cursor:pointer;color:#1F2933}
+#markBar button.on{background:#E03131;border-color:#E03131;color:#fff}
 .mk{border:1px solid var(--line);border-radius:12px;padding:7px 10px;margin:0 0 8px;cursor:pointer}
 .mk .no{display:inline-block;min-width:20px;height:20px;border-radius:10px;background:#E03131;color:#fff;font-size:12px;text-align:center;line-height:20px;margin-right:6px;padding:0 3px}
 .mk.done .no{background:#0F766E}.mk.on{border-color:#F2C230;background:#FFFBEA}
@@ -104,7 +111,13 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
 <div id="pins"></div>
 <svg id="draw"><path id="drawPath" fill="none" stroke="#E03131" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
 <button id="markBtn">✏️ 圈起來</button>
-<div id="markTip">用手指圈出要改進的地方（點一下也可以）</div>
+<div id="markBar"><div class="t" id="mbText"></div><button id="mbMove">✋ 轉動、放大</button><button id="mbDraw">⭕ 畫圈</button></div>
+<!-- 寫要改進什麼：放在畫面最上面（下面那塊會被手機鍵盤蓋住，使用者 2026-11-10「圈起來的功能沒有辦法打字」） -->
+<div id="markForm">
+  <div style="font-weight:700">✏️ 寫要改進什麼 <span class="muted" id="mfMember"></span></div>
+  <textarea class="in" id="markText" maxlength="300" placeholder="例如：2F 這支梁的上層筋看起來不夠長，請確認"></textarea>
+  <div class="row"><button class="btn solid" id="markSend">送出</button><button class="btn" id="markRedo">⭕ 重圈</button><button class="btn ghost" id="markCancel">取消圈</button><span class="muted" id="markErr"></span></div>
+</div>
 <div id="side" style="display:none">
   <div class="hd"><span id="sideTitle">🚚 灌漿區</span><button class="btn ghost tog" id="tog">收起</button></div>
   <div class="bd" id="sideBody"></div>
@@ -383,7 +396,7 @@ function pan(dx, dy) {
 }
 const ray = { r: null };
 function pick(x, y) {
-  if (st.rebar) return;
+  if (st.rebar || st.marking || st.draft) return;   // 圈的時候點一下不換構件（只轉動）
   if (!ray.r) ray.r = new THREE.Raycaster();
   const r = el.getBoundingClientRect();
   ray.r.setFromCamera(new THREE.Vector2((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1), camera);
@@ -406,43 +419,138 @@ function when(ms) {
   const days = Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - new Date(t.getFullYear(), t.getMonth(), t.getDate())) / 86400000);
   return days === 0 ? '今天 ' + hm : days === 1 ? '昨天 ' + hm : (t.getMonth() + 1) + '/' + t.getDate() + ' ' + hm;
 }
-function setMarking(on) {
-  st.marking = on;
-  const d = document.getElementById('draw'), b = document.getElementById('markBtn'), t = document.getElementById('markTip');
-  d.style.display = on ? 'block' : 'none'; t.style.display = on ? 'block' : 'none';
-  b.classList.toggle('on', on); b.textContent = on ? '取消圈' : '✏️ 圈起來';
+/**
+ * 圈的模式：false＝沒在圈；'move'＝先轉動、放大縮小到要的位置（畫面照常操作）；'draw'＝一指畫圈（兩指照樣放大縮小、移動）。
+ * 按「✏️ 圈起來」先進 'move'（使用者 2026-11-10「進入圈選應該要讓使用者可以放大縮小轉向至要的位置再框選」）。
+ */
+function setMarking(mode) {
+  st.marking = mode || false;
+  const d = document.getElementById('draw'), bar = document.getElementById('markBar');
+  d.style.display = st.marking === 'draw' ? 'block' : 'none';
+  bar.style.display = st.marking ? 'flex' : 'none';
+  document.getElementById('mbMove').classList.toggle('on', st.marking === 'move');
+  document.getElementById('mbDraw').classList.toggle('on', st.marking === 'draw');
+  document.getElementById('mbText').textContent = st.marking === 'draw'
+    ? '用手指圈出要改進的地方（兩指可以放大縮小）'
+    : (WIDE() ? '先轉到要的位置（拖曳轉動、滾輪放大縮小、右鍵移動），再按「⭕ 畫圈」' : '先轉到要的位置（一指轉動、兩指放大縮小），再按「⭕ 畫圈」');
   document.getElementById('drawPath').setAttribute('d', '');
+  drawingPts = null;
+  markBtnText();
+}
+function markBtnText() {
+  const b = document.getElementById('markBtn');
+  b.textContent = st.draft || st.marking ? '✖ 取消圈' : '✏️ 圈起來';
+  b.classList.toggle('on', !!st.draft || !!st.marking);
 }
 function bindMarking() {
   const d = document.getElementById('draw'), path = document.getElementById('drawPath'), b = document.getElementById('markBtn');
   b.style.display = 'block';
-  b.onclick = () => { st.draft = null; setMarking(!st.marking); renderSide(); layout(); };
-  d.addEventListener('pointerdown', e => { try { d.setPointerCapture(e.pointerId); } catch (x) { } drawingPts = [[e.clientX, e.clientY]]; path.setAttribute('d', ''); });
-  d.addEventListener('pointermove', e => {
-    if (!drawingPts) return;
-    drawingPts.push([e.clientX, e.clientY]);
-    const r = d.getBoundingClientRect();
-    path.setAttribute('d', 'M' + drawingPts.map(p => (p[0] - r.left).toFixed(1) + ' ' + (p[1] - r.top).toFixed(1)).join(' L'));
+  // 圈的時候、圈好了還沒送出時，這顆按鈕＝取消圈（使用者 2026-11-10「也不能取消圈選」）
+  b.onclick = () => {
+    if (st.draft || st.marking) { cancelDraft(); return; }
+    // 手機：下面那塊先收起來，3D 畫面大一點才好轉、好圈（取消、送出後放回來）
+    st.markSel = null; st.sel = null; st.sideWas = st.sideMin; if (!WIDE()) st.sideMin = true;
+    setMarking('move'); renderSide(); layout(); hideHint();
+  };
+  document.getElementById('mbMove').onclick = () => { setMarking('move'); layout(); };
+  document.getElementById('mbDraw').onclick = () => { setMarking('draw'); layout(); };
+  document.getElementById('markRedo').onclick = () => { st.draft = null; showDraft(); setMarking('draw'); renderSide(); layout(); needs = true; };
+  const err = t => { document.getElementById('markErr').textContent = t; };
+  document.getElementById('markCancel').onclick = cancelDraft;
+  document.getElementById('markSend').onclick = async () => {
+    const text = (document.getElementById('markText').value || '').trim();
+    if (!text) { err('要寫哪裡要改進'); return; }
+    const d = st.draft; if (!d) return; err('送出中…');
+    try {
+      const r = await markApi({ op: 'add', text, pos: d.pos, cam: d.cam, member: d.member });
+      if (r.local) marks.push({ id: 'L' + Date.now(), at: Date.now(), by: (me && me.name) || '我', text, pos: d.pos, cam: d.cam, member: d.member, done: false });
+      else await reloadMarks();
+      const last = marks.slice().sort((a, b) => (b.at || 0) - (a.at || 0))[0];
+      st.draft = null; showDraft(); st.markSel = r.id || (last && last.id) || null; st.sideMin = false; st.sideWas = undefined; renderSide(); layout(); needs = true;
+    } catch (e) { err('沒有送出：' + errText(e)); }
+  };
+  // 畫圈：一指（滑鼠左鍵）畫；第二指放下就不畫了，改成放大縮小、移動；滑鼠右鍵拖曳＝轉動、滾輪＝放大縮小
+  const dp = new Map(); let orbit = null;
+  d.addEventListener('pointerdown', e => {
+    try { d.setPointerCapture(e.pointerId); } catch (x) { }
+    dp.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (dp.size === 1 && e.pointerType === 'mouse' && e.button !== 0) { orbit = { btn: e.button }; drawingPts = null; return; }
+    if (dp.size === 1) { orbit = null; drawingPts = [[e.clientX, e.clientY]]; path.setAttribute('d', ''); }
+    else { drawingPts = null; path.setAttribute('d', ''); }
   });
-  d.addEventListener('pointerup', () => { if (drawingPts) { const pts = drawingPts; drawingPts = null; finishCircle(pts); } });
-  d.addEventListener('pointercancel', () => { drawingPts = null; });
+  d.addEventListener('pointermove', e => {
+    if (!dp.has(e.pointerId)) return;
+    const prev = dp.get(e.pointerId), cur = { x: e.clientX, y: e.clientY };
+    if (dp.size === 2) {
+      const ids = [...dp.keys()], a = dp.get(ids[0]), bb = dp.get(ids[1]);
+      const a2 = e.pointerId === ids[0] ? cur : a, b2 = e.pointerId === ids[1] ? cur : bb;
+      const d1 = Math.hypot(a.x - bb.x, a.y - bb.y), d2 = Math.hypot(a2.x - b2.x, a2.y - b2.y);
+      if (d1 > 0 && d2 > 0) cam.dist *= d1 / d2;
+      pan(((a2.x + b2.x) - (a.x + bb.x)) / 2, ((a2.y + b2.y) - (a.y + bb.y)) / 2);
+    } else if (orbit) {
+      const dx = cur.x - prev.x, dy = cur.y - prev.y;
+      if (orbit.btn === 1) pan(dx, dy);
+      else { cam.theta -= dx * 0.008; cam.phi = Math.min(Math.PI - 0.05, Math.max(0.05, cam.phi - dy * 0.008)); placeCamera(); }
+    } else if (drawingPts) {
+      drawingPts.push([e.clientX, e.clientY]);
+      const r = d.getBoundingClientRect();
+      path.setAttribute('d', 'M' + drawingPts.map(p => (p[0] - r.left).toFixed(1) + ' ' + (p[1] - r.top).toFixed(1)).join(' L'));
+    }
+    dp.set(e.pointerId, cur);
+  });
+  const up = e => {
+    if (!dp.has(e.pointerId)) return;
+    dp.delete(e.pointerId);
+    if (dp.size === 0) { orbit = null; if (drawingPts) { const pts = drawingPts; drawingPts = null; finishCircle(pts); } }
+  };
+  d.addEventListener('pointerup', up);
+  d.addEventListener('pointercancel', e => { dp.delete(e.pointerId); drawingPts = null; orbit = null; path.setAttribute('d', ''); });
+  d.addEventListener('contextmenu', e => e.preventDefault());
+  d.addEventListener('wheel', e => { e.preventDefault(); cam.dist *= Math.exp(e.deltaY * 0.0012); placeCamera(); }, { passive: false });
 }
-/** 圈好了：圈的中心往模型打一條線，碰到的地方就是位置；圈的大小換成模型上的半徑（轉動、縮放都跟著） */
+/**
+ * 圈好了：在圈裡面打好幾條線到模型，取最靠近眼睛的那個表面當位置（以前只打圈的正中心，
+ * 中心是空的就打到後面很遠的構件，一轉動圈就「跑掉了」，使用者 2026-11-10）；圈的大小換成那裡的半徑。
+ */
 function finishCircle(pts) {
   const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
   const rpx = Math.max(20, Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 2);
   const r = el.getBoundingClientRect();
   if (!ray.r) ray.r = new THREE.Raycaster();
+  const meshes = items.filter(it => it.mesh.visible && it.mesh.material.opacity !== 0.08).map(it => it.mesh);
+  const samples = [[0, 0]];
+  [0.45, 0.85].forEach(f => { for (let i = 0; i < 8; i++) samples.push([Math.cos(i * Math.PI / 4) * f * rpx, Math.sin(i * Math.PI / 4) * f * rpx]); });
+  let best = null;
+  samples.forEach(([dx, dy]) => {
+    ray.r.setFromCamera(new THREE.Vector2((cx + dx - r.left) / r.width * 2 - 1, -(cy + dy - r.top) / r.height * 2 + 1), camera);
+    const h = ray.r.intersectObjects(meshes, false)[0];
+    if (h && (!best || h.distance < best.distance)) best = h;
+  });
   ray.r.setFromCamera(new THREE.Vector2((cx - r.left) / r.width * 2 - 1, -(cy - r.top) / r.height * 2 + 1), camera);
-  const hits = ray.r.intersectObjects(items.filter(it => it.mesh.visible && it.mesh.material.opacity !== 0.08).map(it => it.mesh), false);
-  const p = hits.length ? hits[0].point : ray.r.ray.at(camera.position.distanceTo(cam.target), new THREE.Vector3());
-  const dist = camera.position.distanceTo(p), wr = rpx * 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / r.height;
-  const hm = hits.length ? hits[0].object.userData.m : null, c = T2CAD(p);
+  // 位置：圈的正中心那條線上、跟最近的表面一樣深的地方（圈不會偏到旁邊）
+  const depth = best ? best.distance : camera.position.distanceTo(cam.target);
+  const p = ray.r.ray.at(depth, new THREE.Vector3());
+  const wr = rpx * 2 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / r.height;
+  const hm = best ? best.object.userData.m : null, c = T2CAD(p);
   st.draft = { pos: [c[0], c[1], c[2], Math.round(wr)], cam: { t: T2CAD(cam.target), d: Math.round(cam.dist), th: +cam.theta.toFixed(3), ph: +cam.phi.toFixed(3) },
     member: hm ? (hm.f + ' ' + hm.k + ' ' + (hm.c || hm.n || '')).trim() : '' };
-  setMarking(false); st.sideMin = false; st.markSel = null; renderSide(); layout();
-  setTimeout(() => { const t = document.getElementById('markText'); if (t) t.focus(); }, 60);
+  setMarking(false); st.markSel = null; showDraft(true); renderSide(); layout();
+}
+/** 上面那個寫字的框：圈好了打開（清空），送出或取消就關掉 */
+function showDraft(fresh) {
+  const f = document.getElementById('markForm');
+  f.style.display = st.draft ? 'block' : 'none';
+  markBtnText();
+  if (st.draft && fresh) {
+    document.getElementById('markText').value = ''; document.getElementById('markErr').textContent = '';
+    document.getElementById('mfMember').textContent = st.draft.member ? '（' + st.draft.member + '）' : '';
+  }
+}
+function cancelDraft() {
+  st.draft = null; setMarking(false); showDraft();
+  if (st.sideWas !== undefined) { st.sideMin = st.sideWas; st.sideWas = undefined; }
+  renderSide(); layout(); needs = true;
 }
 /** 每次重畫畫面：圈的位置投影到螢幕上（擋在模型後面也照樣顯示，才找得到） */
 function updatePins() {
@@ -568,23 +676,41 @@ function zones(z0, z1, endLen, s1, s2) { // 端部用 s1、中間用 s2 的位�
 function drawRebar() {
   rebarGroup.children.forEach(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); });
   rebarGroup.clear();
+  const byId = id => (M.m || []).find(x => x.i === id);
   if (st.rebar) {
     const m = st.rebar, js = jobsOf(m).filter(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
     if (js.length) js.forEach(j => drawJob(j, j.k === '柱' ? [m.b[2] - 1, m.b[5] + 1] : null)); else drawMember(m);
+    // 點梁：軸線上的柱在梁高範圍內（梁柱接頭）的柱筋、柱箍筋也畫（使用者 2026-11-10「這裡是柱箍筋啊怎麼是梁箍」）
+    if (m.k === '梁' || m.k === '地梁') {
+      const beams = [...(st.focus || [])].map(byId).filter(x => x && (x.k === '梁' || x.k === '地梁'));
+      const lo = Math.min(...beams.map(x => x.b[2]), m.b[2]), hi = Math.max(...beams.map(x => x.b[5]), m.b[5]);
+      const cols = new Set();
+      [...(st.focus || [])].map(byId).filter(x => x && x.k === '柱').forEach(c => jobsOf(c).filter(j => j.k === '柱').forEach(j => cols.add(j)));
+      cols.forEach(j => drawJob(j, [lo - 1, hi + 1]));
+    }
     flushBars(false);
     return;
   }
   if (!st.bars) return;
-  // 整層：看得到的梁那幾台全部；柱只畫看得到的那幾段的高度；沒有工作單的照配筋表畫
+  // 整層：看得到的梁那幾台全部；柱畫這一層從梁底到最高處（梁柱接頭的柱箍筋屬於下面那支柱，也要畫）；沒有工作單的照配筋表畫
   const vis = items.filter(it => it.mesh.visible).map(it => it.m), visIds = new Set(vis.map(m => m.i)), done = new Set();
+  const visBox = vis.filter(m => m.b && ['柱', '梁', '地梁', '版'].includes(m.k));
+  const zLo = visBox.length ? Math.min(...visBox.map(m => m.b[2])) : -1e9, zHi = visBox.length ? Math.max(...visBox.map(m => m.b[5])) : 1e9;
   let n = 0;
   (M.rj || []).forEach(j => {
     const mine = (j.mem || []).map(i => i).filter(i => visIds.has(i)).map(i => vis.find(m => m.i === i));
+    if (j.k === '柱' && st.floor !== '全部' && st.kinds.has('柱')) {
+      // 這一層高度範圍內有這支柱（包括下面那支柱伸上來的接頭）
+      const all = (j.mem || []).map(byId).filter(Boolean);
+      if (!all.some(m => m.b[2] < zHi - 1 && m.b[5] > zLo + 1)) return;
+      all.forEach(m => { if (visIds.has(m.i)) done.add(m.i); });
+      drawJob(j, [zLo - 1, zHi + 1]); n++;
+      return;
+    }
     const use = j.k === '柱' ? mine.filter(m => m.k === '柱') : j.k === '基礎' ? mine.filter(m => m.k === '基礎') : mine.filter(m => m.k === '梁' || m.k === '地梁');
     if (!use.length) return;
     use.forEach(m => done.add(m.i));
-    const zr = j.k === '柱' && st.floor !== '全部' ? [Math.min(...use.map(m => m.b[2])) - 1, Math.max(...use.map(m => m.b[5])) + 1] : null;
-    drawJob(j, zr); n++;
+    drawJob(j, null); n++;
   });
   vis.filter(m => !done.has(m.i) && rebarOf(m) && !jobsOf(m).length).forEach(m => { drawMember(m); n++; });
   flushBars(n > 1);
@@ -706,11 +832,10 @@ function renderSide() {
   let h = '';
   const mk = st.markSel ? marks.find(x => x.id === st.markSel) : null;
   if (st.draft) {
-    T.textContent = '✏️ 圈起來：要改進什麼';
+    T.textContent = '✏️ 圈起來';
     h += '<div class="card">' + (st.draft.member ? '<div class="muted">圈的地方：' + esc(st.draft.member) + '</div>' : '')
-      + '<textarea class="in" id="markText" maxlength="300" placeholder="例如：2F 這支梁的上層筋看起來不夠長，請確認"></textarea>'
-      + '<div class="muted">送出後老闆、主任、公司、開發者都看得到；開發者、老闆、主任會收到通知，開發者改好會按「已改好」。</div>'
-      + '<div class="row"><button class="btn solid" id="markSend">送出</button><button class="btn ghost" id="markCancel">取消</button><span class="muted" id="markErr"></span></div></div>';
+      + '<div>在畫面<b>最上面的框</b>寫要改進什麼，按「送出」；不要了按「取消圈」。可以先轉動看清楚，圈會黏在模型上。</div>'
+      + '<div class="muted" style="margin-top:6px">送出後老闆、主任、公司、開發者都看得到；開發者、老闆、主任會收到通知，開發者改好會按「已改好」。</div></div>';
   } else if (mk) {
     const dev = me && me.role === '管理者', mine = me && me.name === mk.by;
     T.textContent = '📍 要改進的地方 ' + markNo(mk);
@@ -720,7 +845,7 @@ function renderSide() {
       + '<div class="row"><button class="btn" id="markGo">轉到這裡</button>'
       + (dev ? '<button class="btn solid" id="markDone">' + (mk.done ? '改回待處理' : '✅ 已改好') + '</button>' : '')
       + (dev || mine ? '<button class="btn ghost" id="markDel">刪除</button>' : '')
-      + '<button class="btn ghost" id="markClose">關閉</button><span class="muted" id="markErr"></span></div></div>';
+      + '<button class="btn ghost" id="markClose">關閉</button><span class="muted" id="markErr2"></span></div></div>';
     h += markSection();
   } else if (st.rebar) {
     const m = st.rebar;
@@ -753,20 +878,11 @@ function renderSide() {
     h += markSection() + pourList(true);
   }
   B.innerHTML = h;
+  // 換了點的東西（構件、配筋、標記）就捲回最上面（使用者 2026-11-10「外屏沒有像內屏點一個部位跳出他的配筋」）
+  const viewKey = [st.draft ? 'd' : '', st.markSel || '', st.rebar ? 'r' + st.rebar.i : '', st.sel ? 's' + st.sel.i : '', st.bars ? 'b' + st.floor : ''].join('|');
+  if (viewKey !== renderSide.lastKey) { B.scrollTop = 0; renderSide.lastKey = viewKey; }
   const on = (id, fn) => { const x = document.getElementById(id); if (x) x.onclick = fn; };
-  const err = t => { const x = document.getElementById('markErr'); if (x) x.textContent = t; };
-  on('markCancel', () => { st.draft = null; renderSide(); layout(); needs = true; });
-  on('markSend', async () => {
-    const text = (document.getElementById('markText').value || '').trim();
-    if (!text) { err('要寫哪裡要改進'); return; }
-    const d = st.draft; err('送出中…');
-    try {
-      const r = await markApi({ op: 'add', text, pos: d.pos, cam: d.cam, member: d.member });
-      if (r.local) marks.push({ id: 'L' + Date.now(), at: Date.now(), by: (me && me.name) || '我', text, pos: d.pos, cam: d.cam, member: d.member, done: false });
-      else await reloadMarks();
-      st.draft = null; st.markSel = r.id || (marks[marks.length - 1] || {}).id || null; renderSide(); layout(); needs = true;
-    } catch (e) { err('沒有送出：' + errText(e)); }
-  });
+  const err = t => { const x = document.getElementById('markErr2'); if (x) x.textContent = t; };
   on('markGo', () => selectMark(st.markSel, true));
   on('markClose', () => { st.markSel = null; renderSide(); layout(); needs = true; });
   on('markDone', async () => {
@@ -844,7 +960,11 @@ function layout() {
   ['pins', 'draw'].forEach(id => { const e = document.getElementById(id); e.style.left = vr.left + 'px'; e.style.top = vr.top + 'px'; e.style.width = vr.width + 'px'; e.style.height = vr.height + 'px'; });
   const dr = document.getElementById('draw'); dr.setAttribute('width', vr.width); dr.setAttribute('height', vr.height);
   const mb = document.getElementById('markBtn'); mb.style.top = (vr.top + 10) + 'px'; mb.style.right = (innerWidth - vr.right + 12) + 'px';
-  const mt = document.getElementById('markTip'); mt.style.top = (vr.top + 52) + 'px'; mt.style.left = (vr.left + vr.width / 2) + 'px';
+  // 圈的時候那條放在畫面上方中間、按鈕下面（窄的手機放在按鈕下面一點，不會擋到按鈕）
+  const mt = document.getElementById('markBar'), narrow = vr.width < 560;
+  mt.style.top = (vr.top + (narrow ? 50 : 10)) + 'px';
+  mt.style.left = (vr.left + (narrow ? vr.width / 2 : (vr.width - 150) / 2)) + 'px';
+  mt.style.width = Math.min(narrow ? vr.width - 16 : vr.width - 180, 520) + 'px';
   needs = true;
 }
 function frame() { if (needs) { needs = false; renderer.render(scene, camera); updatePins(); } requestAnimationFrame(frame); }
@@ -860,7 +980,8 @@ function shots() {
     if (b) marks.push({ id: 'd1', at: Date.now() - 3600e3, by: '測試老闆', text: '2F 這支梁的上層筋看起來不夠長，請確認', pos: at(b), member: b.f + ' 梁 ' + (b.c || ''), done: false });
     if (c) marks.push({ id: 'd2', at: Date.now() - 86400e3, by: '測試主任', text: 'C3 箍筋間距再確認', pos: at(c), member: c.f + ' 柱 ' + (c.c || ''), done: true, doneBy: '開發者', doneAt: Date.now() - 7200e3 });
     if (P.get('sel') === '1') st.markSel = 'd1';
-    if (P.get('draft') === '1' && b) st.draft = { pos: at(b), member: b.f + ' 梁 ' + (b.c || '') };
+    if (P.get('draft') === '1' && b) { st.draft = { pos: at(b), member: b.f + ' 梁 ' + (b.c || '') }; showDraft(true); }
+    if (P.get('marking') || P.get('draft') === '1') { if (!WIDE()) st.sideMin = true; if (P.get('marking')) setMarking(P.get('marking')); renderSide(); }
     apply();
   }
   const find = (k, f) => (M.m || []).find(m => m.k === k && (!f || m.f === f) && hasBars(m));
