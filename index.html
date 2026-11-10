@@ -166,7 +166,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10';
+var WEB_VERSION = '11/10b';
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 var UNFILED = '未分組';
 var MAX_PHOTOS = 12, MAX_MATS = 9, MAX_RECEIPTS = 12;
@@ -638,7 +638,8 @@ function weekCalCard(events) {
   return scrollCard('📅 這週行程', 176, body, '', { label: '打開 ›', act: 'calopen', v: '' }, 'week');
 }
 
-var NEWS_GROUPS = [['全部', []], ['👷 施工人員', ['worker']], ['🚚 灌漿・施工單', ['pour', 'sheet']], ['🤝 發包', ['contract']], ['📢 注意事項', ['notice']], ['✅ 待辦', ['todo']]];
+// 順序（使用者 2026-11-10「注意灌漿代辦發包，這樣排列」）：全部、注意事項、灌漿・施工單、待辦、發包；施工人員放最後（跟 App 一樣）
+var NEWS_GROUPS = [['全部', []], ['📢 注意事項', ['notice']], ['🚚 灌漿・施工單', ['pour', 'sheet']], ['✅ 待辦', ['todo']], ['🤝 發包', ['contract']], ['👷 施工人員', ['worker']]];
 var NEWS_ICON = { pour: ['🚚', '#F2994A'], sheet: ['📐', '#16A6A0'], contract: ['🤝', '#9B51E0'], worker: ['👷', '#2F80ED'], notice: ['📢', '#E5383B'], cal: ['📅', '#2F80ED'], todo: ['✅', '#1E8E5A'] };
 function newsTag(n) {
   switch (n.kind) {
