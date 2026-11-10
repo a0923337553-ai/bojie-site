@@ -253,7 +253,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10l';
+var WEB_VERSION = '11/10m';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
 var PCAPP = /[?&]app=pc\b/.test(location.search);
 // 哪一種蘋果裝置（使用者 2026-11-10「ipad也要適配」「macbook pro 16也要」）：
@@ -262,6 +262,10 @@ var IPAD = /iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel
 var IOS = IPAD || /iPhone|iPod/.test(navigator.userAgent);
 var MAC = !IOS && /Macintosh|Mac OS X/.test(navigator.userAgent);
 var DEV = IPAD ? 'iPad' : 'iPhone';
+// Android 手機：首頁可以下載 App 安裝檔（使用者 2026-11-10「其他人要如何獲取安裝檔」→「好，加按鈕」）
+// 在 LINE、FB 裡面打開的（App 裡的瀏覽器）多半存不了檔案，要提醒換瀏覽器
+var ANDROID = /Android/i.test(navigator.userAgent);
+var INAPP = /\bLine\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent) || (ANDROID && /; wv\)/.test(navigator.userAgent));
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 var UNFILED = '未分組';
 var MAX_PHOTOS = 12, MAX_MATS = 9, MAX_RECEIPTS = 12;
@@ -589,7 +593,7 @@ function renderModal() {
   var m = S.modal;
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
-    task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal }[m.type](m);
+    task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
 }
@@ -669,6 +673,97 @@ function widgetModal(m) {
     '<div class="btns"><button data-act="mclose">關閉</button></div>';
 }
 
+// ===================== 下載 Android App =====================
+// 安裝檔不公開：用代碼跟收件服務一段一段拿（跟 App 自己更新同一條路，action 'apk'），
+// 拼起來核對大小、SHA-1，再存成「柏捷工地App-<版本>.apk」。之後有新版，App 會自己更新。
+function apkModal(m) {
+  var step = function (n, t, extra) {
+    return '<div class="row" style="align-items:flex-start;gap:8px;margin:8px 0"><b style="font-size:20px;color:var(--teal);line-height:24px">' + n + '</b>' +
+      '<div class="grow" style="font-size:16px;line-height:23px">' + t + (extra ? '<div style="margin-top:6px">' + extra + '</div>' : '') + '</div></div>';
+  };
+  var info = m.info, mb = info && info.size ? (info.size / 1048576).toFixed(1) + ' MB' : '';
+  var h = '<h3>📲 下載 Android App</h3>' +
+    '<div class="note" style="font-size:14px">' + (info && info.versionName ? '最新版 ' + esc(info.versionName) + (mb ? '・' + mb : '') + '。' : '') +
+    'App 比網頁版多了桌面小工具，關著也會跳通知。</div>';
+  if (INAPP) h += '<div class="err" style="margin:6px 0">你現在是在 LINE（或別的 App）裡面打開這頁，可能存不了檔案：按右上角「⋮」→「用預設瀏覽器開啟」（或用 Chrome 打開這個網址），再登入下載。</div>';
+  var act;
+  if (m.dl) act = '<div style="height:12px;border-radius:6px;background:#e3eaec;overflow:hidden"><div style="height:100%;width:' + (m.pct || 0) + '%;background:var(--teal)"></div></div>' +
+    '<div class="sub" style="margin-top:4px">' + esc(m.msg || '') + '　' + (m.pct || 0) + '%</div>';
+  else if (m.blob) act = '<div style="color:var(--teal);font-weight:bold;font-size:16px">✅ 下載好了：' + esc(m.file) + '</div>' +
+    '<button class="pill" style="margin:6px 0 0" data-act="apksave">沒看到下載？按這裡再存一次</button>';
+  else act = '<button class="big" style="margin:0" data-act="apkget">⬇ 下載安裝檔</button>';
+  if (m.err) act += '<div style="color:var(--red);font-size:14px;margin-top:4px">' + esc(m.err) + '</div>';
+  h += step('①', '按這個按鈕下載安裝檔' + (mb ? '（大約 ' + mb + '，用 Wi-Fi 比較快）' : ''), act) +
+    step('②', '手機問「這類檔案可能有害」→ 按「<b>仍要下載</b>」') +
+    step('③', '下載好了按「<b>開啟</b>」（沒看到的話：通知列往下拉點它，或「我的檔案」→「下載」）') +
+    step('④', '第一次會說不能安裝 → 按「設定」→ 打開「<b>允許此來源</b>」→ 返回 → 按「安裝」。跳出「Play 安全防護」→「更多詳細資料」→「<b>仍要安裝</b>」') +
+    step('⑤', '打開桌面的「柏捷工地」，輸入<b>同一個代碼</b>') +
+    '<div class="note" style="font-size:14px;margin-top:6px">裝好以後有新版，App 會自己叫你更新，不用再來這裡下載。</div>' +
+    '<div class="btns"><button data-act="mclose">關閉</button></div>';
+  return h;
+}
+function apkDownload(m) {
+  if (m.dl) return;
+  m.dl = true; m.err = ''; m.pct = 0; m.msg = '準備中…'; m.blob = null; renderModal();
+  var alive = function () { return S.modal === m; };
+  var info, buf, got = 0;
+  function getPart(i, tries) {
+    return api('apk', { part: i }).then(null, function (e) {
+      if (tries > 0 && alive() && !(e && /^(CODE|LOCKED)$/.test(e.error))) return getPart(i, tries - 1);
+      throw e;
+    });
+  }
+  function next(i) {
+    if (!alive()) throw { error: 'CANCEL' };
+    if (i >= info.parts) return null;
+    m.msg = '下載中…（第 ' + (i + 1) + '／' + info.parts + ' 段）'; renderModal();
+    return getPart(i, 1).then(function (p) {
+      var bin = atob(p.data || '');
+      if (got + bin.length > info.size) throw { error: '下載的檔案不完整，再按一次' };
+      for (var k = 0; k < bin.length; k++) buf[got + k] = bin.charCodeAt(k);
+      got += bin.length; m.pct = Math.round(got * 100 / info.size);
+      return next(i + 1);
+    });
+  }
+  api('appinfo').then(function (r) {
+    info = r; m.info = r;
+    if (!r.parts || !r.size) throw { error: '雲端還沒有安裝檔，請找管理者' };
+    buf = new Uint8Array(r.size);
+    return next(0);
+  }).then(function () {
+    if (got !== info.size) throw { error: '下載的檔案不完整，再按一次' };
+    return sha1Hex(buf);
+  }).then(function (h) {
+    if (h && info.sha1 && h !== String(info.sha1).toLowerCase()) throw { error: '下載的檔案不完整，再按一次' };
+    m.dl = false; m.file = '柏捷工地App-' + (info.versionName || info.versionCode) + '.apk';
+    m.blob = new Blob([buf], { type: 'application/vnd.android.package-archive' });
+    if (!alive()) return;
+    renderModal();
+    saveBlob(m.blob, m.file);
+  }, function (e) {
+    m.dl = false;
+    if (e && e.error === 'CANCEL') return;
+    m.err = failMsg(e);
+    if (alive()) renderModal();
+  });
+}
+/** SHA-1（十六進位小寫）；瀏覽器不支援就回 ''（只核對大小） */
+function sha1Hex(u8) {
+  try {
+    if (!(window.crypto && crypto.subtle && crypto.subtle.digest)) return Promise.resolve('');
+    return crypto.subtle.digest('SHA-1', u8).then(function (d) {
+      return Array.prototype.map.call(new Uint8Array(d), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+    }, function () { return ''; });
+  } catch (e) { return Promise.resolve(''); }
+}
+/** 把檔案存到手機的「下載」 */
+function saveBlob(blob, name) {
+  var url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = name; a.style.display = 'none';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
+}
+
 /** 電腦：寬度 900 以上首頁兩欄；2300 以上（29 吋 21:9、40 吋長條）三欄（使用者「排法要舒適不要那麼擠」：不再排四欄） */
 function mq(px) { return !!(window.matchMedia && window.matchMedia('(min-width: ' + px + 'px)').matches); }
 function wide() { return mq(900); }
@@ -703,7 +798,8 @@ function renderLogin() {
   } else if (MAC && !PCAPP) {
     if (!standalone()) h += '<div class="box" style="border-color:var(--teal);background:#E9F7F6"><b>Mac 請先「加入 Dock」再登入</b><div>用 Safari 打開這個網頁 → 最上面選單「檔案」→「加入 Dock」→ 之後都從 Dock 的「柏捷工地」打開，在那裡輸入代碼（Safari 裡輸入的，Dock 那個不會記得）。要 macOS 14 以上；舊的 Mac 就直接用 Safari 打開、加到書籤。</div></div>';
   } else {
-    if (!standalone()) h += '<div class="box phone-only"><b>iPhone 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按下面的「分享」⬆︎ →「加入主畫面」→ 之後都從桌面的「柏捷工地」圖示打開，在那裡輸入代碼（Safari 裡輸入的，圖示那邊不會記得）。</div></div>';
+    if (ANDROID && !PCAPP) h += '<div class="box" style="border-color:var(--teal);background:#E9F7F6"><b>Android 手機可以裝 App</b><div>先在這裡輸入代碼登入 → 首頁最下面按「📲 下載 Android App」→ 照著裝。App 有桌面小工具，關著也會跳通知。</div></div>';
+    else if (!standalone()) h += '<div class="box phone-only"><b>iPhone 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按下面的「分享」⬆︎ →「加入主畫面」→ 之後都從桌面的「柏捷工地」圖示打開，在那裡輸入代碼（Safari 裡輸入的，圖示那邊不會記得）。</div></div>';
   // 電腦版程式（安裝檔，網址後面帶 ?app=pc；使用者 2026-11-10「電腦的部分我想做成安裝檔，不想給他們連結」）：不提網址
   if (PCAPP) h +='<div class="box pc-only" style="border-color:var(--teal);background:#E9F7F6"><b>柏捷工地 電腦版</b><div>第一次輸入自己的代碼（找管理者拿），之後會記在這台電腦的「柏捷工地」程式裡。</div></div>';
   else h += '<div class="box pc-only" style="border-color:var(--teal);background:#E9F7F6"><b>電腦也可以用</b><div>直接用這個網址打開就好；代碼會記在這台電腦的這個瀏覽器（換瀏覽器、清除瀏覽紀錄要重打）。可以把這頁加到書籤。</div></div>';
@@ -738,6 +834,8 @@ function renderHub() {
   // iPad 一樣；Mac 借 iPhone 的小工具（macOS 14 以上可以把 iPhone 的小工具放到 Mac 桌面）
   if (IOS || MAC) h += '<button class="ghost" style="margin-top:8px" data-act="widgethelp">' + (MAC ? '🖥️ 放到 Mac 桌面的小工具（教學）' : '📱 放到 ' + DEV + ' 桌面的小工具（教學）') + '</button>' +
     '<div class="note" style="padding:0 4px">網頁版關著時不會跳通知；打開就會更新。</div></div>';
+  else if (ANDROID && !PCAPP) h += '<button class="ghost" style="margin-top:8px" data-act="apkhelp">📲 下載 Android App（安裝檔）</button>' +
+    '<div class="note" style="padding:0 4px">App 有桌面小工具，關著也會跳通知；網頁版要打開才會更新。</div></div>';
   else h += '<div class="note" style="padding:4px 4px 0">網頁版沒有桌面小工具，關著時也不會跳通知；打開就會更新。</div></div>';
   return h + '</div>';
 }
@@ -1827,6 +1925,12 @@ var ACT = {
     copyText(widgetInstaller(S.code)).then(function () { m.copied = true; m.err = ''; renderModal(); },
       function () { m.err = '複製不了：請再按一次；還是不行就找管理者'; renderModal(); });
   },
+  apkhelp: function () {
+    var m = { type: 'apk' }; S.modal = m; renderModal();
+    api('appinfo').then(function (r) { if (!m.info) m.info = r; if (S.modal === m && !m.dl) renderModal(); }, function () { });
+  },
+  apkget: function () { if (S.modal && S.modal.type === 'apk') apkDownload(S.modal); },
+  apksave: function () { var m = S.modal; if (m && m.blob) saveBlob(m.blob, m.file); },
   maskclose: function (v, el, ev) { if (ev.target === el && !(S.modal && S.modal.busy)) { closeModal(); render(); } },
   mnsite: function (v) { S.modal.site = v; renderModal(); },
   mnday: function (v) { S.modal.day = v; S.modal.other = false; renderModal(); },
