@@ -604,7 +604,8 @@ function markSection() {
 // ---------- 配筋（照配筋表的字和柱斷面圖長出鋼筋，示意） ----------
 // 顏色：主筋紅、加鐵橘、腰筋咖啡、箍筋藍；基礎版下層紅、上層紫
 const BAR_COLOR = { main: 0xB0412E, extra: 0xE07B1F, side: 0x8A5A2B, tie: 0x2F6FB2, fbot: 0xB0412E, ftop: 0x7A3FB0 };
-const BAR_KIND = ['main', 'extra', 'side', 'tie', 'main', 'tie', 'fbot', 'ftop'];
+// 8 牆垂直筋（紅）、9 牆水平筋（橘）、10 版下層（紅）、11 版上層（紫）、12 牆工作筋（咖啡）：外掛 11/10 晚上起照牆出圖、版出圖匯出
+const BAR_KIND = ['main', 'extra', 'side', 'tie', 'main', 'tie', 'fbot', 'ftop', 'main', 'extra', 'fbot', 'ftop', 'side'];
 const segs = { main: [], extra: [], side: [], tie: [], fbot: [], ftop: [] };
 function bar(kind, a, b, r) { segs[kind].push([a, b, r]); }   // a、b：CAD 座標 [x,y,z]
 function loop(pts, r) { for (let i = 0; i < pts.length; i++) bar('tie', pts[i], pts[(i + 1) % pts.length], r); }
@@ -633,11 +634,11 @@ function drawJob(j, zr) {
   if (j.cp) for (let i = 0; i + 3 < j.cp.length; i += 4) if (inZ(j.cp[i + 2])) CPLS.push({ p: [j.cp[i], j.cp[i + 1], j.cp[i + 2]], d: j.cp[i + 3], j });
   (j.bars || []).forEach(o => {
     const kind = BAR_KIND[o.c] || 'main', r = (o.d || 1.3) / 2;
-    // 基礎版：代表的那一支照 rep 方向、o 的距離平移排滿
+    // 基礎版、牆、版：代表的那一支照 rep 方向、o 的距離平移排滿（牆的水平筋 rep 是 [0,0,1]，往上排）
     if (o.p) (o.o || [0]).forEach(off => {
-      const ox = o.rep ? o.rep[0] * off : 0, oy = o.rep ? o.rep[1] * off : 0;
+      const ox = o.rep ? o.rep[0] * off : 0, oy = o.rep ? o.rep[1] * off : 0, oz = o.rep && o.rep.length > 2 ? o.rep[2] * off : 0;
       for (let i = 0; i + 5 < o.p.length; i += 3) {
-        const s = clipZ([o.p[i] + ox, o.p[i + 1] + oy, o.p[i + 2]], [o.p[i + 3] + ox, o.p[i + 4] + oy, o.p[i + 5]], zr);
+        const s = clipZ([o.p[i] + ox, o.p[i + 1] + oy, o.p[i + 2] + oz], [o.p[i + 3] + ox, o.p[i + 4] + oy, o.p[i + 5] + oz], zr);
         if (s) bar(kind, s[0], s[1], r);
       }
     });
@@ -769,7 +770,7 @@ function drawRebar() {
       drawJob(j, [zLo - 1, zHi + 1]); n++;
       return;
     }
-    const use = j.k === '柱' ? mine.filter(m => m.k === '柱') : j.k === '基礎' ? mine.filter(m => m.k === '基礎') : mine.filter(m => m.k === '梁' || m.k === '地梁');
+    const use = j.k === '柱' || j.k === '基礎' || j.k === '牆' || j.k === '版' ? mine.filter(m => m.k === j.k) : mine.filter(m => m.k === '梁' || m.k === '地梁');
     if (!use.length) return;
     use.forEach(m => done.add(m.i));
     drawJob(j, null); n++;
@@ -863,7 +864,18 @@ function renderChips() {
 function rebarOf(m) { return m && m.r && M.rb ? M.rb[m.r] : null; }
 function lmr(a, size) { const t = (a || []).map(v => v ? v + (size ? '-' + size : '') : '—'); return '左 ' + t[0] + '・中 ' + t[1] + '・右 ' + t[2]; }
 function rebarRows(m) {
-  const R = rebarOf(m), rows = []; if (!R) return rows;
+  const R = rebarOf(m), rows = [];
+  // 牆、版（照牆出圖、版出圖）：這一道牆／這一塊版有哪幾組、一共幾支
+  if (!R && m && (m.k === '牆' || m.k === '版')) {
+    const js = jobsOf(m).filter(j => j.k === m.k);
+    if (!js.length) return rows;
+    const names = [...new Set(js.map(j => j.n))];
+    const n = js.reduce((a, j) => a + (j.bars || []).reduce((b, o) => b + (o.o ? o.o.length : 1), 0), 0);
+    rows.push([m.k === '牆' ? '照牆出圖' : '照版出圖', names.slice(0, 8).join('、') + (names.length > 8 ? ' 等 ' + names.length + ' 組' : '')]);
+    rows.push(['鋼筋', n + ' 支（雙排的兩面各算一支）']);
+    return rows;
+  }
+  if (!R) return rows;
   if (R.t === '柱') {
     if (R.size) rows.push(['柱尺寸', R.size]);
     if (R.main) rows.push(['主筋', R.main]);
@@ -883,10 +895,14 @@ function rebarRows(m) {
 function legend() {
   const sheet = st.rebar ? jobsOf(st.rebar).length > 0 : (M.rj || []).length > 0;
   const laps = hasLapData();
-  return '<span style="color:#B0412E">■</span> 主筋　<span style="color:#E07B1F">■</span> 加鐵　<span style="color:#8A5A2B">■</span> 腰筋　<span style="color:#2F6FB2">■</span> 箍筋、繫筋' +
-    ((M.rj || []).some(j => j.k === '基礎') ? '　<span style="color:#7A3FB0">■</span> 基礎上層' : '') +
-    (laps ? '　<span style="color:#22C55E">■</span> 搭接段（綠字寫搭接長度）　<span style="color:#D6336C">■</span> 柱續接器' : '') + '<br>' +
-    (sheet ? '照工作單畫的（梁＝第A台、柱＝升位圖、基礎版＝配筋圖），伸進柱子、彎鉤、搭接、續接都照工作單。' : '照配筋表畫的示意；彎鉤、搭接位置以施工圖為準。') +
+  const has = k => (M.rj || []).some(j => j.k === k), only = st.rebar && (st.rebar.k === '牆' || st.rebar.k === '版') ? st.rebar.k : '';
+  const beamPart = '<span style="color:#B0412E">■</span> 主筋　<span style="color:#E07B1F">■</span> 加鐵　<span style="color:#8A5A2B">■</span> 腰筋　<span style="color:#2F6FB2">■</span> 箍筋、繫筋' +
+    (has('基礎') ? '　<span style="color:#7A3FB0">■</span> 基礎上層' : '');
+  const wallPart = '牆：<span style="color:#B0412E">■</span> 垂直筋、預留筋　<span style="color:#E07B1F">■</span> 水平筋　<span style="color:#8A5A2B">■</span> 工作筋';
+  const slabPart = '版：<span style="color:#B0412E">■</span> 下層　<span style="color:#7A3FB0">■</span> 上層';
+  return (only === '牆' ? wallPart : only === '版' ? slabPart : beamPart + (has('牆') ? '<br>' + wallPart : '') + (has('版') ? '<br>' + slabPart : '')) +
+    (laps ? '<br><span style="color:#22C55E">■</span> 搭接段（綠字寫搭接長度）' + (only ? '' : '　<span style="color:#D6336C">■</span> 柱續接器') : '') + '<br>' +
+    (sheet ? '照工作單畫的（梁＝第A台、柱＝升位圖、基礎版＝配筋圖' + (has('牆') ? '、牆＝牆出圖' : '') + (has('版') ? '、版＝版出圖' : '') + '），伸進柱子、彎鉤、搭接、續接都照工作單。' : '照配筋表畫的示意；彎鉤、搭接位置以施工圖為準。') +
     (sheet && !laps ? '<br><span style="color:#C2410C">這份 3D 還沒有標搭接段：在 BricsCAD「混凝土」再按一次「上傳 3D 到工地App」就會有。</span>' : '');
 }
 function table(rows) { return '<table>' + rows.map(r => '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>').join('') + '</table>'; }
@@ -915,7 +931,7 @@ function renderSide() {
   } else if (st.rebar) {
     const m = st.rebar;
     const job = jobsOf(m).find(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
-    T.textContent = '🔩 ' + (job && job.k !== '柱' ? job.n : m.f + ' ' + m.k + ' ' + (m.c || '')) + ' 的配筋';
+    T.textContent = '🔩 ' + (m.k === '版' ? m.f + ' 版 ' + (m.c || m.n || '') : job && job.k !== '柱' ? job.n : m.f + ' ' + m.k + ' ' + (m.c || '')) + ' 的配筋';
     const lapH = lapSummary(), cpN = CPLS.filter(c => c.j.k === '柱').length;
     h += '<div class="card">' + table(rebarRows(m))
       + (lapH ? '<div style="margin-top:8px;font-weight:700">搭接段（綠色）</div><ul class="lapList">' + lapH + '</ul>' : '')
@@ -923,7 +939,7 @@ function renderSide() {
       + '<div class="muted" style="margin-top:8px">' + legend() + '</div>'
       + '<div class="row"><button class="btn solid" id="exitRebar">‹ 回到整棟</button></div></div>';
   } else if (st.sel) {
-    const m = st.sel, rows = rebarRows(m), canRebar = hasBars(m) && ['柱', '梁', '地梁', '基礎'].includes(m.k);
+    const m = st.sel, rows = rebarRows(m), canRebar = hasBars(m) && ['柱', '梁', '地梁', '基礎', '牆', '版'].includes(m.k);
     T.textContent = '構件';
     h += '<div class="card"><div class="t"><span class="k" style="background:' + (KIND_COLOR[m.k] || '#999') + '">' + esc(m.k) + '</span>' + esc(m.n || m.c || '') + '</div>'
       + table([['樓層', m.f], ['灌漿區', m.gp]].concat(m.v ? [['混凝土', m.v.toFixed(2) + ' m³']] : []).concat(rows))
@@ -931,17 +947,18 @@ function renderSide() {
       + '<button class="btn ghost" id="unsel">取消</button></div></div>';
     h += pourList();
   } else if (st.bars) {
-    const vis = items.filter(it => it.mesh.visible && ['柱', '梁', '地梁', '基礎'].includes(it.m.k) && !it.m.dc);
+    const vis = items.filter(it => it.mesh.visible && (['柱', '梁', '地梁', '基礎'].includes(it.m.k) && !it.m.dc || ((it.m.k === '牆' || it.m.k === '版') && hasBars(it.m))));
     // 一支柱在 FL 上下分成兩段（基礎、上一層灌漿區）：照平面位置算一支
     const one = list => new Set(list.map(it => it.m.k === '柱' ? '柱' + it.m.b[0] + ',' + it.m.b[1] : 'm' + it.m.i)).size;
     const has = vis.filter(it => hasBars(it.m)), cols = one(has.filter(it => it.m.k === '柱')), beams = one(has.filter(it => it.m.k === '梁' || it.m.k === '地梁')),
-      fts = one(has.filter(it => it.m.k === '基礎')), none = one(vis.filter(it => !hasBars(it.m) && it.m.k !== '基礎'));
+      fts = one(has.filter(it => it.m.k === '基礎')), none = one(vis.filter(it => !hasBars(it.m) && it.m.k !== '基礎')),
+      walls = one(has.filter(it => it.m.k === '牆')), slabs = one(has.filter(it => it.m.k === '版'));
     T.textContent = '🔩 ' + (st.floor === '全部' ? '整棟' : st.floor) + ' 的鋼筋';
-    h += '<div class="card"><table><tr><td>畫出來的</td><td>柱 ' + cols + ' 支、梁 ' + beams + ' 支' + (fts ? '、基礎 ' + fts + ' 塊' : '') + '</td></tr>'
+    h += '<div class="card"><table><tr><td>畫出來的</td><td>柱 ' + cols + ' 支、梁 ' + beams + ' 支' + (fts ? '、基礎 ' + fts + ' 塊' : '') + (walls ? '、牆 ' + walls + ' 道' : '') + (slabs ? '、版 ' + slabs + ' 塊' : '') + '</td></tr>'
       + (none ? '<tr><td>沒畫的</td><td>' + none + ' 支在配筋表找不到</td></tr>' : '')
       + (LAPS.length ? '<tr><td>搭接段</td><td><b style="color:#15803D">' + LAPS.length + ' 處</b>（綠色；放大看得到搭接長度）</td></tr>' : '')
       + (CPLS.length ? '<tr><td>續接器</td><td><b style="color:#D6336C">' + CPLS.length + ' 個</b>（柱主筋接頭）</td></tr>' : '') + '</table>'
-      + '<div class="muted" style="margin-top:8px">' + legend() + '<br>上面換樓層、點「柱」「梁」「基礎」只看一種；點一支看它的配筋。</div>'
+      + '<div class="muted" style="margin-top:8px">' + legend() + '<br>上面換樓層、點「柱」「梁」「基礎」「牆」「版」只看一種；點一支（一道、一塊）看它的配筋。</div>'
       + '<div class="row"><button class="btn solid" id="barsOff">關掉鋼筋</button></div></div>';
   } else {
     T.textContent = '📍 要改進的地方・🚚 灌漿區';
@@ -1063,16 +1080,18 @@ function shots() {
     window.__barsN = rebarGroup.children.reduce((a, c) => a + (c.count || 0), 0);
     fitTo(visibleObjs(), true);
   }
-  if (s === 'sel' || s === 'rebar' || s === 'beam' || s === 'foot') {
+  if (s === 'sel' || s === 'rebar' || s === 'beam' || s === 'foot' || s === 'wall' || s === 'slab') {
     const byCode = k => P.get('c') && (M.m || []).find(m => m.k === k && m.c === P.get('c') && (!P.get('f') || m.f === P.get('f')) && hasBars(m));
     const withLap = k => P.get('haslap') && (M.m || []).find(m => m.k === k && (!P.get('f') || m.f === P.get('f')) && jobsOf(m).some(j => j.k === k && j.lp && j.lp.length));
-    const m = s === 'foot' ? (withLap('基礎') || byCode('基礎') || find('基礎')) : s === 'beam' ? (byCode('梁') || byCode('地梁') || find('梁', P.get('f')) || find('地梁')) : (byCode('柱') || find('柱', P.get('f')));
+    const byI = P.get('mi') && (M.m || []).find(m => m.i === +P.get('mi'));
+    const m = byI ? byI : s === 'wall' ? (withLap('牆') || find('牆', P.get('f'))) : s === 'slab' ? (withLap('版') || find('版', P.get('f'))) : s === 'foot' ? (withLap('基礎') || byCode('基礎') || find('基礎')) : s === 'beam' ? (byCode('梁') || byCode('地梁') || find('梁', P.get('f')) || find('地梁')) : (byCode('柱') || find('柱', P.get('f')));
     if (!m) return;
     st.sel = m; apply();
     if (s !== 'sel') { st.rebar = m; st.focus = focusOf(m); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); }
     // 截圖用：&lap=第幾個搭接段（0 起）＝鏡頭靠近那一段
     const li = P.get('lap'), ci = P.get('cpl');
-    const L = li != null && LAPS[+li] ? LAPS[+li].l : ci != null && CPLS[+ci] ? { p: CPLS[+ci].p.concat(CPLS[+ci].p) } : null;
+    const at = (P.get('at') || '').split(',').map(Number);
+    const L = at.length === 3 && at.every(isFinite) ? { p: at.concat(at) } : li != null && LAPS[+li] ? LAPS[+li].l : ci != null && CPLS[+ci] ? { p: CPLS[+ci].p.concat(CPLS[+ci].p) } : null;
     if (L) { cam.target = CAD2T([(L.p[0] + L.p[3]) / 2, (L.p[1] + L.p[4]) / 2, (L.p[2] + L.p[5]) / 2]); cam.dist = +(P.get('dist') || 260); cam.theta = +(P.get('th') || -0.5); cam.phi = +(P.get('ph') || 1.15); st.sideMin = !WIDE(); renderSide(); layout(); placeCamera(); }
   }
 }
