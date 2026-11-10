@@ -37,7 +37,7 @@ button{font:inherit}
 #side{position:fixed;z-index:6;background:#fff;box-shadow:0 -4px 18px rgba(0,0,0,.12)}
 #side .hd{display:flex;align-items:center;gap:8px;padding:10px 14px 6px;font-weight:700}
 #side .hd span{flex:1}
-#side .bd{overflow:auto;padding:0 14px 12px}
+#side .bd{overflow-y:auto;padding:0 14px 12px;min-height:0;flex:1 1 auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y}
 .pour{border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin:0 0 8px;cursor:pointer}
 .pour.on{border-color:var(--warn);background:#FFF4EC}
 .pour b{font-size:15px}
@@ -268,11 +268,11 @@ function apply() {
     const m = it.m;
     let vis = st.kinds.has(m.k) && (st.floor === '全部' || m.f === st.floor);
     if (pourOn) vis = st.kinds.has(m.k) || inPour(m);
-    if (st.rebar) vis = (m === st.rebar);
+    if (st.rebar) vis = st.focus ? st.focus.has(m.i) : m === st.rebar;
     it.mesh.visible = it.edges.visible = vis;
     let mode = 'n';
     if (st.rebar) mode = 'glass';
-    else if (st.bars) mode = rebarOf(m) ? (st.sel === m ? 'selg' : 'glass') : 'ghost';   // 整層鋼筋：混凝土變透明
+    else if (st.bars) mode = hasBars(m) ? (st.sel === m ? 'selg' : 'glass') : 'ghost';   // 整層鋼筋：混凝土變透明
     else if (st.sel === m) mode = 'sel';
     else if (pourOn) mode = inPour(m) ? 'hot' : 'ghost';
     it.mesh.material = matOf(m.k, mode);
@@ -371,14 +371,62 @@ function pick(x, y) {
 function hideHint() { const h = document.getElementById('hint'); if (h) h.style.opacity = 0; }
 
 // ---------- 配筋（照配筋表的字和柱斷面圖長出鋼筋，示意） ----------
-const segs = { main: [], tie: [] };
+// 顏色：主筋紅、加鐵橘、腰筋咖啡、箍筋藍；基礎版下層紅、上層紫
+const BAR_COLOR = { main: 0xB0412E, extra: 0xE07B1F, side: 0x8A5A2B, tie: 0x2F6FB2, fbot: 0xB0412E, ftop: 0x7A3FB0 };
+const BAR_KIND = ['main', 'extra', 'side', 'tie', 'main', 'tie', 'fbot', 'ftop'];
+const segs = { main: [], extra: [], side: [], tie: [], fbot: [], ftop: [] };
 function bar(kind, a, b, r) { segs[kind].push([a, b, r]); }   // a、b：CAD 座標 [x,y,z]
 function loop(pts, r) { for (let i = 0; i < pts.length; i++) bar('tie', pts[i], pts[(i + 1) % pts.length], r); }
+
+// ---------- 照工作單的鋼筋（外掛匯出的 rj：梁第A台、柱升位圖、基礎版） ----------
+let JOBS_OF = null;
+function jobsOf(m) {
+  if (!JOBS_OF) { JOBS_OF = {}; (M.rj || []).forEach(j => (j.mem || []).forEach(i => (JOBS_OF[i] = JOBS_OF[i] || []).push(j))); }
+  return m ? JOBS_OF[m.i] || [] : [];
+}
+function hasBars(m) { return jobsOf(m).length > 0 || !!rebarOf(m); }
+/** 線段只留 za～zb 之間（柱只看這一層的時候） */
+function clipZ(a, b, zr) {
+  if (!zr) return [a, b];
+  const [za, zb] = zr, lo = Math.min(a[2], b[2]), hi = Math.max(a[2], b[2]);
+  if (hi < za || lo > zb) return null;
+  if (Math.abs(b[2] - a[2]) < 0.01) return [a, b];
+  const f = z => { const t = (z - a[2]) / (b[2] - a[2]); return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, z]; };
+  return [a[2] < za ? f(za) : a[2] > zb ? f(zb) : a, b[2] < za ? f(za) : b[2] > zb ? f(zb) : b];
+}
+function drawJob(j, zr) {
+  const inZ = z => !zr || (z >= zr[0] && z <= zr[1]);
+  (j.bars || []).forEach(o => {
+    const kind = BAR_KIND[o.c] || 'main', r = (o.d || 1.3) / 2;
+    // 基礎版：代表的那一支照 rep 方向、o 的距離平移排滿
+    if (o.p) (o.o || [0]).forEach(off => {
+      const ox = o.rep ? o.rep[0] * off : 0, oy = o.rep ? o.rep[1] * off : 0;
+      for (let i = 0; i + 5 < o.p.length; i += 3) {
+        const s = clipZ([o.p[i] + ox, o.p[i + 1] + oy, o.p[i + 2]], [o.p[i + 3] + ox, o.p[i + 4] + oy, o.p[i + 5]], zr);
+        if (s) bar(kind, s[0], s[1], r);
+      }
+    });
+    if (o.loop) (o.z || []).filter(inZ).forEach(z => { const pts = []; for (let i = 0; i + 1 < o.loop.length; i += 2) pts.push([o.loop[i], o.loop[i + 1], z]); for (let i = 0; i < pts.length; i++) bar(kind, pts[i], pts[(i + 1) % pts.length], r); });
+    if (o.seg) (o.z || []).filter(inZ).forEach(z => bar(kind, [o.seg[0], o.seg[1], z], [o.seg[2], o.seg[3], z], r));
+    if (o.rect) {
+      const [ax, ay, ux, uy, n0, n1, z0, z1] = o.rect, P = (t, n, z) => [ax + t * ux - n * uy, ay + t * uy + n * ux, z];
+      (o.t || []).forEach(t => { const q = [P(t, n0, z0), P(t, n1, z0), P(t, n1, z1), P(t, n0, z1)]; for (let i = 0; i < 4; i++) bar(kind, q[i], q[(i + 1) % 4], r); });
+    }
+  });
+}
+/** 按「看配筋」時要顯示的構件：梁＝那一台（整條軸線上的梁和柱），柱＝那一支 */
+function focusOf(m) {
+  const js = jobsOf(m).filter(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
+  const ids = new Set([m.i]);
+  if (m.k === '基礎') js.forEach(j => (j.mem || []).forEach(i => ids.add(i)));
+  if (m.k !== '柱') js.forEach(j => (j.mem || []).forEach(i => ids.add(i)));
+  return ids;
+}
 function flushBars(light) {
   const cyl = new THREE.CylinderGeometry(1, 1, 1, light ? 6 : 10, 1, light);
-  const mats = { main: new THREE.MeshLambertMaterial({ color: 0xB0412E }), tie: new THREE.MeshLambertMaterial({ color: 0x2F6FB2 }) };
   const up = new THREE.Vector3(0, 1, 0), A = new THREE.Vector3(), B = new THREE.Vector3(), q = new THREE.Quaternion(), mtx = new THREE.Matrix4(), sc = new THREE.Vector3();
-  ['main', 'tie'].forEach(k => {
+  Object.keys(segs).forEach(k => {
+    const mats = { [k]: new THREE.MeshLambertMaterial({ color: BAR_COLOR[k] }) };
     const list = segs[k]; if (!list.length) return;
     const im = new THREE.InstancedMesh(cyl, mats[k], list.length);
     list.forEach(([a, b, r], i) => {
@@ -390,7 +438,7 @@ function flushBars(light) {
     im.computeBoundingSphere(); im.computeBoundingBox && im.computeBoundingBox();
     rebarGroup.add(im);
   });
-  segs.main = []; segs.tie = [];
+  Object.keys(segs).forEach(k => { segs[k] = []; });
 }
 function zones(z0, z1, endLen, s1, s2) { // 端部用 s1、中間用 s2 的位置
   const out = []; let z = z0 + 5;
@@ -404,9 +452,26 @@ function zones(z0, z1, endLen, s1, s2) { // 端部用 s1、中間用 s2 的位�
 function drawRebar() {
   rebarGroup.children.forEach(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); });
   rebarGroup.clear();
-  const list = st.rebar ? [st.rebar] : st.bars ? items.filter(it => it.mesh.visible && rebarOf(it.m)).map(it => it.m) : [];
-  list.forEach(drawMember);
-  flushBars(list.length > 1);
+  if (st.rebar) {
+    const m = st.rebar, js = jobsOf(m).filter(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
+    if (js.length) js.forEach(j => drawJob(j, j.k === '柱' ? [m.b[2] - 1, m.b[5] + 1] : null)); else drawMember(m);
+    flushBars(false);
+    return;
+  }
+  if (!st.bars) return;
+  // 整層：看得到的梁那幾台全部；柱只畫看得到的那幾段的高度；沒有工作單的照配筋表畫
+  const vis = items.filter(it => it.mesh.visible).map(it => it.m), visIds = new Set(vis.map(m => m.i)), done = new Set();
+  let n = 0;
+  (M.rj || []).forEach(j => {
+    const mine = (j.mem || []).map(i => i).filter(i => visIds.has(i)).map(i => vis.find(m => m.i === i));
+    const use = j.k === '柱' ? mine.filter(m => m.k === '柱') : j.k === '基礎' ? mine.filter(m => m.k === '基礎') : mine.filter(m => m.k === '梁' || m.k === '地梁');
+    if (!use.length) return;
+    use.forEach(m => done.add(m.i));
+    const zr = j.k === '柱' && st.floor !== '全部' ? [Math.min(...use.map(m => m.b[2])) - 1, Math.max(...use.map(m => m.b[5])) + 1] : null;
+    drawJob(j, zr); n++;
+  });
+  vis.filter(m => !done.has(m.i) && rebarOf(m) && !jobsOf(m).length).forEach(m => { drawMember(m); n++; });
+  flushBars(n > 1);
 }
 function drawMember(m) {
   const R = rebarOf(m); if (!R) return;
@@ -480,10 +545,10 @@ function renderChips() {
   ['全部', ...floorsList()].forEach(f => F.appendChild(chip(f === '全部' ? '整棟' : f, st.floor === f && !st.pour, '', () => { st.floor = f; st.sel = null; st.pour = null; st.rebar = null; apply(); fitTo(visibleObjs(), true); })));
   const present = KIND_ORDER.filter(k => (M.m || []).some(m => m.k === k));
   // 整層鋼筋（使用者 2026-11-10「加整層鋼筋」）：整棟時先跳到第一個有配筋的樓層，比較轉得動
-  if (M.rb && Object.keys(M.rb).length) {
+  if ((M.rb && Object.keys(M.rb).length) || (M.rj || []).length) {
     const b = chip('🔩 鋼筋', st.bars, '', () => {
       st.bars = !st.bars; st.rebar = null; st.sel = null;
-      if (st.bars) { st.pour = null; if (st.floor === '全部') st.floor = floorsList().find(f => (M.m || []).some(m => m.f === f && m.r)) || '全部'; }
+      if (st.bars) { st.pour = null; if (st.floor === '全部') st.floor = floorsList().find(f => (M.m || []).some(m => m.f === f && hasBars(m))) || '全部'; }
       apply(); fitTo(visibleObjs(), true);
     });
     b.style.fontWeight = '700'; K.appendChild(b);
@@ -510,6 +575,13 @@ function rebarRows(m) {
   }
   return rows;
 }
+/** 鋼筋顏色說明；有工作單的寫「照工作單畫的」 */
+function legend() {
+  const sheet = st.rebar ? jobsOf(st.rebar).length > 0 : (M.rj || []).length > 0;
+  return '<span style="color:#B0412E">■</span> 主筋　<span style="color:#E07B1F">■</span> 加鐵　<span style="color:#8A5A2B">■</span> 腰筋　<span style="color:#2F6FB2">■</span> 箍筋、繫筋' +
+    ((M.rj || []).some(j => j.k === '基礎') ? '　<span style="color:#7A3FB0">■</span> 基礎上層' : '') + '<br>' +
+    (sheet ? '照工作單畫的（梁＝第A台、柱＝升位圖、基礎版＝配筋圖），伸進柱子、彎鉤、搭接、續接都照工作單。' : '照配筋表畫的示意；彎鉤、搭接位置以施工圖為準。');
+}
 function table(rows) { return '<table>' + rows.map(r => '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>').join('') + '</table>'; }
 function renderSide() {
   const T = document.getElementById('sideTitle'), B = document.getElementById('sideBody'), side = document.getElementById('side');
@@ -518,12 +590,13 @@ function renderSide() {
   let h = '';
   if (st.rebar) {
     const m = st.rebar;
-    T.textContent = '🔩 ' + m.f + ' ' + m.k + ' ' + (m.c || '') + ' 的配筋';
+    const job = jobsOf(m).find(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
+    T.textContent = '🔩 ' + (job && job.k !== '柱' ? job.n : m.f + ' ' + m.k + ' ' + (m.c || '')) + ' 的配筋';
     h += '<div class="card">' + table(rebarRows(m))
-      + '<div class="muted" style="margin-top:8px"><span style="color:#B0412E">■</span> 主筋、腰筋　<span style="color:#2F6FB2">■</span> 箍筋、繫筋<br>照配筋表畫的示意；彎鉤、搭接、續接的位置以施工圖為準。</div>'
+      + '<div class="muted" style="margin-top:8px">' + legend() + '</div>'
       + '<div class="row"><button class="btn solid" id="exitRebar">‹ 回到整棟</button></div></div>';
   } else if (st.sel) {
-    const m = st.sel, rows = rebarRows(m), canRebar = rows.length && (m.k === '柱' || m.k === '梁' || m.k === '地梁');
+    const m = st.sel, rows = rebarRows(m), canRebar = hasBars(m) && ['柱', '梁', '地梁', '基礎'].includes(m.k);
     T.textContent = '構件';
     h += '<div class="card"><div class="t"><span class="k" style="background:' + (KIND_COLOR[m.k] || '#999') + '">' + esc(m.k) + '</span>' + esc(m.n || m.c || '') + '</div>'
       + table([['樓層', m.f], ['灌漿區', m.gp]].concat(m.v ? [['混凝土', m.v.toFixed(2) + ' m³']] : []).concat(rows))
@@ -531,14 +604,15 @@ function renderSide() {
       + '<button class="btn ghost" id="unsel">取消</button></div></div>';
     h += pourList();
   } else if (st.bars) {
-    const vis = items.filter(it => it.mesh.visible && ['柱', '梁', '地梁'].includes(it.m.k) && !it.m.dc);
+    const vis = items.filter(it => it.mesh.visible && ['柱', '梁', '地梁', '基礎'].includes(it.m.k) && !it.m.dc);
     // 一支柱在 FL 上下分成兩段（基礎、上一層灌漿區）：照平面位置算一支
     const one = list => new Set(list.map(it => it.m.k === '柱' ? '柱' + it.m.b[0] + ',' + it.m.b[1] : 'm' + it.m.i)).size;
-    const has = vis.filter(it => rebarOf(it.m)), cols = one(has.filter(it => it.m.k === '柱')), beams = one(has.filter(it => it.m.k !== '柱')), none = one(vis.filter(it => !rebarOf(it.m)));
+    const has = vis.filter(it => hasBars(it.m)), cols = one(has.filter(it => it.m.k === '柱')), beams = one(has.filter(it => it.m.k === '梁' || it.m.k === '地梁')),
+      fts = one(has.filter(it => it.m.k === '基礎')), none = one(vis.filter(it => !hasBars(it.m) && it.m.k !== '基礎'));
     T.textContent = '🔩 ' + (st.floor === '全部' ? '整棟' : st.floor) + ' 的鋼筋';
-    h += '<div class="card"><table><tr><td>畫出來的</td><td>柱 ' + cols + ' 支、梁 ' + beams + ' 支</td></tr>'
+    h += '<div class="card"><table><tr><td>畫出來的</td><td>柱 ' + cols + ' 支、梁 ' + beams + ' 支' + (fts ? '、基礎 ' + fts + ' 塊' : '') + '</td></tr>'
       + (none ? '<tr><td>沒畫的</td><td>' + none + ' 支在配筋表找不到</td></tr>' : '') + '</table>'
-      + '<div class="muted" style="margin-top:8px"><span style="color:#B0412E">■</span> 主筋、腰筋　<span style="color:#2F6FB2">■</span> 箍筋、繫筋。上面換樓層、點「柱」「梁」只看一種；點一支看它的配筋。照配筋表畫的示意，彎鉤、搭接位置以施工圖為準。</div>'
+      + '<div class="muted" style="margin-top:8px">' + legend() + '<br>上面換樓層、點「柱」「梁」「基礎」只看一種；點一支看它的配筋。</div>'
       + '<div class="row"><button class="btn solid" id="barsOff">關掉鋼筋</button></div></div>';
   } else {
     T.textContent = '🚚 灌漿區';
@@ -547,7 +621,7 @@ function renderSide() {
   B.innerHTML = h;
   const on = (id, fn) => { const x = document.getElementById(id); if (x) x.onclick = fn; };
   on('exitRebar', () => { st.rebar = null; apply(); fitTo(visibleObjs(), false); });
-  on('showRebar', () => { st.rebar = st.sel; st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); });
+  on('showRebar', () => { st.rebar = st.sel; st.focus = focusOf(st.rebar); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); });
   on('unsel', () => { st.sel = null; apply(); });
   on('barsOff', () => { st.bars = false; apply(); });
   B.querySelectorAll('.pour').forEach(p => p.onclick = () => {
@@ -626,7 +700,7 @@ function shots() {
     const m = s === 'beam' ? (byCode('梁') || byCode('地梁') || find('梁', P.get('f')) || find('地梁')) : (byCode('柱') || find('柱', P.get('f')));
     if (!m) return;
     st.sel = m; apply();
-    if (s !== 'sel') { st.rebar = m; st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); }
+    if (s !== 'sel') { st.rebar = m; st.focus = focusOf(m); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); }
   }
 }
 function demoModel() {
