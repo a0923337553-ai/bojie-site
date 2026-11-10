@@ -158,6 +158,8 @@ textarea { min-height:76px; resize:vertical; }
   .hero { padding-left:22px; padding-right:22px; }
   .hero-in { max-width:1136px; }
   .hubcols { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1.25fr); column-gap:18px; align-items:start; }
+  .hubcols.c3 { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+  .hubcols.c4 { grid-template-columns:repeat(4, minmax(0, 1fr)); }
   .a-news .scard { height:590px !important; }
   .hub.has-week .a-news .scard { height:360px !important; }
   .a-rem .scard { height:300px !important; }
@@ -173,6 +175,30 @@ textarea { min-height:76px; resize:vertical; }
   .pc-only { display:block; }
   #pdfpages { max-width:1400px; margin:0 auto; }
   .tile:hover, .item:hover, .news:hover, .ev:hover, .siteopt:hover { filter:brightness(.97); }
+}
+/* 24／27 吋（使用者 2026-11-10「電腦螢幕有 29 吋（21:9）也有 24 吋的也有 27 吋」「還有 40 吋長條的」）：三欄，卡片跟著螢幕高度拉長 */
+@media (min-width: 1600px) {
+  .wrap { max-width:1780px; }
+  .hero-in { max-width:1736px; }
+  .r-calendar .wrap { max-width:1500px; }
+  .hubcols.c3 .a-news .scard { height:calc(100vh - 330px) !important; min-height:420px; }
+  .hubcols.c3 .a-rem .scard { height:calc(100vh - 520px) !important; min-height:300px; }
+  .hubcols.c3 .a-week .scard { height:calc(100vh - 560px) !important; min-height:240px; }
+  .tiles { grid-template-columns:repeat(3, 1fr); }
+  .pgrid { grid-template-columns:repeat(6, 1fr); }
+  .logcards { column-count:2; column-gap:18px; }
+  .logcards > .card { break-inside:avoid; }
+}
+/* 29 吋 21:9、40 吋長條：四欄 */
+@media (min-width: 2300px) {
+  .wrap { max-width:2700px; }
+  .hero-in { max-width:2656px; }
+  .hubcols.c4 .a-news .scard, .hubcols.c4 .a-week .scard { height:calc(100vh - 330px) !important; min-height:420px; }
+  .hubcols.c4 .a-rem .scard { height:calc(100vh - 370px) !important; min-height:360px; }
+  .tiles { grid-template-columns:repeat(4, 1fr); }
+  .pgrid { grid-template-columns:repeat(8, 1fr); }
+  .logcards { column-count:3; }
+  #pdfpages { max-width:2700px; display:grid; grid-template-columns:1fr 1fr; column-gap:12px; }
 }
 /* 跳出的視窗 */
 .mask { position:fixed; inset:0; background:rgba(10,30,45,.45); z-index:50; display:flex; align-items:center; justify-content:center; padding:14px; }
@@ -192,7 +218,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10c';
+var WEB_VERSION = '11/10d';
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 var UNFILED = '未分組';
 var MAX_PHOTOS = 12, MAX_MATS = 9, MAX_RECEIPTS = 12;
@@ -519,10 +545,12 @@ function renderModal() {
 }
 function closeModal() { S.modal = null; renderModal(); }
 
-/** 電腦（寬螢幕）：寬度 900 以上 */
-function wide() { return !!(window.matchMedia && window.matchMedia('(min-width: 900px)').matches); }
-var WIDE_NOW = null;
-window.addEventListener('resize', function () { var w = wide(); if (WIDE_NOW !== null && w !== WIDE_NOW && S.route === 'hub') renderSoft(); WIDE_NOW = w; });
+/** 電腦（寬螢幕）：寬度 900 以上兩欄、1600 以上（24／27 吋）三欄、2300 以上（29 吋 21:9、40 吋長條）四欄 */
+function mq(px) { return !!(window.matchMedia && window.matchMedia('(min-width: ' + px + 'px)').matches); }
+function wide() { return mq(900); }
+function hubCols() { return mq(2300) ? 4 : mq(1600) ? 3 : mq(900) ? 2 : 1; }
+var COLS_NOW = null;
+window.addEventListener('resize', function () { var c = hubCols(); if (COLS_NOW !== null && c !== COLS_NOW && S.route === 'hub') renderSoft(); COLS_NOW = c; });
 function standalone() { return !!(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)); }
 
 function renderLogin() {
@@ -561,7 +589,12 @@ function renderHub() {
   var cNews = '<div class="a-news">' + newsCard(news) + '</div>';
   var cWx = S.fc && S.fc.days && S.fc.days.length ? '<div class="a-wx">' + weekWeather(S.fc) + '</div>' : '';
   var h = renderHero() + '<div class="wrap hub' + (week ? ' has-week' : '') + '">';
-  h += wide() ? '<div class="hubcols"><div>' + cSite + cRem + cWx + '</div><div>' + cWeek + cNews + '</div></div>' : cSite + cRem + cWeek + cNews + cWx;
+  var n = hubCols();
+  if (n === 1) h += cSite + cRem + cWeek + cNews + cWx;
+  else if (n === 2) h += '<div class="hubcols"><div>' + cSite + cRem + cWx + '</div><div>' + cWeek + cNews + '</div></div>';
+  else if (n === 3 && week) h += '<div class="hubcols c3"><div>' + cSite + cRem + '</div><div>' + cWeek + cWx + '</div><div>' + cNews + '</div></div>';
+  else if (week) h += '<div class="hubcols c4"><div>' + cSite + cWx + '</div><div>' + cRem + '</div><div>' + cWeek + '</div><div>' + cNews + '</div></div>';
+  else h += '<div class="hubcols c3"><div>' + cSite + cWx + '</div><div>' + cRem + '</div><div>' + cNews + '</div></div>';   // 施工人員沒有這週行程：三欄就好
   var sub = S.feedErr || (!f && !S.feedBusy ? '讀不到最新消息：網路好了按上面「⟳ 更新」' : '');
   h += '<div class="a-foot"><div class="card"><button class="big" style="margin:0" data-act="sync">' + (S.feedBusy ? '更新中…' : '⟳ 更新') + '</button>' +
     (sub ? '<div class="sub" style="margin-top:6px">' + esc(sub) + '</div>' : '') + '</div>';
@@ -1013,6 +1046,7 @@ function renderLogs() {
   if (!log && !ws.length) return h + '<div class="card sub" style="font-size:15px">這天沒有日誌。按 ‹ › 看別天。</div></div>';
   if (log && log.weather) h += '<div style="font-size:15px;font-weight:bold;margin:0 4px 10px">天氣：' + weatherEmoji(log.weather) + ' ' + esc(log.weather) + '</div>';
   var cats = uniq((s.categories && s.categories.length ? s.categories : DEFAULT_CATS).concat(((log && log.items) || []).map(function (x) { return x.category; })).concat(ws.map(function (e) { return e.category; })));
+  h += '<div class="logcards">';   // 寬螢幕：大項卡片排兩、三欄
   cats.forEach(function (c) {
     var item = logItem(log, c), wl = ws.filter(function (e) { return e.category === c; });
     if (!item && !wl.length) return;
@@ -1030,6 +1064,7 @@ function renderLogs() {
   var mats = ((log && log.materials) || []).filter(function (m) { return String(m.vendor || '').trim() || String(m.qty || '').trim(); });
   if (mats.length) h += '<div class="card"><div class="ttl">材料／機具</div>' + mats.map(function (m) { return '<div style="font-size:15px">' + esc(m.vendor + '　' + m.qty + ' ' + m.unit) + '</div>'; }).join('') + '</div>';
   if (log && String(log.discussion || '').trim()) h += '<div class="card"><div class="ttl">與業主、建築師討論</div><div style="font-size:15px;line-height:21px;white-space:pre-wrap">' + esc(log.discussion) + '</div></div>';
+  h += '</div>';
   var ph = dayPhotos(log, ws, cats, L.date);
   h += '<div class="card"><div class="ttl">📷 這天的照片（' + ph.length + ' 張）</div><div class="sub" style="font-size:12.5px">開發者拍的、施工人員傳的都在這裡（跟匯出的 PDF 一樣一排兩張）</div>' +
     (ph.length ? '<div class="pgrid">' + ph.map(function (p) {
