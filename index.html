@@ -228,7 +228,9 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10f';
+var WEB_VERSION = '11/10g';
+/** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
+var PCAPP = /[?&]app=pc\b/.test(location.search);
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 var UNFILED = '未分組';
 var MAX_PHOTOS = 12, MAX_MATS = 9, MAX_RECEIPTS = 12;
@@ -585,7 +587,9 @@ function renderLogin() {
   h += S.saved ? '<div class="note">要換人或換代碼，請找管理者。</div>' : '<div class="note">代碼只給你自己用；打錯 3 次這支手機會先鎖 30 分鐘。</div>';
   h += '</div>';
   if (!standalone()) h += '<div class="box phone-only"><b>iPhone 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按下面的「分享」⬆︎ →「加入主畫面」→ 之後都從桌面的「柏捷工地」圖示打開，在那裡輸入代碼（Safari 裡輸入的，圖示那邊不會記得）。</div></div>';
-  h += '<div class="box pc-only" style="border-color:var(--teal);background:#E9F7F6"><b>電腦也可以用</b><div>直接用這個網址打開就好；代碼會記在這台電腦的這個瀏覽器（換瀏覽器、清除瀏覽紀錄要重打）。可以把這頁加到書籤。</div></div>';
+  // 電腦版程式（安裝檔，網址後面帶 ?app=pc；使用者 2026-11-10「電腦的部分我想做成安裝檔，不想給他們連結」）：不提網址
+  if (PCAPP) h += '<div class="box pc-only" style="border-color:var(--teal);background:#E9F7F6"><b>柏捷工地 電腦版</b><div>第一次輸入自己的代碼（找管理者拿），之後會記在這台電腦的「柏捷工地」程式裡。</div></div>';
+  else h += '<div class="box pc-only" style="border-color:var(--teal);background:#E9F7F6"><b>電腦也可以用</b><div>直接用這個網址打開就好；代碼會記在這台電腦的這個瀏覽器（換瀏覽器、清除瀏覽紀錄要重打）。可以把這頁加到書籤。</div></div>';
   return h + '<div class="sub" style="text-align:center">網頁版 ' + WEB_VERSION + '</div></div>';
 }
 
@@ -609,7 +613,7 @@ function renderHub() {
   var sub = S.feedErr || (!f && !S.feedBusy ? '讀不到最新消息：網路好了按上面「⟳ 更新」' : '');
   h += '<div class="a-foot"><div class="card"><button class="big" style="margin:0" data-act="sync">' + (S.feedBusy ? '更新中…' : '⟳ 更新') + '</button>' +
     (sub ? '<div class="sub" style="margin-top:6px">' + esc(sub) + '</div>' : '') + '</div>';
-  h += '<div class="sub" style="padding-left:4px">' + esc(s.name + (s.full ? '（' + s.full + '）' : '') + '・' + s.role) + '　網頁版 ' + WEB_VERSION + '</div>';
+  h += '<div class="sub" style="padding-left:4px">' + esc(s.name + (s.full ? '（' + s.full + '）' : '') + '・' + s.role) + '　' + (PCAPP ? '電腦版' : '網頁版') + ' ' + WEB_VERSION + '</div>';
   h += '<div class="note" style="padding:4px 4px 0">網頁版沒有桌面小工具，關著時也不會跳通知；打開就會更新。</div></div>';
   return h + '</div>';
 }
