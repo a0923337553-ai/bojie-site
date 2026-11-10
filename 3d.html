@@ -45,6 +45,7 @@ button{font:inherit}
 #laps{position:fixed;z-index:3;pointer-events:none;overflow:hidden}
 #laps .lb{position:absolute;transform:translate(-50%,-130%);background:#15803D;color:#fff;font-size:12px;font-weight:700;border-radius:8px;padding:1px 6px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 #laps .lb.cp{background:#D6336C}
+#laps .lb.top{background:#1D4ED8}
 .lapList{margin:6px 0 0;padding:0;list-style:none;font-size:14px}
 .lapList li{padding:2px 0}.lapList b{color:#15803D}
 #markBtn{position:fixed;z-index:6;border:0;border-radius:18px;padding:6px 12px;font-weight:700;background:#E03131;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;display:none}
@@ -121,7 +122,7 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
 <div id="markBar"><div class="t" id="mbText"></div><button id="mbMove">✋ 轉動、放大</button><button id="mbDraw">⭕ 畫圈</button></div>
 <!-- 寫要改進什麼：放在畫面最上面（下面那塊會被手機鍵盤蓋住，使用者 2026-11-10「圈起來的功能沒有辦法打字」） -->
 <div id="markForm">
-  <div style="font-weight:700">✏️ 寫要改進什麼 <span class="muted" id="mfMember"></span></div>
+  <div style="font-weight:700"><span id="mfTitle">✏️ 寫要改進什麼</span> <span class="muted" id="mfMember"></span></div>
   <textarea class="in" id="markText" maxlength="300" placeholder="例如：2F 這支梁的上層筋看起來不夠長，請確認"></textarea>
   <div class="row"><button class="btn solid" id="markSend">送出</button><button class="btn" id="markRedo">⭕ 重圈</button><button class="btn ghost" id="markCancel">取消圈</button><span class="muted" id="markErr"></span></div>
 </div>
@@ -461,7 +462,8 @@ function bindMarking() {
   };
   document.getElementById('mbMove').onclick = () => { setMarking('move'); layout(); };
   document.getElementById('mbDraw').onclick = () => { setMarking('draw'); layout(); };
-  document.getElementById('markRedo').onclick = () => { st.draft = null; showDraft(); setMarking('draw'); renderSide(); layout(); needs = true; };
+  // 重圈：寫好的字留著（修改的時候也是）
+  document.getElementById('markRedo').onclick = () => { st.keepText = document.getElementById('markText').value || ''; st.draft = null; showDraft(); setMarking('draw'); renderSide(); layout(); needs = true; };
   const err = t => { document.getElementById('markErr').textContent = t; };
   document.getElementById('markCancel').onclick = cancelDraft;
   document.getElementById('markSend').onclick = async () => {
@@ -469,11 +471,24 @@ function bindMarking() {
     if (!text) { err('要寫哪裡要改進'); return; }
     const d = st.draft; if (!d) return; err('送出中…');
     try {
-      const r = await markApi({ op: 'add', text, pos: d.pos, cam: d.cam, member: d.member });
-      if (r.local) marks.push({ id: 'L' + Date.now(), at: Date.now(), by: (me && me.name) || '我', text, pos: d.pos, cam: d.cam, member: d.member, done: false });
+      let editing = st.editMark, r;
+      if (editing) {
+        try { r = await markApi({ op: 'edit', id: editing, text, pos: d.pos, cam: d.cam, member: d.member }); }
+        catch (e) {
+          // 收件服務還沒更新（沒有「修改」）：自己圈的就新增一個、刪掉舊的；別人圈的要等更新
+          if (!/不認得的 3D 標記動作/.test(errText(e))) throw e;
+          const old = marks.find(x => x.id === editing);
+          if (!old || !(me && me.name === old.by)) throw { error: '收件服務還沒更新，現在只能改自己圈的' };
+          r = await markApi({ op: 'add', text, pos: d.pos, cam: d.cam, member: d.member });
+          await markApi({ op: 'del', id: editing });
+          editing = r.id || null;
+        }
+      } else r = await markApi({ op: 'add', text, pos: d.pos, cam: d.cam, member: d.member });
+      if (r.local && editing) { const mk = marks.find(x => x.id === editing); if (mk) Object.assign(mk, { text, pos: d.pos, cam: d.cam, member: d.member }); }
+      else if (r.local) marks.push({ id: 'L' + Date.now(), at: Date.now(), by: (me && me.name) || '我', text, pos: d.pos, cam: d.cam, member: d.member, done: false });
       else await reloadMarks();
       const last = marks.slice().sort((a, b) => (b.at || 0) - (a.at || 0))[0];
-      st.draft = null; showDraft(); st.markSel = r.id || (last && last.id) || null; st.sideMin = false; st.sideWas = undefined; renderSide(); layout(); needs = true;
+      err(''); st.draft = null; st.editMark = null; showDraft(); st.markSel = editing || r.id || (last && last.id) || null; st.sideMin = false; st.sideWas = undefined; renderSide(); layout(); needs = true;
     } catch (e) { err('沒有送出：' + errText(e)); }
   };
   // 畫圈：一指（滑鼠左鍵）畫；第二指放下就不畫了，改成放大縮小、移動；滑鼠右鍵拖曳＝轉動、滾輪＝放大縮小
@@ -540,7 +555,7 @@ function finishCircle(pts) {
   const p = ray.r.ray.at(depth, new THREE.Vector3());
   const wr = rpx * 2 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / r.height;
   const hm = best ? best.object.userData.m : null, c = T2CAD(p);
-  st.draft = { pos: [c[0], c[1], c[2], Math.round(wr)], cam: { t: T2CAD(cam.target), d: Math.round(cam.dist), th: +cam.theta.toFixed(3), ph: +cam.phi.toFixed(3) },
+  st.draft = { pos: [c[0], c[1], c[2], Math.round(wr)], cam: { t: T2CAD(cam.target).map(v => Math.round(v)), d: Math.round(cam.dist), th: +cam.theta.toFixed(3), ph: +cam.phi.toFixed(3), v: viewState() },
     member: hm ? (hm.f + ' ' + hm.k + ' ' + (hm.c || hm.n || '')).trim() : '' };
   setMarking(false); st.markSel = null; showDraft(true); renderSide(); layout();
 }
@@ -550,12 +565,15 @@ function showDraft(fresh) {
   f.style.display = st.draft ? 'block' : 'none';
   markBtnText();
   if (st.draft && fresh) {
-    document.getElementById('markText').value = ''; document.getElementById('markErr').textContent = '';
+    document.getElementById('markText').value = st.keepText || ''; st.keepText = ''; document.getElementById('markErr').textContent = '';
+    document.getElementById('mfTitle').textContent = st.editMark ? '✏️ 修改要改進什麼' : '✏️ 寫要改進什麼';
     document.getElementById('mfMember').textContent = st.draft.member ? '（' + st.draft.member + '）' : '';
   }
 }
 function cancelDraft() {
-  st.draft = null; setMarking(false); showDraft();
+  const editing = st.editMark;
+  st.draft = null; st.editMark = null; st.keepText = ''; setMarking(false); showDraft();
+  if (editing) st.markSel = editing;   // 修改到一半不要了：回到那個標記
   if (st.sideWas !== undefined) { st.sideMin = st.sideWas; st.sideWas = undefined; }
   renderSide(); layout(); needs = true;
 }
@@ -578,10 +596,35 @@ function updatePins() {
   box.innerHTML = h;
   box.querySelectorAll('.pin').forEach(p => p.onclick = () => { if (p.dataset.id !== '_draft') selectMark(p.dataset.id, false); });
 }
+/**
+ * 圈的時候的畫面（使用者 2026-11-10「圈起來的地方他會自動跳到目前設定的圖層及位置」）：哪一層、開了哪些種類、整層鋼筋、看哪一支的配筋。
+ * 存在圈的鏡頭（cam.v）裡；看配筋的那一支記種類、樓層、中心點（重新上傳 3D 編號會變）。
+ */
+function viewState() {
+  const r = st.rebar, b = r && r.b;
+  return { f: st.floor, k: [...st.kinds], b: st.bars ? 1 : 0, rb: b ? [r.k, r.f, Math.round((b[0] + b[3]) / 2), Math.round((b[1] + b[4]) / 2), Math.round((b[2] + b[5]) / 2)] : 0 };
+}
+function applyView(v) {
+  if (!v || typeof v !== 'object') return;
+  if (v.f === '全部' || floorsList().includes(v.f)) st.floor = v.f;
+  if (Array.isArray(v.k) && v.k.length) {
+    const ks = v.k.filter(k => KIND_ORDER.includes(k));
+    if (ks.length) st.kinds = new Set(ks);
+  }
+  st.bars = !!v.b; st.pour = null; st.sel = null; st.rebar = null; st.focus = null;
+  if (Array.isArray(v.rb) && v.rb.length >= 5) {
+    const [k, f, x, y, z] = v.rb, inside = m => m.b && x >= m.b[0] - 1 && x <= m.b[3] + 1 && y >= m.b[1] - 1 && y <= m.b[4] + 1 && z >= m.b[2] - 1 && z <= m.b[5] + 1;
+    const m = (M.m || []).find(m => m.k === k && m.f === f && inside(m));
+    if (m) { st.rebar = m; st.focus = focusOf(m); }
+  }
+  apply();
+}
 function selectMark(id, jump) {
   const m = marks.find(x => x.id === id); if (!m) return;
   st.markSel = id; st.sel = null; st.draft = null; st.sideMin = false;
-  if (jump && m.cam && m.cam.t) { cam.target = CAD2T(m.cam.t); cam.dist = m.cam.d || cam.dist; cam.theta = m.cam.th; cam.phi = m.cam.ph; placeCamera(); }
+  // 跳回圈的時候的樓層、種類、鋼筋，再轉到那個位置（點圈、點清單、按「轉到這裡」都會）
+  if (m.cam && m.cam.v) applyView(m.cam.v);
+  if ((jump || (m.cam && m.cam.v)) && m.cam && m.cam.t) { cam.target = CAD2T(m.cam.t); cam.dist = m.cam.d || cam.dist; cam.theta = m.cam.th; cam.phi = m.cam.ph; placeCamera(); }
   renderSide(); layout(); needs = true;
 }
 async function markApi(body) {
@@ -676,18 +719,21 @@ function flushBars(light) {
     rebarGroup.add(im);
   });
   Object.keys(segs).forEach(k => { segs[k] = []; });
-  // 搭接段：半透明綠色的框，沿鋼筋方向從搭接起點到終點，框住那一排鋼筋
-  if (LAPS.length) {
-    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0x22C55E, transparent: true, opacity: 0.45, depthWrite: false }), LAPS.length);
+  // 搭接段：半透明的框，沿鋼筋方向從搭接起點到終點，框住那一排鋼筋；上層藍、下層（和牆、腰筋等不分上下的）綠
+  // （使用者 2026-11-10「上下層搭接用不同顏色標示（上搭接35）」）
+  [['top', 0x3B82F6], ['', 0x22C55E]].forEach(([want, color]) => {
+    const list = LAPS.filter(({ l }) => (lapLayer(l) === 'top') === (want === 'top'));
+    if (!list.length) return;
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, depthWrite: false }), list.length);
     const yv = new THREE.Vector3(0, 1, 0), zv = new THREE.Vector3(), basis = new THREE.Matrix4();
-    LAPS.forEach(({ l }, i) => {
+    list.forEach(({ l }, i) => {
       const p = l.p; A.set(p[0], p[2], -p[1]); B.set(p[3], p[5], -p[4]);
       const len = A.distanceTo(B) || 1, u = B.clone().sub(A).normalize();
       zv.crossVectors(u, yv).normalize(); basis.makeBasis(u, yv, zv); q.setFromRotationMatrix(basis);
       sc.set(len, 2 * (l.h || 2), 2 * (l.w || 2)); mtx.compose(A.clone().add(B).multiplyScalar(0.5), q, sc); im.setMatrixAt(i, mtx);
     });
     im.renderOrder = 2; im.computeBoundingSphere(); rebarGroup.add(im);
-  }
+  });
   // 續接器：主筋接頭上一小段粗一點的桃紅色（跟施工圖的柱續接器同色）
   if (CPLS.length) {
     const im = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, light ? 6 : 10), new THREE.MeshLambertMaterial({ color: 0xD6336C }), CPLS.length);
@@ -697,7 +743,17 @@ function flushBars(light) {
     im.computeBoundingSphere(); rebarGroup.add(im);
   }
 }
-/** 搭接長度的字：投影到畫面上；太多、疊在一起的只留靠畫面中間的（放大就會出現更多） */
+/**
+ * 搭接段是上層還是下層：外掛寫的字開頭——基礎、版「上層／下層」，梁「上主筋、上加鐵／下主筋、下加鐵」，樓梯「…上層筋／…下層筋」；
+ * 牆、腰筋這種不分上下的回傳 ''（照舊綠色、字不加上下）
+ */
+function lapLayer(l) {
+  const t = String(l.t || '');
+  if (/^上(層|主筋|加鐵)/.test(t) || /上層筋/.test(t)) return 'top';
+  if (/^下(層|主筋|加鐵)/.test(t) || /下層筋/.test(t)) return 'bot';
+  return '';
+}
+/** 搭接長度的字：投影到畫面上；太多、疊在一起的只留靠畫面中間的（放大就會出現更多）。上層「上搭接35」藍底、下層「下搭接57」綠底 */
 function updateLapLabels() {
   const box = document.getElementById('laps'); if (!box || !camera) return;
   if (!LAPS.length || st.marking === 'draw') { if (box.innerHTML) box.innerHTML = ''; return; }
@@ -705,16 +761,17 @@ function updateLapLabels() {
   LAPS.forEach(({ l }) => {
     const p = l.p, v = CAD2T([(p[0] + p[3]) / 2, (p[1] + p[4]) / 2, (p[2] + p[5]) / 2 + (l.h || 2)]).project(camera);
     if (v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) return;
-    pts.push({ x: (v.x + 1) / 2 * r.width, y: (1 - v.y) / 2 * r.height, t: String(l.t || '').split(' ').pop() });
+    const ly = lapLayer(l), t = String(l.t || '').split(' ').pop();
+    pts.push({ x: (v.x + 1) / 2 * r.width, y: (1 - v.y) / 2 * r.height, t: (ly === 'top' ? '上' : ly === 'bot' ? '下' : '') + t, top: ly === 'top' });
   });
   pts.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
   const placed = [];
   for (const p of pts) {
     if (placed.length >= 40) break;
-    if (placed.some(o => Math.abs(o.x - p.x) < 62 && Math.abs(o.y - p.y) < 20)) continue;
+    if (placed.some(o => Math.abs(o.x - p.x) < 74 && Math.abs(o.y - p.y) < 20)) continue;
     placed.push(p);
   }
-  box.innerHTML = placed.map(p => '<div class="lb" style="left:' + p.x.toFixed(1) + 'px;top:' + p.y.toFixed(1) + 'px">' + esc(p.t) + '</div>').join('');
+  box.innerHTML = placed.map(p => '<div class="lb' + (p.top ? ' top' : '') + '" style="left:' + p.x.toFixed(1) + 'px;top:' + p.y.toFixed(1) + 'px">' + esc(p.t) + '</div>').join('');
 }
 /** 這幾台／這支的搭接清單（看配筋的卡片）：同樣的合起來寫幾處 */
 function lapSummary() {
@@ -904,7 +961,8 @@ function legend() {
   const slabPart = '版：<span style="color:#B0412E">■</span> 下層　<span style="color:#7A3FB0">■</span> 上層';
   return (only === '牆' ? wallPart : only === '版' ? slabPart : only === '樓梯' ? stairPart
     : beamPart + (has('牆') ? '<br>' + wallPart : '') + (has('版') ? '<br>' + slabPart : '') + (has('樓梯') ? '<br>' + stairPart : '')) +
-    (laps ? '<br><span style="color:#22C55E">■</span> 搭接段（綠字寫搭接長度）' + (only ? '' : '　<span style="color:#D6336C">■</span> 柱續接器') : '') + '<br>' +
+    (laps ? '<br><span style="color:#22C55E">■</span> 下層搭接（字寫「下搭接57」）　<span style="color:#3B82F6">■</span> 上層搭接（「上搭接35」）' +
+      (only ? '' : '　<span style="color:#D6336C">■</span> 柱續接器') + '<br><span style="color:#22C55E">■</span> 牆、腰筋、樓梯不分上下的搭接也是綠色（字只寫「搭接35」）' : '') + '<br>' +
     (sheet ? '照工作單畫的（梁＝第A台、柱＝升位圖、基礎版＝配筋圖' + (has('牆') ? '、牆＝牆出圖' : '') + (has('版') ? '、版＝版出圖' : '') + (has('樓梯') ? '、樓梯＝樓梯配筋圖' : '') + '），伸進柱子、彎鉤、搭接、續接都照工作單。' : '照配筋表畫的示意；彎鉤、搭接位置以施工圖為準。') +
     (sheet && !laps ? '<br><span style="color:#C2410C">這份 3D 還沒有標搭接段：在 BricsCAD「混凝土」再按一次「上傳 3D 到工地App」就會有。</span>' : '');
 }
@@ -916,9 +974,10 @@ function renderSide() {
   let h = '';
   const mk = st.markSel ? marks.find(x => x.id === st.markSel) : null;
   if (st.draft) {
-    T.textContent = '✏️ 圈起來';
+    T.textContent = st.editMark ? '✏️ 修改圈的地方' : '✏️ 圈起來';
     h += '<div class="card">' + (st.draft.member ? '<div class="muted">圈的地方：' + esc(st.draft.member) + '</div>' : '')
-      + '<div>在畫面<b>最上面的框</b>寫要改進什麼，按「送出」；不要了按「取消圈」。可以先轉動看清楚，圈會黏在模型上。</div>'
+      + (st.editMark ? '<div>在畫面<b>最上面的框</b>改字，按「送出」；要換位置按「⭕ 重圈」；不改了按「取消圈」。</div>'
+        : '<div>在畫面<b>最上面的框</b>寫要改進什麼，按「送出」；不要了按「取消圈」。可以先轉動看清楚，圈會黏在模型上。</div>')
       + '<div class="muted" style="margin-top:6px">送出後老闆、主任、公司、開發者都看得到；開發者、老闆、主任會收到通知，開發者改好會按「已改好」。</div></div>';
   } else if (mk) {
     const dev = me && me.role === '管理者', mine = me && me.name === mk.by;
@@ -928,7 +987,7 @@ function renderSide() {
       + '<div style="margin-top:6px">' + (mk.done ? '<span class="st d">已改好</span> <span class="muted">' + esc(mk.doneBy || '') + ' ' + when(mk.doneAt) + '</span>' : '<span class="st o">待處理</span>') + '</div>'
       + '<div class="row"><button class="btn" id="markGo">轉到這裡</button>'
       + (dev ? '<button class="btn solid" id="markDone">' + (mk.done ? '改回待處理' : '✅ 已改好') + '</button>' : '')
-      + (dev || mine ? '<button class="btn ghost" id="markDel">刪除</button>' : '')
+      + (dev || mine ? '<button class="btn" id="markEdit">✏️ 修改</button><button class="btn ghost" id="markDel">刪除</button>' : '')
       + '<button class="btn ghost" id="markClose">關閉</button><span class="muted" id="markErr2"></span></div></div>';
     h += markSection();
   } else if (st.rebar) {
@@ -937,7 +996,7 @@ function renderSide() {
     T.textContent = '🔩 ' + (m.k === '版' ? m.f + ' 版 ' + (m.c || m.n || '') : job && job.k !== '柱' ? job.n : m.f + ' ' + m.k + ' ' + (m.c || '')) + ' 的配筋';
     const lapH = lapSummary(), cpN = CPLS.filter(c => c.j.k === '柱').length;
     h += '<div class="card">' + table(rebarRows(m))
-      + (lapH ? '<div style="margin-top:8px;font-weight:700">搭接段（綠色）</div><ul class="lapList">' + lapH + '</ul>' : '')
+      + (lapH ? '<div style="margin-top:8px;font-weight:700">搭接段（下層綠、上層藍）</div><ul class="lapList">' + lapH + '</ul>' : '')
       + (cpN ? '<div style="margin-top:6px">柱主筋接頭：<b style="color:#D6336C">續接器 ' + cpN + ' 個</b><span class="muted">（桃紅色，照升位圖；續接器沒有搭接長度）</span></div>' : '')
       + '<div class="muted" style="margin-top:8px">' + legend() + '</div>'
       + '<div class="row"><button class="btn solid" id="exitRebar">‹ 回到整棟</button></div></div>';
@@ -960,7 +1019,7 @@ function renderSide() {
     T.textContent = '🔩 ' + (st.floor === '全部' ? '整棟' : st.floor) + ' 的鋼筋';
     h += '<div class="card"><table><tr><td>畫出來的</td><td>柱 ' + cols + ' 支、梁 ' + beams + ' 支' + (fts ? '、基礎 ' + fts + ' 塊' : '') + (walls ? '、牆 ' + walls + ' 道' : '') + (slabs ? '、版 ' + slabs + ' 塊' : '') + (stairN ? '、樓梯 ' + stairN + ' 座' : '') + '</td></tr>'
       + (none ? '<tr><td>沒畫的</td><td>' + none + ' 支在配筋表找不到</td></tr>' : '')
-      + (LAPS.length ? '<tr><td>搭接段</td><td><b style="color:#15803D">' + LAPS.length + ' 處</b>（綠色；放大看得到搭接長度）</td></tr>' : '')
+      + (LAPS.length ? '<tr><td>搭接段</td><td><b style="color:#15803D">' + LAPS.length + ' 處</b>（下層綠、上層藍；放大看得到搭接長度）</td></tr>' : '')
       + (CPLS.length ? '<tr><td>續接器</td><td><b style="color:#D6336C">' + CPLS.length + ' 個</b>（柱主筋接頭）</td></tr>' : '') + '</table>'
       + '<div class="muted" style="margin-top:8px">' + legend() + '<br>上面換樓層、點「柱」「梁」「基礎」「牆」「版」「樓梯」只看一種；點一支（一道、一塊）看它的配筋。</div>'
       + '<div class="row"><button class="btn solid" id="barsOff">關掉鋼筋</button></div></div>';
@@ -980,6 +1039,16 @@ function renderSide() {
     const m = marks.find(x => x.id === st.markSel); if (!m) return; err('…');
     try { const r = await markApi({ op: 'done', id: m.id, done: !m.done }); if (r.local) Object.assign(m, { done: !m.done, doneBy: me.name, doneAt: Date.now() }); else await reloadMarks(); renderSide(); needs = true; }
     catch (e) { err(errText(e)); }
+  });
+  // 修改（使用者 2026-11-10「圈起來的可以編輯刪除」）：打開上面寫字的框、放原本的字；要換位置按「⭕ 重圈」
+  on('markEdit', () => {
+    const mk = marks.find(x => x.id === st.markSel); if (!mk) return;
+    st.editMark = mk.id; st.keepText = mk.text || '';
+    if (mk.cam && mk.cam.v) applyView(mk.cam.v);
+    st.draft = { pos: mk.pos, cam: mk.cam, member: mk.member || '' }; st.markSel = null;
+    if (mk.cam && mk.cam.t) { cam.target = CAD2T(mk.cam.t); cam.dist = mk.cam.d || cam.dist; cam.theta = mk.cam.th; cam.phi = mk.cam.ph; placeCamera(); }
+    st.sideWas = st.sideMin; if (!WIDE()) st.sideMin = true;
+    showDraft(true); renderSide(); layout(); needs = true;
   });
   on('markDel', async () => {
     if (!confirm('刪除這個標記？')) return;
