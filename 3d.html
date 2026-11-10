@@ -46,6 +46,15 @@ button{font:inherit}
 #laps .lb{position:absolute;transform:translate(-50%,-130%);background:#15803D;color:#fff;font-size:12px;font-weight:700;border-radius:8px;padding:1px 6px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 #laps .lb.cp{background:#D6336C}
 #laps .lb.top{background:#1D4ED8}
+/* 梁配筋圖（照 DXF 的那張，使用者 2026-11-10「除了顯示3d也要有配筋圖」）：卡片裡一小張、可以放大 */
+.dwg{margin-top:8px;border-radius:10px;overflow:hidden;background:#1E2228;border:1px solid #2B3138}
+.dwg svg{display:block;width:100%;height:auto}
+#dwgView{position:fixed;inset:0;z-index:30;background:#14171B;display:none;flex-direction:column}
+#dwgView .bar{display:flex;align-items:center;gap:8px;padding:8px 10px;color:#fff;font-weight:700;background:#1E2228}
+#dwgView .bar .t{flex:1;font-size:15px}
+#dwgView .bar button{border:0;border-radius:10px;padding:7px 14px;font:inherit;font-size:16px;font-weight:700;background:#334155;color:#fff;cursor:pointer}
+#dwgView .sc{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
+#dwgView .sc svg{display:block;height:auto}
 .lapList{margin:6px 0 0;padding:0;list-style:none;font-size:14px}
 .lapList li{padding:2px 0}.lapList b{color:#15803D}
 #markBtn{position:fixed;z-index:6;border:0;border-radius:18px;padding:6px 12px;font-weight:700;background:#E03131;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;display:none}
@@ -126,6 +135,7 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
   <textarea class="in" id="markText" maxlength="300" placeholder="例如：2F 這支梁的上層筋看起來不夠長，請確認"></textarea>
   <div class="row"><button class="btn solid" id="markSend">送出</button><button class="btn" id="markRedo">⭕ 重圈</button><button class="btn ghost" id="markCancel">取消圈</button><span class="muted" id="markErr"></span></div>
 </div>
+<div id="dwgView"><div class="bar"><span class="t" id="dwgTitle">配筋圖</span><button id="dwgOut">－</button><button id="dwgIn">＋</button><button id="dwgClose">✕ 關閉</button></div><div class="sc" id="dwgBody"></div></div>
 <div id="side" style="display:none">
   <div class="hd"><span id="sideTitle">🚚 灌漿區</span><button class="btn ghost tog" id="tog">收起</button></div>
   <div class="bd" id="sideBody"></div>
@@ -581,7 +591,14 @@ function cancelDraft() {
 function updatePins() {
   const box = document.getElementById('pins'); if (!box || !camera) return;
   const r = el.getBoundingClientRect(), tanh = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  const list = markOrder().map((m, i) => ({ m, no: i + 1 }));
+  let list = markOrder().map((m, i) => ({ m, no: i + 1 }));
+  // 看配筋的時候：只留圈在這一支（這一台、這一座）上的圈（使用者 2026-11-10「紅圈不是那個位置的就不要再顯示」）
+  if (st.rebar) {
+    const ids = st.focus || new Set([st.rebar.i]);
+    const boxes = (M.m || []).filter(x => ids.has(x.i) && x.b).map(x => x.b), pad = 30;
+    const near = p => boxes.some(b => p[0] >= b[0] - pad && p[0] <= b[3] + pad && p[1] >= b[1] - pad && p[1] <= b[4] + pad && p[2] >= b[2] - pad && p[2] <= b[5] + pad);
+    list = list.filter(({ m }) => m.pos && m.pos.length >= 3 && near(m.pos));
+  }
   if (st.draft) list.push({ m: { id: '_draft', pos: st.draft.pos }, no: '＋', draft: true });
   let h = '';
   list.forEach(({ m, no, draft }) => {
@@ -920,6 +937,49 @@ function renderChips() {
   layout();
 }
 function rebarOf(m) { return m && m.r && M.rb ? M.rb[m.r] : null; }
+// ---------- 梁配筋圖（外掛 11/10 晚上起匯出 rd：線 [顏色, x,y…]、字 [顏色, x, y, 字高, 角度, 對齊, 字]，座標從圖的左下角算） ----------
+const ACI_HEX = { 1: '#FF4D4D', 2: '#FFE14D', 3: '#4DDB4D', 4: '#4DE0E6', 5: '#5B7BFF', 6: '#FF5CFF', 7: '#F2F2F2', 8: '#8A8A8A', 9: '#C8C8C8' };
+function aciHex(i) {
+  if (ACI_HEX[i]) return ACI_HEX[i];
+  if (i >= 10 && i <= 249) {   // 色環：每 10 號一個色相，奇數淡一點、越後面越暗
+    const h = Math.floor((i - 10) / 10) * 15, s = i % 10, v = [1, 1, .8, .8, .6, .6, .5, .5, .3, .3][s], sat = s % 2 ? 50 : 100;
+    return 'hsl(' + h + ',' + sat + '%,' + Math.round(Math.max(30, v * 60)) + '%)';
+  }
+  return '#D0D0D0';
+}
+/** 那一張配筋圖的 SVG：crop＝只看這一跨（左右多留一點），不然整張；這一跨框橘色 */
+function drawingSvg(R, crop, widthCss) {
+  const D = R && R.dw && M.rd ? M.rd[R.dw] : null; if (!D) return '';
+  const H = D.h, sb = R.sb;
+  let x0 = -6, y0 = -6, w = D.w + 12, h = D.h + 12;
+  if (crop && sb) { const m = Math.max(40, (sb[2] - sb[0]) * 0.18); x0 = Math.max(-6, sb[0] - m); w = Math.min(D.w + 6, sb[2] + m) - x0; }
+  const f = v => Math.round(v * 10) / 10;
+  let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + f(x0) + ' ' + f(H - (y0 + h)) + ' ' + f(w) + ' ' + f(h) + '"' + (widthCss ? ' style="width:' + widthCss + '"' : '') + '>';
+  (D.l || []).forEach(l => {
+    const pts = []; for (let i = 1; i + 1 < l.length; i += 2) pts.push(l[i] + ',' + f(H - l[i + 1]));
+    if (pts.length > 1) s += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + aciHex(l[0]) + '" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+  });
+  (D.t || []).forEach(([c, x, y, th, r, a, txt]) => {
+    const yy = f(H - y), anc = ['start', 'middle', 'end'][a % 3], base = ['alphabetic', 'central', 'hanging'][Math.floor(a / 3)] || 'alphabetic';
+    s += '<text x="' + x + '" y="' + yy + '" font-size="' + f(th * 1.3) + '" fill="' + aciHex(c) + '" text-anchor="' + anc + '" dominant-baseline="' + base + '"' +
+      (r ? ' transform="rotate(' + f(-r) + ' ' + x + ' ' + yy + ')"' : '') + ' font-family="Microsoft JhengHei,PingFang TC,Noto Sans TC,sans-serif">' + esc(txt) + '</text>';
+  });
+  if (sb) s += '<rect x="' + f(sb[0]) + '" y="' + f(H - sb[3]) + '" width="' + f(sb[2] - sb[0]) + '" height="' + f(sb[3] - sb[1]) + '" fill="rgba(249,115,22,.10)" stroke="#F97316" stroke-width="2.5" vector-effect="non-scaling-stroke" rx="4"/>';
+  return s + '</svg>';
+}
+let DWG_ZOOM = 2.2;
+function openDrawing(m) {
+  const R = rebarOf(m); if (!R || !R.dw) return;
+  const v = document.getElementById('dwgView'), b = document.getElementById('dwgBody');
+  document.getElementById('dwgTitle').textContent = '📐 ' + (m.f || '') + ' ' + (m.c || m.n || '') + ' 的配筋圖（橘框＝這一跨）';
+  const draw = () => { b.innerHTML = drawingSvg(R, false, Math.round(DWG_ZOOM * 100) + '%'); };
+  draw(); v.style.display = 'flex';
+  // 先捲到這一跨
+  const D = M.rd[R.dw]; if (R.sb && D) setTimeout(() => { b.scrollLeft = Math.max(0, (R.sb[0] + R.sb[2]) / 2 / D.w * b.scrollWidth - b.clientWidth / 2); }, 30);
+  document.getElementById('dwgIn').onclick = () => { DWG_ZOOM = Math.min(8, DWG_ZOOM * 1.4); draw(); };
+  document.getElementById('dwgOut').onclick = () => { DWG_ZOOM = Math.max(1, DWG_ZOOM / 1.4); draw(); };
+  document.getElementById('dwgClose').onclick = () => { v.style.display = 'none'; b.innerHTML = ''; };
+}
 function lmr(a, size) { const t = (a || []).map(v => v ? v + (size ? '-' + size : '') : '—'); return '左 ' + t[0] + '・中 ' + t[1] + '・右 ' + t[2]; }
 function rebarRows(m) {
   const R = rebarOf(m), rows = [];
@@ -995,7 +1055,10 @@ function renderSide() {
     const job = jobsOf(m).find(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
     T.textContent = '🔩 ' + (m.k === '版' ? m.f + ' 版 ' + (m.c || m.n || '') : job && job.k !== '柱' ? job.n : m.f + ' ' + m.k + ' ' + (m.c || '')) + ' 的配筋';
     const lapH = lapSummary(), cpN = CPLS.filter(c => c.j.k === '柱').length;
+    // 梁：旁邊畫 DXF 裡的那張梁配筋圖（這一跨框橘色），點一下放大
+    const R0 = rebarOf(m), hasDw = !!(R0 && R0.dw && M.rd && M.rd[R0.dw]);
     h += '<div class="card">' + table(rebarRows(m))
+      + (hasDw ? '<div style="margin-top:8px;font-weight:700">📐 配筋圖 <span class="muted" style="font-weight:400">（橘框＝這一跨，點圖放大）</span></div><div class="dwg" id="dwgCard">' + drawingSvg(R0, true) + '</div>' : '')
       + (lapH ? '<div style="margin-top:8px;font-weight:700">搭接段（下層綠、上層藍）</div><ul class="lapList">' + lapH + '</ul>' : '')
       + (cpN ? '<div style="margin-top:6px">柱主筋接頭：<b style="color:#D6336C">續接器 ' + cpN + ' 個</b><span class="muted">（桃紅色，照升位圖；續接器沒有搭接長度）</span></div>' : '')
       + '<div class="muted" style="margin-top:8px">' + legend() + '</div>'
@@ -1057,6 +1120,7 @@ function renderSide() {
   });
   B.querySelectorAll('.mk').forEach(x => x.onclick = () => selectMark(x.dataset.mk, true));
   on('exitRebar', () => { st.rebar = null; apply(); fitTo(visibleObjs(), false); });
+  { const dc = document.getElementById('dwgCard'); if (dc && st.rebar) { const m = st.rebar; dc.style.cursor = 'zoom-in'; dc.onclick = () => openDrawing(m); } }
   on('showRebar', () => { st.rebar = st.sel; st.focus = focusOf(st.rebar); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); });
   on('unsel', () => { st.sel = null; apply(); });
   on('barsOff', () => { st.bars = false; apply(); });
