@@ -41,6 +41,12 @@ button{font:inherit}
 #pins .done .ring{border-color:#0F766E}#pins .done .num{background:#0F766E}
 #pins .on .ring{border-width:4px;border-color:#F2C230}#pins .draft .ring{border-style:dashed}
 #draw{position:fixed;z-index:7;touch-action:none;display:none;cursor:crosshair}
+/* 搭接段的長度（使用者 2026-11-10「在 3D 把搭接段標顏色、寫上搭接長度」）：綠色框旁邊的字 */
+#laps{position:fixed;z-index:3;pointer-events:none;overflow:hidden}
+#laps .lb{position:absolute;transform:translate(-50%,-130%);background:#15803D;color:#fff;font-size:12px;font-weight:700;border-radius:8px;padding:1px 6px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+#laps .lb.cp{background:#D6336C}
+.lapList{margin:6px 0 0;padding:0;list-style:none;font-size:14px}
+.lapList li{padding:2px 0}.lapList b{color:#15803D}
 #markBtn{position:fixed;z-index:6;border:0;border-radius:18px;padding:6px 12px;font-weight:700;background:#E03131;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;display:none}
 #markBtn.on{background:#fff;color:#E03131;border:2px solid #E03131}
 #markForm{position:fixed;z-index:8;left:8px;right:8px;top:var(--topH,110px);margin-top:6px;background:#fff;border:2px solid #E03131;border-radius:14px;padding:10px 12px;box-shadow:0 6px 18px rgba(0,0,0,.2);display:none}
@@ -108,6 +114,7 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
 <div id="view"></div>
 <div id="msg">載入中…</div>
 <div id="hint"></div>
+<div id="laps"></div>
 <div id="pins"></div>
 <svg id="draw"><path id="drawPath" fill="none" stroke="#E03131" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
 <button id="markBtn">✏️ 圈起來</button>
@@ -618,8 +625,12 @@ function clipZ(a, b, zr) {
   const f = z => { const t = (z - a[2]) / (b[2] - a[2]); return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, z]; };
   return [a[2] < za ? f(za) : a[2] > zb ? f(zb) : a, b[2] < za ? f(za) : b[2] > zb ? f(zb) : b];
 }
+// 搭接段（綠色框＋「搭接60」）、柱的續接器（桃紅）：外掛 11/10 下午起匯出的 lp、cp（照工作單寫的字，不是看重疊猜的）
+let LAPS = [], CPLS = [];
 function drawJob(j, zr) {
   const inZ = z => !zr || (z >= zr[0] && z <= zr[1]);
+  (j.lp || []).forEach(l => { if (inZ(l.p[2])) LAPS.push({ l, j }); });
+  if (j.cp) for (let i = 0; i + 3 < j.cp.length; i += 4) if (inZ(j.cp[i + 2])) CPLS.push({ p: [j.cp[i], j.cp[i + 1], j.cp[i + 2]], d: j.cp[i + 3], j });
   (j.bars || []).forEach(o => {
     const kind = BAR_KIND[o.c] || 'main', r = (o.d || 1.3) / 2;
     // 基礎版：代表的那一支照 rep 方向、o 的距離平移排滿
@@ -663,7 +674,57 @@ function flushBars(light) {
     rebarGroup.add(im);
   });
   Object.keys(segs).forEach(k => { segs[k] = []; });
+  // 搭接段：半透明綠色的框，沿鋼筋方向從搭接起點到終點，框住那一排鋼筋
+  if (LAPS.length) {
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0x22C55E, transparent: true, opacity: 0.45, depthWrite: false }), LAPS.length);
+    const yv = new THREE.Vector3(0, 1, 0), zv = new THREE.Vector3(), basis = new THREE.Matrix4();
+    LAPS.forEach(({ l }, i) => {
+      const p = l.p; A.set(p[0], p[2], -p[1]); B.set(p[3], p[5], -p[4]);
+      const len = A.distanceTo(B) || 1, u = B.clone().sub(A).normalize();
+      zv.crossVectors(u, yv).normalize(); basis.makeBasis(u, yv, zv); q.setFromRotationMatrix(basis);
+      sc.set(len, 2 * (l.h || 2), 2 * (l.w || 2)); mtx.compose(A.clone().add(B).multiplyScalar(0.5), q, sc); im.setMatrixAt(i, mtx);
+    });
+    im.renderOrder = 2; im.computeBoundingSphere(); rebarGroup.add(im);
+  }
+  // 續接器：主筋接頭上一小段粗一點的桃紅色（跟施工圖的柱續接器同色）
+  if (CPLS.length) {
+    const im = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, light ? 6 : 10), new THREE.MeshLambertMaterial({ color: 0xD6336C }), CPLS.length);
+    CPLS.forEach(({ p, d }, i) => {
+      A.set(p[0], p[2], -p[1]); q.identity(); sc.set(d * 0.95, 9, d * 0.95); mtx.compose(A, q, sc); im.setMatrixAt(i, mtx);
+    });
+    im.computeBoundingSphere(); rebarGroup.add(im);
+  }
 }
+/** 搭接長度的字：投影到畫面上；太多、疊在一起的只留靠畫面中間的（放大就會出現更多） */
+function updateLapLabels() {
+  const box = document.getElementById('laps'); if (!box || !camera) return;
+  if (!LAPS.length || st.marking === 'draw') { if (box.innerHTML) box.innerHTML = ''; return; }
+  const r = el.getBoundingClientRect(), cx = r.width / 2, cy = r.height / 2, pts = [];
+  LAPS.forEach(({ l }) => {
+    const p = l.p, v = CAD2T([(p[0] + p[3]) / 2, (p[1] + p[4]) / 2, (p[2] + p[5]) / 2 + (l.h || 2)]).project(camera);
+    if (v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) return;
+    pts.push({ x: (v.x + 1) / 2 * r.width, y: (1 - v.y) / 2 * r.height, t: String(l.t || '').split(' ').pop() });
+  });
+  pts.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
+  const placed = [];
+  for (const p of pts) {
+    if (placed.length >= 40) break;
+    if (placed.some(o => Math.abs(o.x - p.x) < 62 && Math.abs(o.y - p.y) < 20)) continue;
+    placed.push(p);
+  }
+  box.innerHTML = placed.map(p => '<div class="lb" style="left:' + p.x.toFixed(1) + 'px;top:' + p.y.toFixed(1) + 'px">' + esc(p.t) + '</div>').join('');
+}
+/** 這幾台／這支的搭接清單（看配筋的卡片）：同樣的合起來寫幾處 */
+function lapSummary() {
+  const g = new Map();
+  LAPS.forEach(({ l, j }) => {
+    if (j.k === '柱') return;
+    const key = l.t + (l.s ? '｜' + l.s : '');
+    g.set(key, (g.get(key) || 0) + 1);
+  });
+  return [...g.entries()].map(([k, n]) => { const [t, s] = k.split('｜'); const parts = t.split(' '), len = parts.pop(); return '<li>' + esc(parts.join(' ')) + ' <b>' + esc(len) + '</b>' + (s ? '<span class="muted">（' + esc(s) + '）</span>' : '') + (n > 1 ? ' ×' + n : '') + '</li>'; }).join('');
+}
+function hasLapData() { return (M.rj || []).some(j => (j.lp && j.lp.length) || (j.cp && j.cp.length)); }
 function zones(z0, z1, endLen, s1, s2) { // 端部用 s1、中間用 s2 的位置
   const out = []; let z = z0 + 5;
   while (z < z1 - 3) { out.push(z); z += (z - z0 < endLen || z1 - z < endLen) ? s1 : s2; }
@@ -676,6 +737,7 @@ function zones(z0, z1, endLen, s1, s2) { // 端部用 s1、中間用 s2 的位�
 function drawRebar() {
   rebarGroup.children.forEach(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); });
   rebarGroup.clear();
+  LAPS = []; CPLS = [];
   const byId = id => (M.m || []).find(x => x.i === id);
   if (st.rebar) {
     const m = st.rebar, js = jobsOf(m).filter(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
@@ -820,9 +882,12 @@ function rebarRows(m) {
 /** 鋼筋顏色說明；有工作單的寫「照工作單畫的」 */
 function legend() {
   const sheet = st.rebar ? jobsOf(st.rebar).length > 0 : (M.rj || []).length > 0;
+  const laps = hasLapData();
   return '<span style="color:#B0412E">■</span> 主筋　<span style="color:#E07B1F">■</span> 加鐵　<span style="color:#8A5A2B">■</span> 腰筋　<span style="color:#2F6FB2">■</span> 箍筋、繫筋' +
-    ((M.rj || []).some(j => j.k === '基礎') ? '　<span style="color:#7A3FB0">■</span> 基礎上層' : '') + '<br>' +
-    (sheet ? '照工作單畫的（梁＝第A台、柱＝升位圖、基礎版＝配筋圖），伸進柱子、彎鉤、搭接、續接都照工作單。' : '照配筋表畫的示意；彎鉤、搭接位置以施工圖為準。');
+    ((M.rj || []).some(j => j.k === '基礎') ? '　<span style="color:#7A3FB0">■</span> 基礎上層' : '') +
+    (laps ? '　<span style="color:#22C55E">■</span> 搭接段（綠字寫搭接長度）　<span style="color:#D6336C">■</span> 柱續接器' : '') + '<br>' +
+    (sheet ? '照工作單畫的（梁＝第A台、柱＝升位圖、基礎版＝配筋圖），伸進柱子、彎鉤、搭接、續接都照工作單。' : '照配筋表畫的示意；彎鉤、搭接位置以施工圖為準。') +
+    (sheet && !laps ? '<br><span style="color:#C2410C">這份 3D 還沒有標搭接段：在 BricsCAD「混凝土」再按一次「上傳 3D 到工地App」就會有。</span>' : '');
 }
 function table(rows) { return '<table>' + rows.map(r => '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>').join('') + '</table>'; }
 function renderSide() {
@@ -851,7 +916,10 @@ function renderSide() {
     const m = st.rebar;
     const job = jobsOf(m).find(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
     T.textContent = '🔩 ' + (job && job.k !== '柱' ? job.n : m.f + ' ' + m.k + ' ' + (m.c || '')) + ' 的配筋';
+    const lapH = lapSummary(), cpN = CPLS.filter(c => c.j.k === '柱').length;
     h += '<div class="card">' + table(rebarRows(m))
+      + (lapH ? '<div style="margin-top:8px;font-weight:700">搭接段（綠色）</div><ul class="lapList">' + lapH + '</ul>' : '')
+      + (cpN ? '<div style="margin-top:6px">柱主筋接頭：<b style="color:#D6336C">續接器 ' + cpN + ' 個</b><span class="muted">（桃紅色，照升位圖；續接器沒有搭接長度）</span></div>' : '')
       + '<div class="muted" style="margin-top:8px">' + legend() + '</div>'
       + '<div class="row"><button class="btn solid" id="exitRebar">‹ 回到整棟</button></div></div>';
   } else if (st.sel) {
@@ -870,7 +938,9 @@ function renderSide() {
       fts = one(has.filter(it => it.m.k === '基礎')), none = one(vis.filter(it => !hasBars(it.m) && it.m.k !== '基礎'));
     T.textContent = '🔩 ' + (st.floor === '全部' ? '整棟' : st.floor) + ' 的鋼筋';
     h += '<div class="card"><table><tr><td>畫出來的</td><td>柱 ' + cols + ' 支、梁 ' + beams + ' 支' + (fts ? '、基礎 ' + fts + ' 塊' : '') + '</td></tr>'
-      + (none ? '<tr><td>沒畫的</td><td>' + none + ' 支在配筋表找不到</td></tr>' : '') + '</table>'
+      + (none ? '<tr><td>沒畫的</td><td>' + none + ' 支在配筋表找不到</td></tr>' : '')
+      + (LAPS.length ? '<tr><td>搭接段</td><td><b style="color:#15803D">' + LAPS.length + ' 處</b>（綠色；放大看得到搭接長度）</td></tr>' : '')
+      + (CPLS.length ? '<tr><td>續接器</td><td><b style="color:#D6336C">' + CPLS.length + ' 個</b>（柱主筋接頭）</td></tr>' : '') + '</table>'
       + '<div class="muted" style="margin-top:8px">' + legend() + '<br>上面換樓層、點「柱」「梁」「基礎」只看一種；點一支看它的配筋。</div>'
       + '<div class="row"><button class="btn solid" id="barsOff">關掉鋼筋</button></div></div>';
   } else {
@@ -957,7 +1027,7 @@ function layout() {
   hint.style.bottom = (WIDE() ? 18 : side.offsetHeight + 12) + 'px'; hint.style.left = (w / 2) + 'px';
   // 圈起來：標記、畫圈的那一層跟 3D 畫面一樣大；按鈕在畫面右上角
   const vr = view.getBoundingClientRect();
-  ['pins', 'draw'].forEach(id => { const e = document.getElementById(id); e.style.left = vr.left + 'px'; e.style.top = vr.top + 'px'; e.style.width = vr.width + 'px'; e.style.height = vr.height + 'px'; });
+  ['pins', 'draw', 'laps'].forEach(id => { const e = document.getElementById(id); e.style.left = vr.left + 'px'; e.style.top = vr.top + 'px'; e.style.width = vr.width + 'px'; e.style.height = vr.height + 'px'; });
   const dr = document.getElementById('draw'); dr.setAttribute('width', vr.width); dr.setAttribute('height', vr.height);
   const mb = document.getElementById('markBtn'); mb.style.top = (vr.top + 10) + 'px'; mb.style.right = (innerWidth - vr.right + 12) + 'px';
   // 圈的時候那條放在畫面上方中間、按鈕下面（窄的手機放在按鈕下面一點，不會擋到按鈕）
@@ -967,7 +1037,7 @@ function layout() {
   mt.style.width = Math.min(narrow ? vr.width - 16 : vr.width - 180, 520) + 'px';
   needs = true;
 }
-function frame() { if (needs) { needs = false; renderer.render(scene, camera); updatePins(); } requestAnimationFrame(frame); }
+function frame() { if (needs) { needs = false; renderer.render(scene, camera); updatePins(); updateLapLabels(); } requestAnimationFrame(frame); }
 
 // ---------- 截圖、範例 ----------
 function shots() {
@@ -995,10 +1065,15 @@ function shots() {
   }
   if (s === 'sel' || s === 'rebar' || s === 'beam' || s === 'foot') {
     const byCode = k => P.get('c') && (M.m || []).find(m => m.k === k && m.c === P.get('c') && (!P.get('f') || m.f === P.get('f')) && hasBars(m));
-    const m = s === 'foot' ? (byCode('基礎') || find('基礎')) : s === 'beam' ? (byCode('梁') || byCode('地梁') || find('梁', P.get('f')) || find('地梁')) : (byCode('柱') || find('柱', P.get('f')));
+    const withLap = k => P.get('haslap') && (M.m || []).find(m => m.k === k && (!P.get('f') || m.f === P.get('f')) && jobsOf(m).some(j => j.k === k && j.lp && j.lp.length));
+    const m = s === 'foot' ? (withLap('基礎') || byCode('基礎') || find('基礎')) : s === 'beam' ? (byCode('梁') || byCode('地梁') || find('梁', P.get('f')) || find('地梁')) : (byCode('柱') || find('柱', P.get('f')));
     if (!m) return;
     st.sel = m; apply();
     if (s !== 'sel') { st.rebar = m; st.focus = focusOf(m); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); }
+    // 截圖用：&lap=第幾個搭接段（0 起）＝鏡頭靠近那一段
+    const li = P.get('lap'), ci = P.get('cpl');
+    const L = li != null && LAPS[+li] ? LAPS[+li].l : ci != null && CPLS[+ci] ? { p: CPLS[+ci].p.concat(CPLS[+ci].p) } : null;
+    if (L) { cam.target = CAD2T([(L.p[0] + L.p[3]) / 2, (L.p[1] + L.p[4]) / 2, (L.p[2] + L.p[5]) / 2]); cam.dist = +(P.get('dist') || 260); cam.theta = +(P.get('th') || -0.5); cam.phi = +(P.get('ph') || 1.15); st.sideMin = !WIDE(); renderSide(); layout(); placeCamera(); }
   }
 }
 function demoModel() {
