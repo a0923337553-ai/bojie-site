@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>柏捷工地 3D 結構</title>
+<!--
+  3D 結構閱覽（使用者 2026-11-10：「先做結構體」、「點一個柱或梁，看它的配筋」就夠了；App、iPhone 網頁、電腦版都要，施工人員看不到）
+  資料：BricsCAD「混凝土 → 上傳 3D 到工地App」傳到雲端 工地App/3D/<工地>/結構3D.json，收件服務 model3d 給老闆、主任、公司、開發者。
+  打開方式：
+    網頁／電腦版：index.html 工地頁的「3D 結構」用 iframe 打開 3d.html?site=…&embed=1，代碼讀同一個網站存的 bojie.code
+    手機 App：WebView 打開 3d.html?site=…&app=android，收件服務由 App 代傳（window.Android.call），代碼不進網頁
+    測試：3d.html?demo=1（範例房子）、3d.html?file=xxx.json（本機檔）
+-->
+<style>
+:root{--teal:#0F766E;--teal2:#E6F4F1;--ink:#1F2933;--sub:#5B6770;--line:#E2E8EC;--bg:#F4F6F7;--warn:#E8590C;--side:360px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif;overflow:hidden}
+button{font:inherit}
+#top{position:fixed;left:0;right:0;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+.bar{display:flex;align-items:center;gap:8px;padding:8px 12px}
+.bar h1{flex:1;margin:0;font-size:17px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .sub{font-size:12px;color:var(--sub);font-weight:400}
+.btn{border:0;background:var(--teal2);color:var(--teal);border-radius:10px;padding:7px 12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn.solid{background:var(--teal);color:#fff}
+.btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+.chips{display:flex;gap:6px;padding:0 12px 8px;overflow-x:auto;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:#fff;border-radius:16px;padding:4px 12px;font-size:14px;cursor:pointer;white-space:nowrap;user-select:none}
+.chip.on{background:var(--teal);border-color:var(--teal);color:#fff}
+.chip.off{color:#9AA5AD;text-decoration:line-through}
+.chip i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+#view{position:fixed;left:0;right:0;bottom:0;touch-action:none}
+#view canvas{display:block;width:100%;height:100%}
+#hint{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:4;background:rgba(31,41,51,.78);color:#fff;border-radius:12px;padding:7px 14px;font-size:13px;pointer-events:none;transition:opacity .6s;white-space:nowrap}
+#side{position:fixed;z-index:6;background:#fff;box-shadow:0 -4px 18px rgba(0,0,0,.12)}
+#side .hd{display:flex;align-items:center;gap:8px;padding:10px 14px 6px;font-weight:700}
+#side .hd span{flex:1}
+#side .bd{overflow:auto;padding:0 14px 12px}
+.pour{border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin:0 0 8px;cursor:pointer}
+.pour.on{border-color:var(--warn);background:#FFF4EC}
+.pour b{font-size:15px}
+.pour .m{color:var(--sub);font-size:13px}
+.card{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:0 0 8px}
+.card .t{font-size:17px;font-weight:700}
+.card .k{display:inline-block;font-size:12px;border-radius:6px;padding:1px 7px;margin-right:6px;color:#fff;vertical-align:2px}
+.card table{border-collapse:collapse;margin-top:6px;font-size:14px}
+.card td{padding:2px 10px 2px 0;vertical-align:top}
+.card td:first-child{color:var(--sub);white-space:nowrap}
+.row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center}
+.muted{color:var(--sub);font-size:13px}
+#msg{position:fixed;left:0;right:0;top:40%;z-index:7;color:var(--sub);text-align:center;padding:24px;font-size:16px}
+#msg .btn{margin-top:12px}
+@media (max-width:899px){
+  #side{left:0;right:0;bottom:0;border-radius:16px 16px 0 0;max-height:46vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}
+  #side.min .bd{display:none}
+}
+/* 電腦：右邊一欄，排得寬鬆（使用者 2026-11-10「電腦螢幕排法要舒適，不要那麼擠」） */
+@media (min-width:900px){
+  body{font-size:16px}
+  .bar{padding:10px 20px}.chips{padding:0 20px 10px}
+  .bar h1{font-size:19px}
+  #side{top:var(--topH,110px);right:0;bottom:0;width:var(--side);border-left:1px solid var(--line);box-shadow:none;display:flex;flex-direction:column}
+  #side .hd{padding:16px 18px 8px;font-size:17px}#side .bd{padding:0 18px 16px}
+  #side .hd .tog{display:none}
+  .card table{font-size:15px}
+}
+@media (min-width:1600px){ :root{--side:420px} body{font-size:17px} }
+</style>
+</head>
+<body>
+<div id="top">
+  <div class="bar">
+    <button class="btn ghost" id="back">‹ 返回</button>
+    <h1 id="title">3D 結構 <span class="sub" id="made"></span></h1>
+    <button class="btn" id="reset">整棟</button>
+  </div>
+  <div class="chips" id="floors"></div>
+  <div class="chips" id="kinds"></div>
+</div>
+<div id="view"></div>
+<div id="msg">載入中…</div>
+<div id="hint"></div>
+<div id="side" style="display:none">
+  <div class="hd"><span id="sideTitle">🚚 灌漿區</span><button class="btn ghost tog" id="tog">收起</button></div>
+  <div class="bd" id="sideBody"></div>
+</div>
+<script>
+var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
+var THREE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.170.0/three.module.min.js';
+</script>
+<script type="module">
+const P = new URLSearchParams(location.search);
+const SITE = P.get('site') || '';
+const EMBED = P.get('embed') === '1';
+const msgEl = document.getElementById('msg');
+function say(html) { msgEl.innerHTML = html; msgEl.style.display = html ? '' : 'none'; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function ls(k, v) { try { if (v === undefined) return localStorage.getItem('bojie.' + k) || ''; if (v) localStorage.setItem('bojie.' + k, v); else localStorage.removeItem('bojie.' + k); } catch (e) { return ''; } }
+
+// ---------- 返回 ----------
+function goBack() {
+  if (window.Android && Android.close) return Android.close();
+  if (EMBED && parent !== window && parent.close3d) return parent.close3d();
+  if (history.length > 1) history.back(); else location.href = './' + (P.get('app') === 'pc' ? '?app=pc' : '');
+}
+document.getElementById('back').onclick = goBack;
+addEventListener('keydown', e => { if (e.key === 'Escape') goBack(); });
+
+// ---------- 收件服務：App 裡由 App 代傳（代碼不進網頁），網頁用存在這個網站的代碼 ----------
+let cbN = 0; const cbs = {};
+window.__bojie3dCb = (id, text) => { const f = cbs[id]; delete cbs[id]; if (f) f(text); };
+function api(action, body) {
+  const req = Object.assign({ action }, body || {});
+  if (window.Android && Android.call) return new Promise((ok, bad) => {
+    const id = 'c' + (++cbN);
+    cbs[id] = t => { let r = null; try { r = JSON.parse(t); } catch (e) { } if (r && r.ok) ok(r); else bad(r || { error: '收件服務回覆看不懂' }); };
+    Android.call(JSON.stringify(req), id);
+  });
+  req.code = ls('code'); req.client = 'page'; req.device = ls('device');
+  if (!req.code) return Promise.reject({ error: 'NOCODE' });
+  return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(req) })
+    .then(r => r.json(), () => { throw { error: '連不上收件服務（網路有問題，等一下再試）' }; })
+    .then(r => { if (r && r.ok) return r; throw (r || {}); });
+}
+function errText(e) {
+  if (!e) return '讀不到';
+  if (e.error === 'NOCODE') return '請先在柏捷工地登入再打開 3D';
+  if (e.message) return e.message;
+  const m = String(e.error || '讀不到'); return /^[A-Z]+：/.test(m) ? m.split('：').slice(1).join('：') : m;
+}
+
+// ---------- 讀模型：記在這台（沒改就不重抓）；灌漿清單每次都問 ----------
+let M = null, pours = [];
+async function loadModel() {
+  if (P.get('demo')) return demoModel();
+  if (P.get('file')) {   // 本機測試：?file=結構3D.json&pourparts=基礎,2F
+    pours = (P.get('pourparts') || '').split(',').filter(Boolean).map((p, i) => ({ id: 't' + i, date: '2026-11-' + (12 + i), part: p, m3: '', trucks: '' }));
+    return fetch(P.get('file')).then(r => r.json());
+  }
+  let have = null;
+  try { have = JSON.parse(ls('m3d.' + SITE) || 'null'); } catch (e) { have = null; }
+  const r = await api('model3d', { site: SITE, have: have ? have.modified : '' });
+  pours = (r.pours || []).map(p => { const pr = p.props || {}; return { id: p.id, date: pr.pourDate || '', part: pr.part || String(p.name || '').replace(/\.pdf$/i, ''), m3: pr.m3 || '', trucks: pr.trucks || '' }; });
+  if (r.same && have) return JSON.parse(have.text);
+  if (!r.model) throw { error: 'NONE' };
+  ls('m3d.' + SITE, JSON.stringify({ modified: r.modified || '', text: r.model }));
+  return JSON.parse(r.model);
+}
+
+// ---------- 顏色、號數 ----------
+const KIND_COLOR = { '基礎': '#A0785A', '地梁': '#C98B4E', '柱': '#3E8E86', '梁': '#4F7CAC', '版': '#B9C2C9', '牆': '#D8C9A8', '樓梯': '#8E6FB0' };
+const KIND_ORDER = ['基礎', '地梁', '柱', '梁', '版', '牆', '樓梯'];
+// 重疊、貼在一起的面誰蓋過誰：跟算數量一樣柱 → 梁 → 版 → 牆
+const KIND_PRI = { '基礎': 0, '柱': 0, '地梁': 1, '梁': 1, '版': 2, '樓梯': 2, '牆': 3 };
+const BAR_MM = { 3: 9.53, 4: 12.7, 5: 15.9, 6: 19.1, 7: 22.2, 8: 25.4, 9: 28.7, 10: 32.2, 11: 35.8, 12: 39.6, 14: 43 };
+function barDia(s) { const m = /#\s*(\d+)/.exec(s || ''); if (m) return (BAR_MM[+m[1]] || 25) / 10; const d = /D\s*(\d+)/i.exec(s || ''); return d ? +d[1] / 10 : 2.2; }
+function num(s) { const v = parseFloat(String(s == null ? '' : s).split('+').reduce((a, b) => a + (parseFloat(b) || 0), 0)); return isFinite(v) ? v : 0; }
+function stirParse(s) { const m = /(?:(\d+)\s*-\s*)?#\s*(\d+)\s*@\s*([\d.]+)/.exec(s || ''); return m ? { n: m[1] ? +m[1] : 0, d: (BAR_MM[+m[2]] || 12.7) / 10, s: +m[3] } : null; }
+function roc(ymd) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd || ''); if (!m) return ''; const d = new Date(+m[1], +m[2] - 1, +m[3]); return (m[1] - 1911) + '.' + m[2] + '.' + m[3] + '（' + '日一二三四五六'[d.getDay()] + '）'; }
+
+const st = { floor: '全部', kinds: new Set(KIND_ORDER), sel: null, pour: null, rebar: null, sideMin: false };
+const WIDE = () => innerWidth >= 900;
+
+let THREE, renderer, scene, camera, root, rebarGroup, el;
+const items = [];   // {m, mesh, edges}
+let needs = true;
+
+function start() {
+  const view = document.getElementById('view');
+  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: !!P.get('shot') });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  renderer.setClearColor(0xF4F6F7);
+  view.appendChild(renderer.domElement);
+  el = renderer.domElement;
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(40, 1, 10, 200000);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8899AA, 1.6));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(0.6, 1, 0.4); scene.add(sun);
+  root = new THREE.Group(); scene.add(root);
+  rebarGroup = new THREE.Group(); scene.add(rebarGroup);
+  document.getElementById('title').firstChild.textContent = (M.site || SITE || '') + '・3D 結構 ';
+  document.getElementById('made').textContent = M.made ? '（' + String(M.made).slice(0, 10) + ' 匯出）' : '';
+  document.getElementById('hint').textContent = matchMedia('(pointer:fine)').matches ? '左鍵轉動・右鍵移動・滾輪縮放・點一下看構件' : '單指轉動・雙指縮放／移動・點一下看構件';
+  document.getElementById('side').style.display = '';
+  build(); bindInput(); apply(); layout(); fitTo(visibleObjs(), false);
+  say('');
+  setTimeout(hideHint, 7000);
+  shots();
+  requestAnimationFrame(frame);
+  window.__ready = true;
+}
+
+// ---------- 形狀 ----------
+// CAD 座標（x 東、y 北、z 上，公分）→ three（x、z 上、-y）
+function boxesGeo(list) {
+  const pos = [], nor = [], idx = [];
+  const F = [ // 每一面：法向量、四個角（0/1 取 x0/x1…）
+    [[1, 0, 0], [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]]], [[-1, 0, 0], [[0, 1, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]]],
+    [[0, 1, 0], [[1, 1, 0], [0, 1, 0], [0, 1, 1], [1, 1, 1]]], [[0, -1, 0], [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]]],
+    [[0, 0, 1], [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]]], [[0, 0, -1], [[0, 1, 0], [1, 1, 0], [1, 0, 0], [0, 0, 0]]]];
+  list.forEach(b => F.forEach(([n, cs]) => {
+    const base = pos.length / 3;
+    cs.forEach(c => { const x = c[0] ? b[3] : b[0], y = c[1] ? b[4] : b[1], z = c[2] ? b[5] : b[2]; pos.push(x, z, -y); nor.push(n[0], n[2], -n[1]); });
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }));
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setIndex(idx);
+  return g;
+}
+function stairGeo(s) {
+  const sh = new THREE.Shape(), a = s.sec;
+  sh.moveTo(a[0], a[1]); for (let i = 2; i < a.length; i += 2) sh.lineTo(a[i], a[i + 1]);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: s.c1 - s.c0, bevelEnabled: false });
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const u = p.getX(i), z = p.getY(i), c = s.c0 + p.getZ(i);
+    const X = s.ax ? s.w + s.sg * u : c, Y = s.ax ? c : s.w + s.sg * u;
+    p.setXYZ(i, X, z, -Y);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+function geomOf(m) {
+  if (m.st) return stairGeo(m.st);
+  if (m.bs) return boxesGeo(m.bs);
+  if (m.b) return boxesGeo([m.b]);
+  return null;
+}
+
+const MAT = {};
+function matOf(kind, mode) {
+  const key = kind + '|' + mode; if (MAT[key]) return MAT[key];
+  const c = new THREE.Color(KIND_COLOR[kind] || '#999'), pr = KIND_PRI[kind] || 0;
+  const o = { color: c, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1 + pr, polygonOffsetUnits: 1 + pr * 2 };
+  if (mode === 'ghost') Object.assign(o, { transparent: true, opacity: 0.08, depthWrite: false });
+  else if (mode === 'hot') Object.assign(o, { color: new THREE.Color('#F08C3A'), emissive: new THREE.Color('#5a2200') });
+  else if (mode === 'sel') Object.assign(o, { color: new THREE.Color('#F2C230'), emissive: new THREE.Color('#4a3a00') });
+  else if (mode === 'glass') Object.assign(o, { transparent: true, opacity: 0.16, depthWrite: false });
+  return MAT[key] = new THREE.MeshLambertMaterial(o);
+}
+let EDGE, EDGE_GHOST;
+function build() {
+  EDGE = new THREE.LineBasicMaterial({ color: 0x33414B, transparent: true, opacity: 0.5 });
+  EDGE_GHOST = new THREE.LineBasicMaterial({ color: 0x33414B, transparent: true, opacity: 0.06 });
+  (M.m || []).forEach(m => {
+    const geo = geomOf(m); if (!geo) return;
+    const mesh = new THREE.Mesh(geo, matOf(m.k, 'n')); mesh.userData.m = m;
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), EDGE);
+    root.add(mesh); root.add(edges); items.push({ m, mesh, edges });
+  });
+}
+
+// ---------- 顯示哪些、什麼顏色 ----------
+function floorsList() {
+  const named = (M.floors || []).map(f => f.n), seen = new Set((M.m || []).map(m => m.f));
+  return named.filter(f => seen.has(f)).concat([...seen].filter(f => f && !named.includes(f)));
+}
+function pourGroups(p) { return String(p.part || '').split(/[+＋、,]/).map(s => s.trim()).filter(Boolean); }
+function inPour(m) { return !!st.pour && st.pour.groups.includes(m.gp); }
+function apply() {
+  const pourOn = !!st.pour;
+  items.forEach(it => {
+    const m = it.m;
+    let vis = st.kinds.has(m.k) && (st.floor === '全部' || m.f === st.floor);
+    if (pourOn) vis = st.kinds.has(m.k) || inPour(m);
+    if (st.rebar) vis = (m === st.rebar);
+    it.mesh.visible = it.edges.visible = vis;
+    let mode = 'n';
+    if (st.rebar) mode = 'glass';
+    else if (st.sel === m) mode = 'sel';
+    else if (pourOn) mode = inPour(m) ? 'hot' : 'ghost';
+    it.mesh.material = matOf(m.k, mode);
+    it.edges.material = mode === 'ghost' ? EDGE_GHOST : EDGE;
+  });
+  drawRebar();
+  renderChips(); renderSide(); needs = true;
+}
+
+// ---------- 相機：自己寫的轉動、縮放、移動（手機、滑鼠都能用） ----------
+const cam = { target: null, dist: 3000, theta: -0.75, phi: 1.05 };
+function placeCamera() {
+  const s = Math.sin(cam.phi), t = cam.target;
+  camera.position.set(t.x + cam.dist * s * Math.sin(cam.theta), t.y + cam.dist * Math.cos(cam.phi), t.z + cam.dist * s * Math.cos(cam.theta));
+  camera.lookAt(t);
+  camera.near = Math.max(1, cam.dist / 300); camera.far = cam.dist * 50; camera.updateProjectionMatrix();
+  needs = true;
+}
+function fitTo(objs, keepAngle) {
+  const box = new THREE.Box3(); objs.forEach(o => box.expandByObject(o));
+  if (box.isEmpty()) return;
+  const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
+  cam.target = c;
+  cam.dist = r / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * (camera.aspect < 1 ? 1.1 / Math.sqrt(camera.aspect) : 1.0);
+  if (!keepAngle) { cam.theta = -0.75; cam.phi = 1.05; }
+  placeCamera();
+}
+function visibleObjs() { return items.filter(it => it.mesh.visible && it.mesh.material.opacity !== 0.08).map(it => it.mesh); }
+
+const ptrs = new Map(); let downAt = null;
+function bindInput() {
+  cam.target = new THREE.Vector3();
+  el.addEventListener('contextmenu', e => e.preventDefault());
+  el.addEventListener('pointerdown', e => {
+    try { el.setPointerCapture(e.pointerId); } catch (x) { }
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    downAt = ptrs.size === 1 ? { x: e.clientX, y: e.clientY, t: performance.now(), moved: false, btn: e.button, shift: e.shiftKey } : (downAt && Object.assign(downAt, { moved: true }));
+    hideHint();
+  });
+  el.addEventListener('pointermove', e => {
+    if (!ptrs.has(e.pointerId)) return;
+    const prev = ptrs.get(e.pointerId), cur = { x: e.clientX, y: e.clientY };
+    if (ptrs.size === 1 && downAt) {
+      if (Math.hypot(cur.x - downAt.x, cur.y - downAt.y) > 6) downAt.moved = true;
+      if (downAt.moved) {
+        const dx = cur.x - prev.x, dy = cur.y - prev.y;
+        if (downAt.btn === 2 || downAt.btn === 1 || downAt.shift) pan(dx, dy);
+        else { cam.theta -= dx * 0.008; cam.phi = Math.min(Math.PI - 0.05, Math.max(0.05, cam.phi - dy * 0.008)); placeCamera(); }
+      }
+    } else if (ptrs.size === 2) {
+      const ids = [...ptrs.keys()], a = ptrs.get(ids[0]), b = ptrs.get(ids[1]);
+      const a2 = e.pointerId === ids[0] ? cur : a, b2 = e.pointerId === ids[1] ? cur : b;
+      const d1 = Math.hypot(a.x - b.x, a.y - b.y), d2 = Math.hypot(a2.x - b2.x, a2.y - b2.y);
+      if (d1 > 0 && d2 > 0) cam.dist *= d1 / d2;
+      pan(((a2.x + b2.x) - (a.x + b.x)) / 2, ((a2.y + b2.y) - (a.y + b.y)) / 2);
+    }
+    ptrs.set(e.pointerId, cur);
+  });
+  const end = e => {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.delete(e.pointerId);
+    if (downAt && !downAt.moved && ptrs.size === 0 && performance.now() - downAt.t < 600 && downAt.btn === 0) pick(e.clientX, e.clientY);
+    if (ptrs.size === 0) downAt = null;
+  };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+  el.addEventListener('wheel', e => { e.preventDefault(); cam.dist *= Math.exp(e.deltaY * 0.0012); placeCamera(); hideHint(); }, { passive: false });
+  el.addEventListener('dblclick', () => fitTo(st.rebar ? [...rebarGroup.children] : visibleObjs(), true));
+  addEventListener('resize', layout);
+}
+function pan(dx, dy) {
+  const h = el.clientHeight || 1, k = 2 * cam.dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / h;
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0), up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+  cam.target.addScaledVector(right, -dx * k).addScaledVector(up, dy * k); placeCamera();
+}
+const ray = { r: null };
+function pick(x, y) {
+  if (st.rebar) return;
+  if (!ray.r) ray.r = new THREE.Raycaster();
+  const r = el.getBoundingClientRect();
+  ray.r.setFromCamera(new THREE.Vector2((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1), camera);
+  const hits = ray.r.intersectObjects(items.filter(it => it.mesh.visible && it.mesh.material.opacity !== 0.08).map(it => it.mesh), false);
+  st.sel = hits.length ? hits[0].object.userData.m : null;
+  if (st.sel) st.sideMin = false;
+  apply();
+}
+function hideHint() { const h = document.getElementById('hint'); if (h) h.style.opacity = 0; }
+
+// ---------- 配筋（照配筋表的字和柱斷面圖長出鋼筋，示意） ----------
+const segs = { main: [], tie: [] };
+function bar(kind, a, b, r) { segs[kind].push([a, b, r]); }   // a、b：CAD 座標 [x,y,z]
+function loop(pts, r) { for (let i = 0; i < pts.length; i++) bar('tie', pts[i], pts[(i + 1) % pts.length], r); }
+function flushBars() {
+  const cyl = new THREE.CylinderGeometry(1, 1, 1, 10, 1);
+  const mats = { main: new THREE.MeshLambertMaterial({ color: 0xB0412E }), tie: new THREE.MeshLambertMaterial({ color: 0x2F6FB2 }) };
+  const up = new THREE.Vector3(0, 1, 0), A = new THREE.Vector3(), B = new THREE.Vector3(), q = new THREE.Quaternion(), mtx = new THREE.Matrix4(), sc = new THREE.Vector3();
+  ['main', 'tie'].forEach(k => {
+    const list = segs[k]; if (!list.length) return;
+    const im = new THREE.InstancedMesh(cyl, mats[k], list.length);
+    list.forEach(([a, b, r], i) => {
+      A.set(a[0], a[2], -a[1]); B.set(b[0], b[2], -b[1]);
+      const len = A.distanceTo(B) || 0.01;
+      q.setFromUnitVectors(up, B.clone().sub(A).normalize()); sc.set(r, len, r);
+      mtx.compose(A.clone().add(B).multiplyScalar(0.5), q, sc); im.setMatrixAt(i, mtx);
+    });
+    im.computeBoundingSphere(); im.computeBoundingBox && im.computeBoundingBox();
+    rebarGroup.add(im);
+  });
+  segs.main = []; segs.tie = [];
+}
+function zones(z0, z1, endLen, s1, s2) { // 端部用 s1、中間用 s2 的位置
+  const out = []; let z = z0 + 5;
+  while (z < z1 - 3) { out.push(z); z += (z - z0 < endLen || z1 - z < endLen) ? s1 : s2; }
+  return out;
+}
+function drawRebar() {
+  rebarGroup.clear();
+  const m = st.rebar, R = m && m.r && M.rb ? M.rb[m.r] : null; if (!R) return;
+  const [x0, y0, z0, x1, y1, z1] = m.b, dx = x1 - x0, dy = y1 - y0, cv = 4;
+  if (R.t === '柱') {
+    const d = barDia(R.main), tie = stirParse(R.tieEnd) || stirParse(R.tieMid) || { d: 1.27, s: 15 }, mid = stirParse(R.tieMid) || tie;
+    let dots = (R.dots || []).map(p => [x0 + p[0] * dx, y0 + p[1] * dy]);
+    if (!dots.length) {   // 沒有斷面圖：主筋照支數沿四邊排
+      const n = Math.max(4, num((R.main || '').split('-')[0]) || 8), ix0 = x0 + cv + tie.d + d / 2, ix1 = x1 - cv - tie.d - d / 2, iy0 = y0 + cv + tie.d + d / 2, iy1 = y1 - cv - tie.d - d / 2;
+      let nx = Math.max(2, Math.round((n + 4) / 2 * dx / (dx + dy))), ny = Math.max(2, (n + 4) / 2 - nx);
+      for (let i = 0; i < nx; i++) { const x = ix0 + (ix1 - ix0) * i / (nx - 1); dots.push([x, iy0], [x, iy1]); }
+      for (let j = 1; j < ny - 1; j++) { const y = iy0 + (iy1 - iy0) * j / (ny - 1); dots.push([ix0, y], [ix1, y]); }
+    }
+    dots.forEach(p => bar('main', [p[0], p[1], z0], [p[0], p[1], z1], d / 2));
+    const loops = (R.loops && R.loops.length) ? R.loops.map(l => { const pts = []; for (let i = 0; i + 1 < l.length; i += 2) pts.push([x0 + l[i] * dx, y0 + l[i + 1] * dy]); return pts; })
+      : [[[x0 + cv, y0 + cv], [x1 - cv, y0 + cv], [x1 - cv, y1 - cv], [x0 + cv, y1 - cv]]];
+    const lines = (R.lines || []).map(l => [[x0 + l[0] * dx, y0 + l[1] * dy], [x0 + l[2] * dx, y0 + l[3] * dy]]);
+    const H = z1 - z0, endLen = Math.max(Math.max(dx, dy), H / 6, 50);
+    zones(z0, z1, endLen, tie.s, mid.s).forEach(z => {
+      loops.forEach(pts => loop(pts.map(p => [p[0], p[1], z]), tie.d / 2));
+      lines.forEach(([a, b]) => bar('tie', [a[0], a[1], z], [b[0], b[1], z], tie.d / 2));
+    });
+  } else if (R.t === '梁') {
+    const alongX = dx >= dy, L0 = alongX ? x0 : y0, L1 = alongX ? x1 : y1, W0 = alongX ? y0 : x0, W1 = alongX ? y1 : x1, L = L1 - L0;
+    const P3 = (l, w, z) => alongX ? [l, w, z] : [w, l, z];
+    const sAll = (R.stir || []).map(stirParse), sMid = sAll[1] || sAll[0] || sAll[2] || { d: 1.27, s: 15, n: 0 };
+    const ds = sMid.d;
+    const row = (sizeText, counts, lens, top) => {
+      const d = barDia(sizeText), n = counts.map(num), N = Math.max(...n, 0); if (!N) return;
+      const cont = Math.min(...n.map(v => v || 0));
+      const perLayer = Math.max(2, Math.floor((W1 - W0 - 2 * cv - 2 * ds - d) / (2.5 * d)) + 1);
+      const slot = i => { const layer = Math.floor(i / perLayer), k = i % perLayer, cnt = Math.min(perLayer, N - layer * perLayer); const w0 = W0 + cv + ds + d / 2, w1 = W1 - cv - ds - d / 2; const w = cnt === 1 ? (w0 + w1) / 2 : w0 + (w1 - w0) * k / (cnt - 1); const zz = top ? z1 - cv - ds - d / 2 - layer * 2.5 * d : z0 + cv + ds + d / 2 + layer * 2.5 * d; return [w, zz]; };
+      const order = spread(N), contSlots = order.slice(0, cont), rest = order.slice(cont);
+      contSlots.forEach(i => { const [w, z] = slot(i); bar('main', P3(L0, w, z), P3(L1, w, z), d / 2); });
+      const lenL = num(lens[0]) || L / (top ? 4 : 5), lenR = num(lens[1]) || L / (top ? 4 : 5);
+      rest.slice(0, Math.max(0, n[0] - cont)).forEach(i => { const [w, z] = slot(i); bar('main', P3(L0, w, z), P3(L0 + Math.min(lenL, L / 2), w, z), d / 2); });
+      rest.slice(0, Math.max(0, n[2] - cont)).forEach(i => { const [w, z] = slot(i); bar('main', P3(L1 - Math.min(lenR, L / 2), w, z), P3(L1, w, z), d / 2); });
+      rest.slice(0, Math.max(0, n[1] - cont)).forEach(i => { const [w, z] = slot(i); bar('main', P3(L0 + L / 5, w, z), P3(L1 - L / 5, w, z), d / 2); });
+    };
+    row(R.topSize, R.top || [], R.topLen || [], true);
+    row(R.botSize, R.bot || [], R.botLen || [], false);
+    const side = /(\d+)\s*-\s*#\s*(\d+)/.exec(R.side || '');
+    if (side) {
+      const n = +side[1], d = (BAR_MM[+side[2]] || 12.7) / 10, za = z0 + cv + 6, zb = z1 - cv - 6;
+      for (let i = 1; i <= n; i++) { const z = za + (zb - za) * i / (n + 1); [W0 + cv + ds + d / 2, W1 - cv - ds - d / 2].forEach(w => bar('main', P3(L0, w, z), P3(L1, w, z), d / 2)); }
+    }
+    const left = sAll[0] && sAll[0].n ? sAll[0].n * sAll[0].s : 0, right = sAll[2] && sAll[2].n ? sAll[2].n * sAll[2].s : 0;
+    const a0 = W0 + cv + ds / 2, a1 = W1 - cv - ds / 2, b0 = z0 + cv + ds / 2, b1 = z1 - cv - ds / 2;
+    for (let l = L0 + 5; l < L1 - 3;) {
+      loop([P3(l, a0, b0), P3(l, a1, b0), P3(l, a1, b1), P3(l, a0, b1)], ds / 2);
+      l += (left && l - L0 < left) ? sAll[0].s : (right && L1 - l < right) ? sAll[2].s : sMid.s;
+    }
+  }
+  flushBars();
+}
+function spread(N) { // 先排兩邊、再平均插進中間：連續的那幾支分散開來
+  const order = [], used = new Set();
+  const add = i => { if (i >= 0 && i < N && !used.has(i)) { used.add(i); order.push(i); } };
+  add(0); add(N - 1);
+  for (let parts = 2; order.length < N; parts *= 2) for (let k = 1; k < parts; k += 2) add(Math.round((N - 1) * k / parts));
+  return order;
+}
+
+// ---------- 畫面：上面的分類、旁邊的灌漿區／構件 ----------
+function chip(text, on, cls, fn, color) {
+  const b = document.createElement('span'); b.className = 'chip ' + (on ? 'on' : cls || '');
+  b.innerHTML = (color ? '<i style="background:' + color + '"></i>' : '') + esc(text); b.onclick = fn; return b;
+}
+function renderChips() {
+  const F = document.getElementById('floors'), K = document.getElementById('kinds');
+  F.innerHTML = ''; K.innerHTML = '';
+  ['全部', ...floorsList()].forEach(f => F.appendChild(chip(f === '全部' ? '整棟' : f, st.floor === f && !st.pour, '', () => { st.floor = f; st.sel = null; st.pour = null; st.rebar = null; apply(); fitTo(visibleObjs(), true); })));
+  const present = KIND_ORDER.filter(k => (M.m || []).some(m => m.k === k));
+  present.forEach(k => K.appendChild(chip(k, false, st.kinds.has(k) ? '' : 'off', () => { st.kinds.has(k) ? st.kinds.delete(k) : st.kinds.add(k); if (!st.kinds.size) present.forEach(x => st.kinds.add(x)); apply(); }, KIND_COLOR[k])));
+  layout();
+}
+function rebarOf(m) { return m && m.r && M.rb ? M.rb[m.r] : null; }
+function lmr(a, size) { const t = (a || []).map(v => v ? v + (size ? '-' + size : '') : '—'); return '左 ' + t[0] + '・中 ' + t[1] + '・右 ' + t[2]; }
+function rebarRows(m) {
+  const R = rebarOf(m), rows = []; if (!R) return rows;
+  if (R.t === '柱') {
+    if (R.size) rows.push(['柱尺寸', R.size]);
+    if (R.main) rows.push(['主筋', R.main]);
+    const ties = [['端部', R.tieEnd], ['中央', R.tieMid], ['接頭', R.tieJoint]].filter(x => x[1]);
+    if (ties.length) rows.push(['箍筋', ties.map(x => x[0] + ' ' + x[1]).join('・')]);
+    if (R.cx || R.cy) rows.push(['繫筋', (R.cx ? '橫 ' + R.cx + ' 支' : '') + (R.cx && R.cy ? '・' : '') + (R.cy ? '直 ' + R.cy + ' 支' : '')]);
+  } else {
+    if (R.size) rows.push(['梁尺寸', R.size + (R.kind ? '（' + R.kind + '）' : '')]);
+    if ((R.top || []).some(Boolean)) rows.push(['上層筋', lmr(R.top, R.topSize)]);
+    if ((R.bot || []).some(Boolean)) rows.push(['下層筋', lmr(R.bot, R.botSize)]);
+    if ((R.stir || []).some(Boolean)) rows.push(['箍筋', R.stir[0] || R.stir[2] ? lmr(R.stir) : R.stir[1]]);
+    if (R.side) rows.push(['腰筋', R.side]);
+  }
+  return rows;
+}
+function table(rows) { return '<table>' + rows.map(r => '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>').join('') + '</table>'; }
+function renderSide() {
+  const T = document.getElementById('sideTitle'), B = document.getElementById('sideBody'), side = document.getElementById('side');
+  side.classList.toggle('min', st.sideMin);
+  document.getElementById('tog').textContent = st.sideMin ? '打開' : '收起';
+  let h = '';
+  if (st.rebar) {
+    const m = st.rebar;
+    T.textContent = '🔩 ' + m.f + ' ' + m.k + ' ' + (m.c || '') + ' 的配筋';
+    h += '<div class="card">' + table(rebarRows(m))
+      + '<div class="muted" style="margin-top:8px"><span style="color:#B0412E">■</span> 主筋、腰筋　<span style="color:#2F6FB2">■</span> 箍筋、繫筋<br>照配筋表畫的示意；彎鉤、搭接、續接的位置以施工圖為準。</div>'
+      + '<div class="row"><button class="btn solid" id="exitRebar">‹ 回到整棟</button></div></div>';
+  } else if (st.sel) {
+    const m = st.sel, rows = rebarRows(m), canRebar = rows.length && (m.k === '柱' || m.k === '梁' || m.k === '地梁');
+    T.textContent = '構件';
+    h += '<div class="card"><div class="t"><span class="k" style="background:' + (KIND_COLOR[m.k] || '#999') + '">' + esc(m.k) + '</span>' + esc(m.n || m.c || '') + '</div>'
+      + table([['樓層', m.f], ['灌漿區', m.gp]].concat(m.v ? [['混凝土', m.v.toFixed(2) + ' m³']] : []).concat(rows))
+      + '<div class="row">' + (canRebar ? '<button class="btn solid" id="showRebar">🔩 看配筋</button>' : (m.k === '柱' || m.k === '梁' || m.k === '地梁') && !m.dc ? '<span class="muted">這支在配筋表找不到</span>' : '')
+      + '<button class="btn ghost" id="unsel">取消</button></div></div>';
+    h += pourList();
+  } else {
+    T.textContent = '🚚 灌漿區';
+    h += pourList();
+  }
+  B.innerHTML = h;
+  const on = (id, fn) => { const x = document.getElementById(id); if (x) x.onclick = fn; };
+  on('exitRebar', () => { st.rebar = null; apply(); fitTo(visibleObjs(), false); });
+  on('showRebar', () => { st.rebar = st.sel; st.sel = null; apply(); fitTo([...rebarGroup.children], false); cam.phi = 1.2; cam.dist *= camera.aspect < 1 ? 0.7 : 1.05; placeCamera(); });
+  on('unsel', () => { st.sel = null; apply(); });
+  B.querySelectorAll('.pour').forEach(p => p.onclick = () => {
+    const pr = pours.find(x => x.id === p.dataset.id); st.pour = st.pour === pr ? null : pr; st.sel = null; st.rebar = null;
+    if (st.pour) { st.pour.groups = pourGroups(st.pour); st.floor = '全部'; }
+    apply();
+    const hot = items.filter(it => inPour(it.m)).map(it => it.mesh);
+    fitTo(st.pour && hot.length ? hot : visibleObjs(), true);
+  });
+}
+function pourList() {
+  if (!pours.length) return '<div class="muted">這個工地還沒有上傳灌漿數量。</div>';
+  const t = new Date(); const today = t.getFullYear() + '-' + ('0' + (t.getMonth() + 1)).slice(-2) + '-' + ('0' + t.getDate()).slice(-2);
+  const list = pours.slice().sort((a, b) => (a.date >= today) !== (b.date >= today) ? (a.date >= today ? -1 : 1) : a.date >= today ? (a.date < b.date ? -1 : 1) : (a.date > b.date ? -1 : 1));
+  return '<div class="muted" style="margin:2px 0 8px">點一筆，3D 會把那次灌的地方亮起來（橘色）</div>' + list.map(p => {
+    const n = items.filter(it => pourGroups(p).includes(it.m.gp)).length;
+    return '<div class="pour' + (st.pour === p ? ' on' : '') + '" data-id="' + esc(p.id) + '"><b>' + esc(roc(p.date) || '沒寫日期') + '　' + esc(p.part) + '</b><div class="m">'
+      + [p.m3 ? p.m3 + ' m³' : '', p.trucks ? '約 ' + p.trucks + ' 車' : '', n ? n + ' 件' : '3D 裡找不到這一區'].filter(Boolean).join('・') + '</div></div>';
+  }).join('');
+}
+document.getElementById('tog').onclick = () => { st.sideMin = !st.sideMin; renderSide(); layout(); };
+document.getElementById('reset').onclick = () => {
+  if (!M) return;
+  st.floor = '全部'; st.sel = null; st.pour = null; st.rebar = null; KIND_ORDER.forEach(k => st.kinds.add(k)); apply(); fitTo(visibleObjs(), false);
+};
+
+function layout() {
+  if (!renderer) return;
+  const top = document.getElementById('top').offsetHeight, side = document.getElementById('side'), view = document.getElementById('view');
+  document.documentElement.style.setProperty('--topH', top + 'px');
+  const sw = WIDE() ? side.offsetWidth : 0;
+  view.style.top = top + 'px'; view.style.right = sw + 'px';
+  view.style.bottom = WIDE() ? '0' : side.offsetHeight + 'px';
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / Math.max(1, h);
+  if (cam.target) placeCamera();
+  const hint = document.getElementById('hint');
+  hint.style.bottom = (WIDE() ? 18 : side.offsetHeight + 12) + 'px'; hint.style.left = (w / 2) + 'px';
+}
+function frame() { if (needs) { needs = false; renderer.render(scene, camera); } requestAnimationFrame(frame); }
+
+// ---------- 截圖、範例 ----------
+function shots() {
+  const s = P.get('shot'); if (!s) return;
+  hideHint(); document.getElementById('hint').style.display = 'none';
+  const find = (k, f) => (M.m || []).find(m => m.k === k && (!f || m.f === f) && m.r);
+  if (s === 'pour' && pours.length) { const p = pours.find(x => items.some(it => pourGroups(x).includes(it.m.gp))) || pours[0]; p.groups = pourGroups(p); st.pour = p; apply(); fitTo(items.filter(it => inPour(it.m)).map(it => it.mesh), true); }
+  if (s === 'floor') { st.floor = floorsList()[1] || floorsList()[0]; apply(); fitTo(visibleObjs(), true); }
+  if (s === 'sel' || s === 'rebar' || s === 'beam') {
+    const byCode = k => P.get('c') && (M.m || []).find(m => m.k === k && m.c === P.get('c') && (!P.get('f') || m.f === P.get('f')) && m.r);
+    const m = s === 'beam' ? (byCode('梁') || byCode('地梁') || find('梁', P.get('f')) || find('地梁')) : (byCode('柱') || find('柱', P.get('f')));
+    if (!m) return;
+    st.sel = m; apply();
+    if (s !== 'sel') { st.rebar = m; st.sel = null; apply(); fitTo([...rebarGroup.children], false); cam.phi = 1.2; cam.dist *= camera.aspect < 1 ? 0.7 : 1.05; placeCamera(); }
+  }
+}
+function demoModel() {
+  const m = [], floors = [{ n: '1F', z: 0, h: 380 }, { n: '2F', z: 380, h: 360 }, { n: '3F', z: 740, h: 360 }, { n: 'RF', z: 1100, h: 0 }];
+  const xs = [0, 650, 1300, 1950], ys = [0, 600, 1200]; let n = 0;
+  const add = (k, f, gp, c, nm, b, r, v) => m.push({ i: ++n, k, f, gp, c, n: nm, b, r, v });
+  xs.forEach(x => ys.forEach(y => add('基礎', '1F', '基礎', 'F1', 'F1(t=100)', [x - 110, y - 110, -250, x + 110, y + 110, -150])));
+  ys.forEach(y => add('地梁', '1F', '基礎', 'FG1', 'FG1(60x150)', [xs[0] + 30, y - 30, -165, xs[3] - 30, y + 30, -15], '梁|1F|FG1'));
+  add('版', '1F', '1F', 'S0', 'S0(t=15)', [xs[0] - 30, ys[0] - 30, -15, xs[3] + 30, ys[2] + 30, 0]);
+  for (let fi = 0; fi < 3; fi++) {
+    const f = floors[fi], z0 = f.z, z1 = floors[fi + 1].z, up = floors[fi + 1].n;
+    xs.forEach(x => ys.forEach(y => add('柱', f.n, up, 'C1', 'C1(70x70)', [x - 35, y - 35, z0, x + 35, y + 35, z1], '柱|1F|C1', 0.7 * 0.7 * (z1 - z0) / 100)));
+    ys.forEach(y => add('梁', up, up, 'G1', 'G1(50x70)', [xs[0] + 35, y - 25, z1 - 70, xs[3] - 35, y + 25, z1], '梁|2F|G1'));
+    add('版', up, up, 'S1', 'S1(t=15)', [xs[0] - 35, ys[0] - 35, z1 - 15, xs[3] + 35, ys[2] + 35, z1]);
+  }
+  pours = [{ id: 'p1', date: '2026-11-12', part: '2F', m3: '96.0', trucks: '11' }, { id: 'p2', date: '2026-10-28', part: '基礎', m3: '120.0', trucks: '14' }];
+  return { v: 1, site: '範例工地', made: '2026-11-10 10:30', floors, m,
+    rb: { '柱|1F|C1': { t: '柱', size: '70x70', main: '16-#8', tieEnd: '#4@10', tieMid: '#4@15', cx: '3', cy: '3' },
+      '梁|2F|G1': { t: '梁', size: '50x70', kind: '大梁', topSize: '#8', botSize: '#8', top: ['6', '3', '6'], bot: ['3', '5', '3'], topLen: ['', ''], botLen: ['', ''], stir: ['16-#4@10', '#4@15', '16-#4@10'], side: '2-#4' },
+      '梁|1F|FG1': { t: '梁', size: '60x150', kind: '地梁', topSize: '#8', botSize: '#8', top: ['5', '5', '5'], bot: ['5', '5', '5'], topLen: ['', ''], botLen: ['', ''], stir: ['', '#4@15', ''], side: '4-#4' } } };
+}
+
+// ---------- 開始（放最後：上面的 const、let 都準備好了才跑） ----------
+try {
+  say('載入中…');
+  const [three, model] = await Promise.all([import(THREE_URL), loadModel()]);
+  THREE = three; M = model;
+  start();
+} catch (e) {
+  const t = e && e.error === 'NONE' ? '這個工地還沒有 3D。<br><span class="muted">要在 BricsCAD「混凝土」按「全部樓層」，再按「上傳 3D 到工地App」。</span>' : esc(errText(e));
+  say('<div>' + t + '</div><button class="btn ghost" onclick="location.reload()">再試一次</button>');
+  console.error(e);
+}
+</script>
+</body>
+</html>
