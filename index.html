@@ -228,7 +228,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10e';
+var WEB_VERSION = '11/10f';
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 var UNFILED = '未分組';
 var MAX_PHOTOS = 12, MAX_MATS = 9, MAX_RECEIPTS = 12;
@@ -408,7 +408,9 @@ function weatherGreeting(w, now) {
 
 // ---------- 我的工作（施工人員傳的）用的字 ----------
 function windowDays() { var n = S.s.role === '管理者' ? 7 : S.s.days; var out = []; for (var i = 0; i < n; i++) out.push(addDays(S.s.today, -i)); return out; }
-function hoursLabel(h) { h = String(h).trim(); return h === '1' || h === '1.0' ? '全天' : h === '0.5' ? '半天' : h + ' 工'; }
+function hoursLabel(h) { h = String(h == null ? '' : h).trim(); return !h ? '' : h === '1' || h === '1.0' ? '全天' : h === '0.5' ? '半天' : h + ' 工'; }
+/** 「放樣工程｜全天」；工數空的（公司、施工人員看別人的，收件服務拿掉了；使用者 2026-11-10）就只有大項 */
+function catHours(c, h) { var l = hoursLabel(h); return l ? c + '｜' + l : c; }
 function matText(m) { return m.vendor + '-' + m.qty + m.unit; }
 function reqLabel(s) { return s === '待確認' ? '改過了：等管理者同意' : s === '已同意' ? '改過了：管理者已同意' : s === '不同意' ? '改過了：管理者沒同意（維持原本的）' : s; }
 function reqColor(s) { return s === '待確認' ? 'var(--warn)' : s === '不同意' ? 'var(--red)' : 'var(--green)'; }
@@ -770,7 +772,7 @@ function entryRow(e) {
   if (e.materials && e.materials.length) x.push('材料 ' + e.materials.map(matText).join('、'));
   var rc = (e.receipts || []).length;
   return '<div class="entry' + (e.mine ? ' mine' : '') + '" data-act="open" data-v="' + esc(e.id) + '"><div class="who2">' + esc(e.name) + '</div><div class="body">' +
-    '<div class="sub">' + esc(e.category + '｜' + hoursLabel(e.hours) + (e.proxy ? '｜管理者代填' : '')) + '</div>' +
+    '<div class="sub">' + esc(catHours(e.category, e.hours) + (e.proxy ? '｜管理者代填' : '')) + '</div>' +
     (e.site === UNFILED ? '<div class="sub" style="color:var(--warn);font-weight:bold">他打的工地：' + esc(e.siteText || '（沒打）') + '</div>' : '') +
     '<div>' + esc(e.text || '（沒寫內容）') + '</div>' +
     (x.length ? '<div class="sub" style="color:var(--navy)">' + esc(x.join('｜')) + '</div>' : '') +
@@ -867,7 +869,7 @@ function renderView() {
   var h = topBar(e.name + ' 的工作', 'work') + '<div class="wrap">';
   if (e.proxy) h += '<div class="box"><b style="color:var(--warn)">管理者幫' + esc(e.name) + '填的</b>' + (e.reqStatus ? '<div style="font-weight:bold;color:' + reqColor(e.reqStatus) + '">' + esc(reqLabel(e.reqStatus)) + '</div>' : '') + '</div>';
   h += '<div class="card"><div class="sub" style="font-size:15px">' + md(e.date) + '（' + dayName(e.date) + '）' + esc(e.site) + (e.siteText ? '（他打的：' + esc(e.siteText) + '）' : '') + '</div>' +
-    '<div style="font-weight:bold;margin-top:4px">' + esc(e.category + '｜' + hoursLabel(e.hours)) + '</div><div style="font-size:19px;margin-top:4px;white-space:pre-wrap">' + esc(e.text || '（沒寫內容）') + '</div>' +
+    '<div style="font-weight:bold;margin-top:4px">' + esc(catHours(e.category, e.hours)) + '</div><div style="font-size:19px;margin-top:4px;white-space:pre-wrap">' + esc(e.text || '（沒寫內容）') + '</div>' +
     (e.weather ? '<div style="color:var(--navy);margin-top:6px">天氣：' + esc(e.weather) + '</div>' : '') +
     (e.materials && e.materials.length ? '<div style="color:var(--navy)">材料/機具：' + esc(e.materials.map(matText).join('、')) + '</div>' : '') + '</div>';
   h += '<div class="full">' + (e.photos || []).map(function (id) { return '<img data-pid="' + esc(id) + '" alt="">'; }).join('') + '</div>';
@@ -1065,7 +1067,7 @@ function renderLogs() {
       if (head) h += '<div class="sub" style="font-size:14px">' + esc(head) + '</div>';
       item.lines.forEach(function (l) { h += '<div style="font-size:15px;line-height:21px">' + esc(l) + '</div>'; });
     }
-    wl.forEach(function (e) { h += '<div style="font-size:14.5px;color:var(--blue);line-height:20px;margin-top:3px;white-space:pre-wrap">👷 ' + esc(e.name + '（' + e.hours + '）：' + e.text) + '</div>'; });
+    wl.forEach(function (e) { h += '<div style="font-size:14.5px;color:var(--blue);line-height:20px;margin-top:3px;white-space:pre-wrap">👷 ' + esc(e.name + (String(e.hours || '').trim() ? '（' + e.hours + '）' : '') + '：' + e.text) + '</div>'; });
     var n = (log && log.photos ? log.photos.filter(function (p) { return p.category === c && p.driveId; }).length : 0) + wl.reduce(function (a, e) { return a + (e.photos || []).length; }, 0);
     if (n) h += '<div style="font-size:13px;color:var(--warn);margin-top:3px">📷 ' + n + ' 張（在最下面）</div>';
     h += '</div>';
