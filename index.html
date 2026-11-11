@@ -992,9 +992,9 @@ function weekCalCard(events) {
 }
 
 // 順序（使用者 2026-11-10「注意灌漿代辦發包，這樣排列」）：全部、注意事項、灌漿・施工單、待辦、發包；施工人員放最後（跟 App 一樣）
-var NEWS_GROUPS = [['全部', []], ['📢 注意事項', ['notice']], ['🚚 灌漿・施工單', ['pour', 'sheet', 'snote']], ['✅ 待辦', ['todo']], ['📋 派工', ['task']], ['🤝 發包', ['contract']], ['👷 施工人員', ['worker']]];
+var NEWS_GROUPS = [['全部', []], ['📢 注意事項', ['notice']], ['🚚 灌漿・施工單', ['pour', 'sheet', 'snote', 'rebar']], ['✅ 待辦', ['todo']], ['📋 派工', ['task']], ['🤝 發包', ['contract']], ['👷 施工人員', ['worker']]];
 var NEWS_ICON = { pour: ['🚚', '#F2994A'], sheet: ['📐', '#16A6A0'], contract: ['🤝', '#9B51E0'], worker: ['👷', '#2F80ED'], notice: ['📢', '#E5383B'], cal: ['📅', '#2F80ED'], todo: ['✅', '#1E8E5A'], mark: ['📍', '#E03131'],
-  task: ['📋', '#F28C28'], snote: ['📝', '#B08900'] };
+  task: ['📋', '#F28C28'], snote: ['📝', '#B08900'], rebar: ['🔩', '#7A3FB0'] };
 function newsTag(n) {
   switch (n.kind) {
     case 'cal': return n.tag === 'add' ? ['新增行程', '#1E9E6A'] : n.tag === 'del' ? ['行程取消', '#E5383B'] : n.tag === 'chg' ? ['行程改了', '#2F80ED'] : ['行程', '#2F80ED'];
@@ -1007,6 +1007,7 @@ function newsTag(n) {
     case 'mark': return [n.tag === 'done' ? '3D 改好了' : '3D 要改進', '#E03131'];
     case 'task': return [n.tag === 'got' ? '收到' : n.tag === 'done' ? '做好了' : '派工', '#F28C28'];
     case 'snote': return [n.tag === 'give' ? '給你看' : '施工單記號', '#B08900'];
+    case 'rebar': return ['鋼筋發布', '#7A3FB0'];   // BricsCAD 分批發布料單群組（使用者 2026-11-11）
     default: return ['消息', '#5D7486'];
   }
 }
@@ -1545,11 +1546,11 @@ function loadPhoto(attr, kind, id) {
  * 3D 結構（使用者 2026-11-10）：整頁蓋一個 3d.html（同一個網站，讀得到登入的代碼），關掉回到原本的工地頁。
  * 手機往回滑、按返回鍵也是關掉 3D（先記一筆瀏覽紀錄）。
  */
-function open3d() {
+function open3d(rel) {   // rel：鋼筋第幾批（點「鋼筋發布」消息進來，3D 打開整棟鋼筋、亮那一批）
   if ($('d3')) return;
   var d = document.createElement('div'); d.id = 'd3';
   d.style.cssText = 'position:fixed;inset:0;z-index:1000;background:#F4F6F7';
-  d.innerHTML = '<iframe src="3d.html?embed=1&site=' + encodeURIComponent(S.site) + (PCAPP ? '&app=pc' : '') + '" style="border:0;width:100%;height:100%;display:block" allow="fullscreen"></iframe>';
+  d.innerHTML = '<iframe src="3d.html?embed=1&site=' + encodeURIComponent(S.site) + (PCAPP ? '&app=pc' : '') + (rel ? '&rel=' + encodeURIComponent(rel) : '') + '" style="border:0;width:100%;height:100%;display:block" allow="fullscreen"></iframe>';
   document.body.appendChild(d); document.body.style.overflow = 'hidden';
   try { history.pushState({ d3: 1 }, ''); } catch (e) { }
 }
@@ -1886,6 +1887,7 @@ var ACT = {
       case 'contract': setSite(n.site); openOffice('contracts'); return;
       case 'todo': setSite(n.site); openTodo('hub'); return;
       case 'mark': if (isLead()) { setSite(n.site); open3d(); } return;   // 3D 上圈要改進的地方
+      case 'rebar': if (isLead()) { setSite(n.site); open3d(n.id); } return;   // 鋼筋第 N 批發布：打開 3D 亮那一批
       case 'task': if (isOffice()) { setSite(n.site); openTasks('hub'); } else { loadMyTasks(); render(); } return;   // 派工
       case 'snote': openSheetNote(n); return;   // 施工單記號：打開那份、跳到那一頁
       case 'worker': setSite(n.site); openWork('hub'); return;
