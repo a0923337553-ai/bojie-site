@@ -217,7 +217,7 @@ function num(s) { const v = parseFloat(String(s == null ? '' : s).split('+').red
 function stirParse(s) { const m = /(?:(\d+)\s*-\s*)?#\s*(\d+)\s*@\s*([\d.]+)/.exec(s || ''); return m ? { n: m[1] ? +m[1] : 0, d: (BAR_MM[+m[2]] || 12.7) / 10, s: +m[3] } : null; }
 function roc(ymd) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd || ''); if (!m) return ''; const d = new Date(+m[1], +m[2] - 1, +m[3]); return (m[1] - 1911) + '.' + m[2] + '.' + m[3] + '（' + '日一二三四五六'[d.getDay()] + '）'; }
 
-const st = { floor: '全部', kinds: new Set(KIND_ORDER), sel: null, pour: null, rebar: null, bars: false, sideMin: false };
+const st = { floor: '全部', kinds: new Set(KIND_ORDER), sel: null, pour: null, rebar: null, bars: false, sideMin: false, rels: new Set() };
 const WIDE = () => innerWidth >= 900;
 
 let THREE, renderer, scene, camera, root, rebarGroup, el;
@@ -241,6 +241,12 @@ function start() {
   document.getElementById('made').textContent = M.made ? '（' + String(M.made).slice(0, 10) + ' 匯出）' : '';
   document.getElementById('hint').textContent = matchMedia('(pointer:fine)').matches ? '左鍵轉動・右鍵移動・滾輪縮放・點一下看構件' : '單指轉動・雙指縮放／移動・點一下看構件';
   document.getElementById('side').style.display = '';
+  // 分批發布：預設選最新那一批；網址帶 rel=N（從「鋼筋第 N 批發布」通知點進來）＝打開整棟鋼筋、亮那一批
+  if (relMode()) {
+    const want = +(P.get('rel') || 0), L = relList();
+    st.rels = new Set([L.some(r => r.n === want) ? want : L[L.length - 1].n]); HOT = relHot();
+    if (want) { st.bars = true; st.floor = '全部'; }
+  }
   build(); bindInput(); bindMarking(); apply(); layout(); fitTo(visibleObjs(), false);
   say('');
   setTimeout(hideHint, 7000);
@@ -317,6 +323,13 @@ function floorsList() {
 }
 function pourGroups(p) { return String(p.part || '').split(/[+＋、,]/).map(s => s.trim()).filter(Boolean); }
 function inPour(m) { return !!st.pour && st.pour.groups.includes(m.gp); }
+/** 選了哪幾區（灌漿區、一起灌的）：ids＝點亮的卡片，groups＝這幾張合起來的灌漿區；沒選＝null */
+function setPours(ids) {
+  if (!ids || !ids.size) { st.pour = null; return; }
+  const groups = new Set();
+  ids.forEach(id => { const pr = zoneList().find(z => z.id === id) || pours.find(x => x.id === id); if (pr) (pr.groups || pourGroups(pr)).forEach(g => groups.add(g)); });
+  st.pour = { ids, groups: [...groups] };
+}
 function apply() {
   const pourOn = !!st.pour;
   items.forEach(it => {
@@ -327,7 +340,8 @@ function apply() {
     it.mesh.visible = it.edges.visible = vis;
     let mode = 'n';
     if (st.rebar) mode = 'glass';
-    else if (st.bars) mode = hasBars(m) ? (st.sel === m ? 'selg' : 'glass') : 'ghost';   // 整層鋼筋：混凝土變透明
+    // 整層鋼筋：混凝土變透明；分批發布時整棟都留著（還沒發布的也看得到混凝土）
+    else if (st.bars) mode = st.sel === m && hasBars(m) ? 'selg' : (hasBars(m) || relMode()) ? 'glass' : 'ghost';
     else if (st.sel === m) mode = 'sel';
     else if (pourOn) mode = inPour(m) ? 'hot' : 'ghost';
     it.mesh.material = matOf(m.k, mode);
@@ -667,17 +681,60 @@ const BAR_COLOR = { main: 0xB0412E, extra: 0xE07B1F, side: 0x8A5A2B, tie: 0x2F6F
 // 8 牆垂直筋（紅）、9 牆水平筋（橘）、10 版下層（紅）、11 版上層（紫）、12 牆工作筋（咖啡）：外掛 11/10 晚上起照牆出圖、版出圖匯出
 // 13 樓梯上層筋（紫）、14 斜面下層筋（紅）、15 平台下層筋（橘）、16 副筋（藍）：照樓梯配筋圖
 const BAR_KIND = ['main', 'extra', 'side', 'tie', 'main', 'tie', 'fbot', 'ftop', 'main', 'extra', 'fbot', 'ftop', 'side', 'ftop', 'fbot', 'extra', 'tie'];
-const segs = { main: [], extra: [], side: [], tie: [], fbot: [], ftop: [] };
-function bar(kind, a, b, r) { segs[kind].push([a, b, r]); }   // a、b：CAD 座標 [x,y,z]
+const segs = { main: [], extra: [], side: [], tie: [], fbot: [], ftop: [], old: [] };
+BAR_COLOR.old = 0xB7C0C8;   // 以前發布的那幾批：淡灰色
+let TONE = 'hot';            // 現在畫的這一支：'hot' 照原本的顏色、'old' 灰色
+function bar(kind, a, b, r) { segs[TONE === 'old' ? 'old' : kind].push([a, b, r]); }   // a、b：CAD 座標 [x,y,z]
+
+// ---------- 鋼筋分批發布（使用者 2026-11-11「選取這次出的鋼筋料單群組進行發布…鋼筋只會長到那裡…發布第二個群組時會跟前一個接上，但我依然可以很清楚知道這次發布的範圍」） ----------
+// 外掛在 3D 裡寫 rel（發布紀錄 [{n, at, groups}]）和每支鋼筋屬於哪個料單群組（rj 的 g、bars／lp 的 g、cpg）。
+// 沒有發布紀錄＝照以前全部畫；有了＝只畫發布過的群組，選的那幾批照原本的顏色、其他發布過的淡灰色，還沒發布的不畫（只有混凝土）。
+function relList() { return M && Array.isArray(M.rel) ? M.rel.filter(r => r && r.n) : []; }
+function relMode() { return relList().length > 0; }
+let REL_ALL = null, HOT = new Set();
+function relAllGroups() { if (!REL_ALL) { REL_ALL = new Set(); relList().forEach(r => (r.groups || []).forEach(g => REL_ALL.add(g))); } return REL_ALL; }
+function relHot() { const s = new Set(); relList().filter(r => st.rels.has(r.n)).forEach(r => (r.groups || []).forEach(g => s.add(g))); return s; }
+/** 這支鋼筋：'' 不畫（還沒發布）、'hot' 選的那幾批（或沒分批）、'old' 以前發布的 */
+function toneOf(g) {
+  if (!relMode()) return 'hot';
+  if (!g || !relAllGroups().has(g)) return '';
+  if (!st.rels.size) return 'hot';
+  return HOT.has(g) ? 'hot' : 'old';
+}
+/** 這一筆工作單有沒有任何一段發布了（沒有就當作沒有配筋） */
+function jobReleased(j) {
+  if (!relMode()) return true;
+  if (j._rel === undefined) {
+    const R = relAllGroups(), gs = [j.g].concat((j.bars || []).map(o => o.g), (j.lp || []).map(l => l.g), j.cpg || []);
+    j._rel = gs.some(g => g && R.has(g));
+  }
+  return j._rel;
+}
+function mdOf(at) { const m = /^\d{4}-(\d{2})-(\d{2})(?:[ T](\d{2}:\d{2}))?/.exec(at || ''); return m ? (+m[1]) + '/' + (+m[2]) + (m[3] ? ' ' + m[3] : '') : String(at || ''); }
+/** 點發布的那幾批（空的＝發布過的全部一樣顏色）：整棟的鋼筋打開 */
+function showReleases(s) {
+  st.rels = s; HOT = relHot();
+  st.bars = true; st.pour = null; st.sel = null; st.rebar = null; st.floor = '全部';
+  apply();
+  fitTo(visibleObjs(), true);
+}
+function relSection() {
+  const L = relList(); if (!L.length) return '';
+  let h = '<div class="muted" style="margin:10px 0 6px">🔩 <b>鋼筋發布</b>：點一批，那一批照原本的顏色、其他發布過的變淡灰色；<b>可以點好幾批</b>，再點一次取消。還沒發布的只有混凝土。</div>';
+  if (st.rels.size) h += '<div class="row" style="margin:-2px 0 8px"><span class="muted">選了 ' + st.rels.size + ' 批</span><button class="btn ghost" id="relAll">發布過的全部一起看</button></div>';
+  h += L.slice().reverse().map(r => '<div class="pour relc' + (st.rels.has(r.n) ? ' on' : '') + '" data-n="' + r.n + '"><b>第 ' + r.n + ' 批</b> <span class="muted">' + esc(mdOf(r.at)) + ' 發布</span><div class="m">' + esc((r.groups || []).join('、')) + '</div></div>').join('');
+  return h;
+}
 function loop(pts, r) { for (let i = 0; i < pts.length; i++) bar('tie', pts[i], pts[(i + 1) % pts.length], r); }
 
 // ---------- 照工作單的鋼筋（外掛匯出的 rj：梁第A台、柱升位圖、基礎版） ----------
 let JOBS_OF = null;
 function jobsOf(m) {
-  if (!JOBS_OF) { JOBS_OF = {}; (M.rj || []).forEach(j => (j.mem || []).forEach(i => (JOBS_OF[i] = JOBS_OF[i] || []).push(j))); }
+  if (!JOBS_OF) { JOBS_OF = {}; (M.rj || []).filter(jobReleased).forEach(j => (j.mem || []).forEach(i => (JOBS_OF[i] = JOBS_OF[i] || []).push(j))); }
   return m ? JOBS_OF[m.i] || [] : [];
 }
-function hasBars(m) { return jobsOf(m).length > 0 || !!rebarOf(m); }
+// 有分批發布：配筋表（rb）畫的示意不算（沒有料單群組，不知道發布了沒）
+function hasBars(m) { return jobsOf(m).length > 0 || (!relMode() && !!rebarOf(m)); }
 /** 線段只留 za～zb 之間（柱只看這一層的時候） */
 function clipZ(a, b, zr) {
   if (!zr) return [a, b];
@@ -691,9 +748,13 @@ function clipZ(a, b, zr) {
 let LAPS = [], CPLS = [];
 function drawJob(j, zr) {
   const inZ = z => !zr || (z >= zr[0] && z <= zr[1]);
-  (j.lp || []).forEach(l => { if (inZ(l.p[2])) LAPS.push({ l, j }); });
-  if (j.cp) for (let i = 0; i + 3 < j.cp.length; i += 4) if (inZ(j.cp[i + 2])) CPLS.push({ p: [j.cp[i], j.cp[i + 1], j.cp[i + 2]], d: j.cp[i + 3], j });
+  (j.lp || []).forEach(l => { const t = toneOf(l.g || j.g); if (t && inZ(l.p[2])) LAPS.push({ l, j, t }); });
+  if (j.cp) for (let i = 0; i + 3 < j.cp.length; i += 4) {
+    const t = toneOf((j.cpg && j.cpg[i / 4]) || j.g);
+    if (t && inZ(j.cp[i + 2])) CPLS.push({ p: [j.cp[i], j.cp[i + 1], j.cp[i + 2]], d: j.cp[i + 3], j, t });
+  }
   (j.bars || []).forEach(o => {
+    TONE = toneOf(o.g || j.g); if (!TONE) { TONE = 'hot'; return; }   // 還沒發布的這段不畫
     const kind = BAR_KIND[o.c] || 'main', r = (o.d || 1.3) / 2;
     // 基礎版、牆、版：代表的那一支照 rep 方向、o 的距離平移排滿（牆的水平筋 rep 是 [0,0,1]，往上排）
     if (o.p) (o.o || [0]).forEach(off => {
@@ -710,6 +771,7 @@ function drawJob(j, zr) {
       (o.t || []).forEach(t => { const q = [P(t, n0, z0), P(t, n1, z0), P(t, n1, z1), P(t, n0, z1)]; for (let i = 0; i < 4; i++) bar(kind, q[i], q[(i + 1) % 4], r); });
     }
   });
+  TONE = 'hot';
 }
 /** 按「看配筋」時要顯示的構件：梁＝那一台（整條軸線上的梁和柱），柱＝那一支 */
 function focusOf(m) {
@@ -723,7 +785,8 @@ function flushBars(light) {
   const cyl = new THREE.CylinderGeometry(1, 1, 1, light ? 6 : 10, 1, light);
   const up = new THREE.Vector3(0, 1, 0), A = new THREE.Vector3(), B = new THREE.Vector3(), q = new THREE.Quaternion(), mtx = new THREE.Matrix4(), sc = new THREE.Vector3();
   Object.keys(segs).forEach(k => {
-    const mats = { [k]: new THREE.MeshLambertMaterial({ color: BAR_COLOR[k] }) };
+    // 以前發布的那幾批：淡灰、半透明（這一批才看得清楚）
+    const mats = { [k]: k === 'old' ? new THREE.MeshLambertMaterial({ color: BAR_COLOR.old, transparent: true, opacity: 0.55, depthWrite: false }) : new THREE.MeshLambertMaterial({ color: BAR_COLOR[k] }) };
     const list = segs[k]; if (!list.length) return;
     const im = new THREE.InstancedMesh(cyl, mats[k], list.length);
     list.forEach(([a, b, r], i) => {
@@ -738,10 +801,11 @@ function flushBars(light) {
   Object.keys(segs).forEach(k => { segs[k] = []; });
   // 搭接段：半透明的框，沿鋼筋方向從搭接起點到終點，框住那一排鋼筋；上層藍、下層（和牆、腰筋等不分上下的）綠
   // （使用者 2026-11-10「上下層搭接用不同顏色標示（上搭接35）」）
-  [['top', 0x3B82F6], ['', 0x22C55E]].forEach(([want, color]) => {
-    const list = LAPS.filter(({ l }) => (lapLayer(l) === 'top') === (want === 'top'));
+  [['top', 0x3B82F6], ['', 0x22C55E], ['old', 0xC4CCD3]].forEach(([want, color]) => {
+    // 以前發布的那幾批的搭接段：灰色、淡一點
+    const list = want === 'old' ? LAPS.filter(x => x.t === 'old') : LAPS.filter(({ l, t }) => t !== 'old' && (lapLayer(l) === 'top') === (want === 'top'));
     if (!list.length) return;
-    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, depthWrite: false }), list.length);
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: want === 'old' ? 0.25 : 0.45, depthWrite: false }), list.length);
     const yv = new THREE.Vector3(0, 1, 0), zv = new THREE.Vector3(), basis = new THREE.Matrix4();
     list.forEach(({ l }, i) => {
       const p = l.p; A.set(p[0], p[2], -p[1]); B.set(p[3], p[5], -p[4]);
@@ -752,13 +816,15 @@ function flushBars(light) {
     im.renderOrder = 2; im.computeBoundingSphere(); rebarGroup.add(im);
   });
   // 續接器：主筋接頭上一小段粗一點的桃紅色（跟施工圖的柱續接器同色）
-  if (CPLS.length) {
-    const im = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, light ? 6 : 10), new THREE.MeshLambertMaterial({ color: 0xD6336C }), CPLS.length);
-    CPLS.forEach(({ p, d }, i) => {
+  [[false, 0xD6336C], [true, 0xC4CCD3]].forEach(([old, color]) => {   // 以前發布的那幾批的續接器：灰色
+    const list = CPLS.filter(c => (c.t === 'old') === old);
+    if (!list.length) return;
+    const im = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, light ? 6 : 10), new THREE.MeshLambertMaterial({ color }), list.length);
+    list.forEach(({ p, d }, i) => {
       A.set(p[0], p[2], -p[1]); q.identity(); sc.set(d * 0.95, 9, d * 0.95); mtx.compose(A, q, sc); im.setMatrixAt(i, mtx);
     });
     im.computeBoundingSphere(); rebarGroup.add(im);
-  }
+  });
 }
 /**
  * 搭接段是上層還是下層：外掛寫的字開頭——基礎、版「上層／下層」，梁「上主筋、上加鐵／下主筋、下加鐵」，樓梯「…上層筋／…下層筋」；
@@ -775,7 +841,8 @@ function updateLapLabels() {
   const box = document.getElementById('laps'); if (!box || !camera) return;
   if (!LAPS.length || st.marking === 'draw') { if (box.innerHTML) box.innerHTML = ''; return; }
   const r = el.getBoundingClientRect(), cx = r.width / 2, cy = r.height / 2, pts = [];
-  LAPS.forEach(({ l }) => {
+  LAPS.forEach(({ l, t: tone }) => {
+    if (tone === 'old') return;   // 以前發布的那幾批不寫搭接長度（畫面才不會太亂）
     const p = l.p, v = CAD2T([(p[0] + p[3]) / 2, (p[1] + p[4]) / 2, (p[2] + p[5]) / 2 + (l.h || 2)]).project(camera);
     if (v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) return;
     const ly = lapLayer(l), t = String(l.t || '').split(' ').pop();
@@ -793,8 +860,8 @@ function updateLapLabels() {
 /** 這幾台／這支的搭接清單（看配筋的卡片）：同樣的合起來寫幾處 */
 function lapSummary() {
   const g = new Map();
-  LAPS.forEach(({ l, j }) => {
-    if (j.k === '柱') return;
+  LAPS.forEach(({ l, j, t }) => {
+    if (j.k === '柱' || t === 'old') return;
     const key = l.t + (l.s ? '｜' + l.s : '');
     g.set(key, (g.get(key) || 0) + 1);
   });
@@ -813,11 +880,11 @@ function zones(z0, z1, endLen, s1, s2) { // 端部用 s1、中間用 s2 的位�
 function drawRebar() {
   rebarGroup.children.forEach(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); });
   rebarGroup.clear();
-  LAPS = []; CPLS = [];
+  LAPS = []; CPLS = []; TONE = 'hot'; HOT = relHot();
   const byId = id => (M.m || []).find(x => x.i === id);
   if (st.rebar) {
     const m = st.rebar, js = jobsOf(m).filter(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
-    if (js.length) js.forEach(j => drawJob(j, j.k === '柱' ? [m.b[2] - 1, m.b[5] + 1] : null)); else drawMember(m);
+    if (js.length) js.forEach(j => drawJob(j, j.k === '柱' ? [m.b[2] - 1, m.b[5] + 1] : null)); else if (!relMode()) drawMember(m);
     // 點梁：軸線上的柱在梁高範圍內（梁柱接頭）的柱筋、柱箍筋也畫（使用者 2026-11-10「這裡是柱箍筋啊怎麼是梁箍」）
     if (m.k === '梁' || m.k === '地梁') {
       const beams = [...(st.focus || [])].map(byId).filter(x => x && (x.k === '梁' || x.k === '地梁'));
@@ -850,7 +917,7 @@ function drawRebar() {
     use.forEach(m => done.add(m.i));
     drawJob(j, null); n++;
   });
-  vis.filter(m => !done.has(m.i) && rebarOf(m) && !jobsOf(m).length).forEach(m => { drawMember(m); n++; });
+  if (!relMode()) vis.filter(m => !done.has(m.i) && rebarOf(m) && !jobsOf(m).length).forEach(m => { drawMember(m); n++; });
   flushBars(n > 1);
 }
 function drawMember(m) {
@@ -927,6 +994,8 @@ function renderChips() {
   // 整層鋼筋（使用者 2026-11-10「加整層鋼筋」）：整棟時先跳到第一個有配筋的樓層，比較轉得動
   if ((M.rb && Object.keys(M.rb).length) || (M.rj || []).length) {
     const b = chip('🔩 鋼筋', st.bars, '', () => {
+      // 有分批發布：打開就看整棟發布過的（選的那幾批原本的顏色）
+      if (!st.bars && relMode()) { showReleases(st.rels.size ? st.rels : new Set([relList()[relList().length - 1].n])); return; }
       st.bars = !st.bars; st.rebar = null; st.sel = null;
       if (st.bars) { st.pour = null; if (st.floor === '全部') st.floor = floorsList().find(f => (M.m || []).some(m => m.f === f && hasBars(m))) || '全部'; }
       apply(); fitTo(visibleObjs(), true);
@@ -1024,7 +1093,8 @@ function legend() {
     (laps ? '<br><span style="color:#22C55E">■</span> 下層搭接（字寫「下搭接57」）　<span style="color:#3B82F6">■</span> 上層搭接（「上搭接35」）' +
       (only ? '' : '　<span style="color:#D6336C">■</span> 柱續接器') + '<br><span style="color:#22C55E">■</span> 牆、腰筋、樓梯不分上下的搭接也是綠色（字只寫「搭接35」）' : '') + '<br>' +
     (sheet ? '照工作單畫的（梁＝第A台、柱＝升位圖、基礎版＝配筋圖' + (has('牆') ? '、牆＝牆出圖' : '') + (has('版') ? '、版＝版出圖' : '') + (has('樓梯') ? '、樓梯＝樓梯配筋圖' : '') + '），伸進柱子、彎鉤、搭接、續接都照工作單。' : '照配筋表畫的示意；彎鉤、搭接位置以施工圖為準。') +
-    (sheet && !laps ? '<br><span style="color:#C2410C">這份 3D 還沒有標搭接段：在 BricsCAD「混凝土」再按一次「上傳 3D 到工地App」就會有。</span>' : '');
+    (sheet && !laps ? '<br><span style="color:#C2410C">這份 3D 還沒有標搭接段：在 BricsCAD「混凝土」再按一次「上傳 3D 到工地App」就會有。</span>' : '') +
+    (relMode() ? '<br><b>分批發布</b>：' + (st.rels.size ? '選的那幾批照上面的顏色，<span style="color:#9AA6B0">■ 淡灰色＝以前發布的</span>；' : '發布過的都照上面的顏色；') + '還沒發布的料單群組不畫鋼筋（只有混凝土）。' : '');
 }
 function table(rows) { return '<table>' + rows.map(r => '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>').join('') + '</table>'; }
 function renderSide() {
@@ -1081,14 +1151,15 @@ function renderSide() {
       stairN = new Set(has.filter(it => it.m.k === '樓梯').flatMap(it => jobsOf(it.m).filter(j => j.k === '樓梯').map(j => j.n))).size;
     T.textContent = '🔩 ' + (st.floor === '全部' ? '整棟' : st.floor) + ' 的鋼筋';
     h += '<div class="card"><table><tr><td>畫出來的</td><td>柱 ' + cols + ' 支、梁 ' + beams + ' 支' + (fts ? '、基礎 ' + fts + ' 塊' : '') + (walls ? '、牆 ' + walls + ' 道' : '') + (slabs ? '、版 ' + slabs + ' 塊' : '') + (stairN ? '、樓梯 ' + stairN + ' 座' : '') + '</td></tr>'
-      + (none ? '<tr><td>沒畫的</td><td>' + none + ' 支在配筋表找不到</td></tr>' : '')
+      + (none ? '<tr><td>沒畫的</td><td>' + none + (relMode() ? ' 支還沒發布（只畫混凝土）' : ' 支在配筋表找不到') + '</td></tr>' : '')
       + (LAPS.length ? '<tr><td>搭接段</td><td><b style="color:#15803D">' + LAPS.length + ' 處</b>（下層綠、上層藍；放大看得到搭接長度）</td></tr>' : '')
       + (CPLS.length ? '<tr><td>續接器</td><td><b style="color:#D6336C">' + CPLS.length + ' 個</b>（柱主筋接頭）</td></tr>' : '') + '</table>'
       + '<div class="muted" style="margin-top:8px">' + legend() + '<br>上面換樓層、點「柱」「梁」「基礎」「牆」「版」「樓梯」只看一種；點一支（一道、一塊）看它的配筋。</div>'
       + '<div class="row"><button class="btn solid" id="barsOff">關掉鋼筋</button></div></div>';
+    h += relSection();
   } else {
     T.textContent = '📍 要改進的地方・🚚 灌漿區';
-    h += markSection() + pourList(true);
+    h += markSection() + relSection() + pourList(true);
   }
   B.innerHTML = h;
   // 換了點的東西（構件、配筋、標記）就捲回最上面（使用者 2026-11-10「外屏沒有像內屏點一個部位跳出他的配筋」）
@@ -1124,14 +1195,24 @@ function renderSide() {
   on('showRebar', () => { st.rebar = st.sel; st.focus = focusOf(st.rebar); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); });
   on('unsel', () => { st.sel = null; apply(); });
   on('barsOff', () => { st.bars = false; apply(); });
-  B.querySelectorAll('.pour').forEach(p => p.onclick = () => {
-    const id = p.dataset.id, pr = zoneList().find(z => z.id === id) || pours.find(x => x.id === id);
-    st.pour = st.pour && st.pour.id === id ? null : pr; st.sel = null; st.rebar = null; st.bars = false;
-    if (st.pour) { if (!st.pour.groups) st.pour.groups = pourGroups(st.pour); st.floor = '全部'; }
+  // 灌漿區可以點好幾區一起亮（使用者 2026-11-11「我可以點選多個群組讓他們亮起來，剛剛看是只能點一個」）：再點一次取消那一區
+  B.querySelectorAll('.pour:not(.relc)').forEach(p => p.onclick = () => {
+    const ids = new Set(st.pour ? st.pour.ids : []);
+    ids.has(p.dataset.id) ? ids.delete(p.dataset.id) : ids.add(p.dataset.id);
+    setPours(ids); st.sel = null; st.rebar = null; st.bars = false;
+    if (st.pour) st.floor = '全部';
     apply();
     const hot = items.filter(it => inPour(it.m)).map(it => it.mesh);
     fitTo(st.pour && hot.length ? hot : visibleObjs(), true);
   });
+  on('pourClear', () => { st.pour = null; apply(); fitTo(visibleObjs(), true); });
+  // 鋼筋發布（第 14 版起，外掛「發布」的料單群組）：點一批亮那一批，可以點好幾批；再點一次取消
+  B.querySelectorAll('.relc').forEach(p => p.onclick = () => {
+    const n = +p.dataset.n, s = new Set(st.rels);
+    s.has(n) ? s.delete(n) : s.add(n);
+    showReleases(s);
+  });
+  on('relAll', () => showReleases(new Set()));
 }
 /**
  * 灌漿區（使用者 2026-11-10「也沒有根據混凝土灌漿位置」）：照 BricsCAD 算的分組（基礎、1F、2F…RF女兒牆）一區一列，
@@ -1149,15 +1230,16 @@ function zoneList() {
 }
 function pourList(tip) {
   let h = tip ? '<div class="tip">🔩 <b>看鋼筋</b>：按上面「🔩 鋼筋」看整層；或點一支柱或梁，再按「看配筋」</div>' : '';
-  h += '<div class="muted" style="margin:2px 0 8px">點一區，3D 會把那一區亮起來（橘色）；分區跟 BricsCAD 灌漿數量一樣</div>';
+  h += '<div class="muted" style="margin:2px 0 8px">點一區，3D 會把那一區亮起來（橘色）；<b>可以點好幾區一起亮</b>，再點一次取消。分區跟 BricsCAD 灌漿數量一樣</div>';
+  if (st.pour && st.pour.ids.size > 1) h += '<div class="row" style="margin:-2px 0 8px"><span class="muted">選了 ' + st.pour.ids.size + ' 區</span><button class="btn ghost" id="pourClear">全部取消</button></div>';
   h += zoneList().map(z => {
     const days = z.up.map(p => roc(p.date)).filter(Boolean);
-    return '<div class="pour' + (st.pour && st.pour.id === z.id ? ' on' : '') + '" data-id="' + esc(z.id) + '"><b>' + esc(z.g) + '</b><div class="m">'
+    return '<div class="pour' + (st.pour && st.pour.ids.has(z.id) ? ' on' : '') + '" data-id="' + esc(z.id) + '"><b>' + esc(z.g) + '</b><div class="m">'
       + z.n + ' 件' + (z.v ? '・' + z.v.toFixed(1) + ' m³' : '') + '・' + (days.length ? '<span class="day">灌漿日 ' + esc(days.join('、')) + '</span>' : '還沒上傳灌漿數量') + '</div></div>';
   }).join('');
   const multi = pours.filter(p => pourGroups(p).length > 1);
   if (multi.length) h += '<div class="muted" style="margin:10px 0 8px">一起灌的</div>' + multi.map(p =>
-    '<div class="pour' + (st.pour && st.pour.id === p.id ? ' on' : '') + '" data-id="' + esc(p.id) + '"><b>' + esc(p.part) + '</b><div class="m">'
+    '<div class="pour' + (st.pour && st.pour.ids.has(p.id) ? ' on' : '') + '" data-id="' + esc(p.id) + '"><b>' + esc(p.part) + '</b><div class="m">'
     + [roc(p.date) ? '<span class="day">灌漿日 ' + esc(roc(p.date)) + '</span>' : '', p.m3 ? p.m3 + ' m³' : '', p.trucks ? '約 ' + p.trucks + ' 車' : ''].filter(Boolean).join('・') + '</div></div>').join('');
   return h;
 }
@@ -1209,7 +1291,11 @@ function shots() {
     apply();
   }
   const find = (k, f) => (M.m || []).find(m => m.k === k && (!f || m.f === f) && hasBars(m));
-  if (s === 'pour') { const z = zoneList().find(x => x.g === (P.get('zone') || '')) || zoneList()[Math.min(2, zoneList().length - 1)]; if (z) { st.pour = z; apply(); fitTo(items.filter(it => inPour(it.m)).map(it => it.mesh), true); } }
+  if (s === 'pour') {   // zone=基礎,2F：一次亮好幾區
+    const want = (P.get('zone') || '').split(',').filter(Boolean);
+    const zs = want.length ? zoneList().filter(x => want.includes(x.g)) : [zoneList()[Math.min(2, zoneList().length - 1)]].filter(Boolean);
+    if (zs.length) { setPours(new Set(zs.map(z => z.id))); apply(); fitTo(items.filter(it => inPour(it.m)).map(it => it.mesh), true); }
+  }
   if (s === 'floor') { st.floor = floorsList()[1] || floorsList()[0]; apply(); fitTo(visibleObjs(), true); }
   if (s === 'bars') {
     st.bars = true; st.floor = P.get('f') || '全部'; if (P.get('only')) KIND_ORDER.forEach(k => { if (k !== P.get('only')) st.kinds.delete(k); });
