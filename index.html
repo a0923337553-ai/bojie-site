@@ -258,6 +258,9 @@ textarea { min-height:76px; resize:vertical; }
 .ptag.red { background:#FDE3E1; color:var(--red); }
 .card.admin { border:2px solid #7B3FBF22; background:#FBF8FF; }
 .wlog { cursor:pointer; }
+/* 待辦的刪除按鈕（使用者 2026-11-11「刪除目前是點紅色的字，不直覺」） */
+.tdel { flex:none; align-self:flex-start; margin:2px 0 0 6px; border:1.5px solid var(--red); background:#fff; color:var(--red); border-radius:10px; font-size:14px; font-weight:bold; padding:6px 10px; }
+.tdel.strong { background:var(--red); color:#fff; }
 </style>
 </head>
 <body>
@@ -267,7 +270,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/11b';
+var WEB_VERSION = '11/11c';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -518,7 +521,8 @@ function markSeen(keys) {
 function homeTodos() {
   var f = S.feed; if (!f || !f.todos) return null;
   function mk(t, done) { return { id: t.id, site: t.site, text: t.text, done: done, by: t.by || '', at: t.at || 0, doneBy: t.doneBy || '', doneAt: t.doneAt || 0 }; }
-  var all = f.todos.map(function (t) { return mk(t, false); }).concat((f.todosDone || []).map(function (t) { return mk(t, true); }));
+  var all = f.todos.map(function (t) { return mk(t, false); }).concat((f.todosDone || []).map(function (t) { return mk(t, true); }))
+    .filter(function (t) { return !todoGone(t.id); });   // 剛刪掉的：最新消息還沒重讀也不要再出現
   return all.map(function (t) {
     var l = S.localTodo[t.id]; if (l === undefined || l === t.done) return t;
     var c = mk(t, l); c.doneBy = l ? '你' : ''; c.doneAt = l ? Date.now() : 0; return c;
@@ -1236,10 +1240,14 @@ function renderSheets() {
   if (S.officeErr) h += '<div class="err">' + esc(S.officeErr) + '</div>';
   if (!o) return h + '<div class="sub">讀取中…</div></div>';
   var list = (o.sheets || []).filter(function (d) { return d.site === site; }).sort(function (a, b) { return cmp(docTitle(a), docTitle(b)); });
+  if (S.sheetMsg) h += '<div class="box">' + esc(S.sheetMsg) + '</div>';
   if (!list.length) h += '<div class="card sub" style="font-size:15px">這個工地還沒有施工單。要看別的工地，回首頁換工地。</div>';
+  // 開發者刪掉傳錯的施工單（第 14 版，使用者 2026-11-11「上傳錯不能刪」）：只有 Google 驗證過的開發者
+  var canDel = isOwner();
   list.forEach(function (d) {
-    h += '<button class="item" data-act="pdfopen" data-v="' + esc(d.id) + '"><span class="pdfph">PDF</span><span class="grow"><b style="font-size:16px;display:block">' + esc(docTitle(d)) + '</b>' +
+    var b = '<button class="item" data-act="pdfopen" data-v="' + esc(d.id) + '"' + (canDel ? ' style="flex:1;min-width:0;margin:0"' : '') + '><span class="pdfph">PDF</span><span class="grow"><b style="font-size:16px;display:block">' + esc(docTitle(d)) + '</b>' +
       '<span class="sub" style="display:block">' + esc(shortTime(d.modified) || '─') + ' 列印</span></span><span class="arrow">›</span></button>';
+    h += canDel ? '<div class="row" style="align-items:stretch;margin-bottom:10px">' + b + '<button class="tdel" style="align-self:center;margin:0 0 0 2px;padding:8px 12px" data-act="sheetdel" data-v="' + esc(d.id) + '">🗑 刪除</button></div>' : b;
   });
   return h + '<div class="note" style="margin-top:4px">同一個群組重新列印，就會自動換成新的。</div></div>';
 }
@@ -1294,13 +1302,14 @@ function renderTodo() {
       '<span class="chev">' + (S.todoShowDone ? '▲' : '▼') + '</span></button>' +
       (S.todoShowDone ? done.map(todoRowPage).join('') + '<div class="note" style="color:#8A9BA8">做完超過 30 天的會自動收起來（雲端還留著）</div>' : '') + '</div>';
   }
-  h += '<div class="note" style="padding:0 4px">開發者、老闆、主任、公司共用這一份，施工人員看不到。打勾＝完成。點字可以改或刪。</div>';
+  h += '<div class="note" style="padding:0 4px">開發者、老闆、主任、公司共用這一份，施工人員看不到。打勾＝完成。點字可以改；右邊「刪除」刪掉這一項。</div>';
   return h + '</div>';
 }
 function todoRowPage(t) {
   return '<div class="trow' + (t.done ? ' done' : '') + '" style="padding:6px 0"><button class="tbox' + (t.done ? ' done' : '') + '" style="width:26px;height:26px;margin:2px 6px 0 2px" data-act="todocheck" data-v="' + esc(t.id) + '">' + (t.done ? '✓' : '') + '</button>' +
     '<div class="grow" data-act="todoedit" data-v="' + esc(t.id) + '"><div class="t" style="font-size:17px">' + esc(t.text) + '</div>' +
-    '<div style="font-size:12px;color:#8A9BA8">' + esc(t.done ? todoWhen(t.doneBy, t.doneAt, '完成') : todoWhen(t.by, t.at, '加')) + '</div></div></div>';
+    '<div style="font-size:12px;color:#8A9BA8">' + esc(t.done ? todoWhen(t.doneBy, t.doneAt, '完成') : todoWhen(t.by, t.at, '加')) + '</div></div>' +
+    (/^tmp/.test(t.id) ? '' : '<button class="tdel" data-act="tododel" data-v="' + esc(t.id) + '">🗑 刪除</button>') + '</div>';
 }
 
 // ===================== 施工日誌（只能看） =====================
@@ -1470,7 +1479,8 @@ function todoEditModal(m) {
   var t = m.t;
   return '<h3>✅ 改待辦</h3><textarea data-f="m.text" maxlength="300">' + esc(m.text) + '</textarea>' +
     '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(todoWhen(t.by, t.at, '加') + (t.done ? '・' + todoWhen(t.doneBy, t.doneAt, '完成') : '')) + '</div>' +
-    '<button class="link red" style="margin-top:8px;' + (m.ask ? 'font-weight:bold' : '') + '" data-act="mtdel">' + (m.ask ? '確定要刪掉這一項嗎？（大家都看不到了）' : '刪掉這一項') + '</button>' +
+    (m.ask ? '<div style="color:var(--red);font-weight:bold;font-size:14px;margin-top:10px">確定要刪掉這一項嗎？大家都看不到了。</div>' : '') +
+    '<button class="tdel' + (m.ask ? ' strong' : '') + '" style="margin:' + (m.ask ? '6' : '10') + 'px 0 0" data-act="mtdel">' + (m.ask ? '🗑 確定刪除' : '🗑 刪除這一項') + '</button>' +
     (m.err ? '<div style="color:var(--red);font-size:14px">' + esc(m.err) + '</div>' : '') +
     '<div class="btns"><button class="dim" data-act="mclose">取消</button><button id="msave" data-act="mtsave"' + (modalOk(m) && !m.busy ? '' : ' disabled') + '>存檔</button></div>';
 }
@@ -1761,7 +1771,7 @@ function openTodo(from) { S.todoFrom = from; S.todoItems = null; S.todoErr = '';
 function loadTodos() {
   S.todoBusy = '讀取中…'; renderSoft();
   var site = S.site;
-  return api('todo', { op: 'list', site: site }).then(function (r) { if (S.site !== site) return; S.todoItems = r.items || []; S.todoBusy = ''; renderSoft(); })
+  return api('todo', { op: 'list', site: site }).then(function (r) { if (S.site !== site) return; S.todoItems = (r.items || []).filter(function (t) { return !todoGone(t.id); }); S.todoBusy = ''; renderSoft(); })
     .catch(function (e) { S.todoBusy = ''; var m = failMsg(e); if (m) { S.todoErr = '讀不到：' + m; renderSoft(); } });
 }
 function findTodo(id) { return (S.todoItems || []).filter(function (t) { return t.id === id; })[0]; }
@@ -1942,6 +1952,7 @@ var ACT = {
   },
   // 工地頁
   tile: function (v) {
+    S.sheetMsg = '';
     if (v === 'logs') openLogs('site');
     else if (v === 'todo') openTodo('site');
     else if (v === '3d') open3d();
@@ -2034,9 +2045,7 @@ var ACT = {
   mtdel: function () {
     var m = S.modal; if (m.busy) return;
     if (!m.ask) { m.ask = true; renderModal(); return; }
-    m.busy = true; renderModal();
-    api('todo', { op: 'del', id: m.t.id }).then(function () { S.modal = null; renderModal(); S.feedStale = true; loadTodos(); })
-      .catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '刪不掉：' + x; renderModal(); } });
+    closeModal(); todoDelNow(m.t.id);   // 馬上從畫面拿掉，收件服務在背景刪（使用者 2026-11-11「同步太慢，會讓人以為還沒刪除掉」）
   },
   mlogdate: function (v) { closeModal(); if (v !== S.log.date) loadLog(v); },
   mcaldate: function (v) { var m = S.modal; if (m.ev.series) return; m.date = addDays(m.date, +v); renderModal(); },
@@ -2812,6 +2821,36 @@ function editDone() {
   if (isAdmin()) loadAdminAll();
 }
 document.addEventListener('change', function (ev) { if (ev.target.getAttribute && ev.target.getAttribute('data-f') === 'date' && S.route === 'edit') render(); });
+
+// ---------- 待辦刪除（使用者 2026-11-11「刪除目前是點紅色的字，不直覺，做成有刪除的按鈕；刪除後同步太慢，會讓人以為還沒刪除掉」） ----------
+S.todoDeleted = {};
+function todoGone(id) { var t = S.todoDeleted[id]; if (!t) return false; if (Date.now() - t > 120000) { delete S.todoDeleted[id]; return false; } return true; }
+/** 畫面上馬上拿掉（待辦頁、首頁），收件服務在背景刪；刪不掉再放回來 */
+function todoDelNow(id) {
+  S.todoDeleted[id] = Date.now();
+  if (S.todoItems) S.todoItems = S.todoItems.filter(function (t) { return t.id !== id; });
+  S.todoErr = ''; render();
+  api('todo', { op: 'del', id: id }).then(function () { S.feedStale = true; loadTodos(); loadFeed(false); })
+    .catch(function (e) { delete S.todoDeleted[id]; var x = failMsg(e); if (x) S.todoErr = '刪不掉：' + x; loadTodos(); render(); });
+}
+ACT.tododel = function (id) {
+  var t = findTodo(id); if (!t || /^tmp/.test(id)) return;
+  if (!confirm('刪除這一項待辦？\n「' + t.text + '」\n刪掉以後大家都看不到了。')) return;
+  todoDelNow(id);
+};
+
+// ---------- 第 14 版：開發者刪傳錯的鋼筋施工單（使用者 2026-11-11） ----------
+S.sheetMsg = '';
+ACT.sheetdel = function (id) {
+  var d = ((S.office && S.office.sheets) || []).filter(function (x) { return x.id === id; })[0];
+  if (!d || S.busy) return;
+  if (!confirm('刪除施工單「' + docTitle(d) + '」？\n雲端和每個人的手機、iPad 上的這份都會拿掉（雲端放進垃圾桶，30 天內找得回來）。')) return;
+  S.busy = true; S.sheetMsg = '刪除中…'; render();
+  api('sheetdel', { id: id }).then(function () {
+    S.busy = false; S.sheetMsg = '已刪除「' + docTitle(d) + '」';
+    S.office.sheets = S.office.sheets.filter(function (x) { return x.id !== id; }); S.feedStale = true; render(); loadOffice();
+  }).catch(function (e) { S.busy = false; var m = failMsg(e); S.sheetMsg = m ? '刪不掉：' + m : ''; render(); });
+};
 
 // ---------- 開始 ----------
 // 記住的代碼：顯示鎖住的 ●●●●●●，按「登入」才進去（使用者 2026-11-08）
