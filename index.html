@@ -244,6 +244,20 @@ textarea { min-height:76px; resize:vertical; }
 .btns button:disabled { color:#b5c0c8; }
 .btns .dim { color:var(--muted); font-weight:normal; }
 .btns .redb { color:var(--red); }
+/* 第 13 版：開發者 Google 驗證、人員管理、切換身分（2026-11-11） */
+.asbar { position:sticky; top:0; z-index:30; background:#7B3FBF; color:#fff; padding:8px 12px; display:flex; align-items:center; gap:8px; font-size:15px; }
+.asbar button { margin-left:auto; border:0; border-radius:16px; background:#fff; color:#7B3FBF; font-weight:bold; font-size:14.5px; padding:6px 12px; }
+.prow { display:flex; align-items:center; gap:8px; padding:9px 2px; border-top:1px solid #EAF0F4; cursor:pointer; }
+.prow.off { opacity:.55; }
+.prow .grow { flex:1; min-width:0; }
+.pcode { font-family:Consolas, Menlo, monospace; font-size:16px; letter-spacing:2px; background:#F1F5F8; border-radius:8px; padding:3px 8px; flex:none; }
+.pact { padding:6px 2px 12px; }
+.mini { border:1.5px solid var(--navy); background:#fff; color:var(--navy); border-radius:10px; font-size:14.5px; font-weight:bold; padding:8px 6px; }
+.mini.red { border-color:var(--red); color:var(--red); }
+.ptag { display:inline-block; font-size:12px; font-weight:bold; border-radius:6px; padding:1px 6px; background:#FFF1C2; color:#8A6200; vertical-align:middle; }
+.ptag.red { background:#FDE3E1; color:var(--red); }
+.card.admin { border:2px solid #7B3FBF22; background:#FBF8FF; }
+.wlog { cursor:pointer; }
 </style>
 </head>
 <body>
@@ -253,7 +267,9 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/11';
+var WEB_VERSION = '11/11b';
+// 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
+var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
 var PCAPP = /[?&]app=pc\b/.test(location.search);
 // 哪一種蘋果裝置（使用者 2026-11-10「ipad也要適配」「macbook pro 16也要」）：
@@ -328,12 +344,15 @@ function errText(r) {
 /** 錯誤：代碼不能用了 → 回登入；鎖住 → 鎖住的畫面；其他 → 回傳要顯示的字（空的＝不用顯示） */
 function failMsg(e) {
   if (e && e.error === 'LOCKED') return '';
+  if (e && e.error === 'GS') { gsGone(e.message); return ''; }
   if (e && e.error === 'CODE') { codeGone(); return ''; }
   return errText(e);
 }
 
 function api(action, body) {
   var req = { action: action, code: S.code, client: 'page', device: deviceId() };
+  // 開發者用 Google 登入的（gMode）：帶通行證 gs；沒帶代碼＝開發者本人（gsme），帶別人的代碼＝切換成他測試
+  if (S.gMode && S.gs) { req.gs = S.gs; if (!S.code) req.gsme = 1; }
   for (var k in (body || {})) req[k] = body[k];
   // text/plain：不會先多問一次（CORS preflight），收件服務的 doPost 一樣讀得到
   return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(req) })
@@ -549,6 +568,8 @@ function loadFeed(fresh) {
     api('feed', body).then(function (f) { S.feed = f; S.feedErr = ''; LS.setJSON('feed', f); settleTodos(); renderSoft(); if (!isOffice()) loadMyTasks(); })
       .catch(function (e) { var m = failMsg(e); if (m) { S.feedErr = '讀不到最新消息：' + m + '（網路好了按「⟳ 更新」）'; renderSoft(); } })
   ];
+  // 管理者：施工人員待處理的筆數（5 分鐘問一次就好）
+  if (isAdmin() && !S.asCode && (fresh || !S.adminAt || Date.now() - S.adminAt > 300000)) jobs.push(loadAdminAll());
   if (g) {
     jobs.push(api('here', { lat: g.lat, lon: g.lon }).then(function (h) { S.here = h; LS.setJSON('here', h); renderSoft(); }).catch(function () { }));
     jobs.push(api('forecast', { lat: g.lat, lon: g.lon }).then(function (r) { S.fc = r; LS.setJSON('fc', r); renderSoft(); }).catch(function () { }));
@@ -578,8 +599,11 @@ function render() {
   else if (!S.s || !S.s.today) h = topBar('柏捷工地', null) + '<div class="wrap">' + (S.err ? '<div class="err">' + esc(S.err) + '</div>' : '<div class="card note" style="font-size:15px">讀取中…</div>') +
     '<button class="ghost dim" data-act="tologin" style="margin-top:14px">回登入畫面</button></div>';
   else h = ({ hub: renderHub, work: renderWork, edit: renderEdit, view: renderView, site: renderSite, pours: renderPours, sheets: renderSheets,
-    pdf: renderPdf, contracts: renderContracts, todo: renderTodo, logs: renderLogs, calendar: renderCal, tasks: renderTasks }[S.route] || renderHub)();
+    pdf: renderPdf, contracts: renderContracts, todo: renderTodo, logs: renderLogs, calendar: renderCal, tasks: renderTasks,
+    people: renderPeople, adminq: renderAdminQ }[S.route] || renderHub)();
+  if (S.asCode && S.route !== 'login') h = asBar() + h;   // 開發者切換成別人測試中
   $('app').innerHTML = h;
+  if ($('gbtn')) mountGis();
   $('app').className = 'r-' + S.route;   // 電腦版：清單、表單那幾頁窄一點比較好讀
   if (S.route === 'login') { var c = $('code'); if (c) c.value = S.codeInput; }
   for (var k in keep) { var el = document.querySelector('[data-sk="' + k + '"]'); if (el) el.scrollTop = keep[k]; }
@@ -596,9 +620,11 @@ function renderModal() {
   var m = S.modal;
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
-    task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal }[m.type](m);
+    task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
+  if ($('gbtn')) mountGis();
 }
 function closeModal() { S.modal = null; renderModal(); }
 
@@ -795,6 +821,18 @@ function renderLogin() {
     '<button class="big" data-act="login" style="margin-top:12px"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? '登入中…' : '登入') + '</button>';
   h += S.saved ? '<div class="note">要換人或換代碼，請找管理者。</div>' : '<div class="note">代碼只給你自己用；打錯 3 次這支手機會先鎖 30 分鐘。</div>';
   h += '</div>';
+  // 開發者：用 Google 登入（iPad、Mac、電腦才顯示；使用者 2026-11-11「讓開發者要登入他的 Google 帳號做驗證比較保險」）
+  if (S.gs) {
+    h += '<div class="card" style="border:2px solid #7B3FBF33;background:#FBF8FF"><h2 style="margin:4px 0 6px;font-size:20px">⭐ 開發者（Google 已驗證）</h2>' +
+      '<div class="note" style="font-size:14px">這台用 Google 登入過，跟摺疊機一樣有最終權限（人員名單、代碼）。</div>' +
+      '<button class="big" style="margin-top:10px;background:#7B3FBF" data-act="glogin"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? '進入中…' : '以開發者進入') + '</button>' +
+      '<button class="link red" data-act="gout">這台登出 Google（改用代碼）</button></div>';
+  } else if (gAllowed()) {
+    h += '<div class="card"><h2 style="margin:4px 0 6px;font-size:20px">開發者：用 Google 登入</h2>' +
+      '<div class="note" style="font-size:14px">只有開發者本人的 Google 帳號可以。登入後跟摺疊機一樣有最終權限（人員名單、代碼），一次可以用 30 天。</div>' +
+      '<div id="gbtn" style="margin:12px 0 4px;min-height:44px"></div>' +
+      (S.gBusy ? '<div class="sub">Google 確認中…</div>' : '') + (S.gErr ? '<div class="err" style="margin-top:8px">' + esc(S.gErr) + '</div>' : '') + '</div>';
+  }
   // iPhone、iPad：先加入主畫面（iPad 的「分享」在右上角）；Mac：Safari「檔案」→「加入 Dock」（macOS 14 以上）
   if (IOS) {
     if (!standalone()) h += '<div class="box"><b>' + DEV + ' 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按' + (IPAD ? '右上角' : '下面') +
@@ -823,6 +861,8 @@ function renderHub() {
   var cNews = '<div class="a-news">' + newsCard(news) + '</div>';
   var cWx = S.fc && S.fc.days && S.fc.days.length ? '<div class="a-wx">' + weekWeather(S.fc) + '</div>' : '';
   var h = renderHero() + '<div class="wrap hub' + (week ? ' has-week' : '') + '">';
+  // 管理者（第 13 版）：人員管理、施工人員待處理（等你同意、未分組）
+  if (isAdmin() && !S.asCode) h += adminCard();
   // 派工（第 15 版）：施工人員首頁最上面「派給你的工作」
   if (!off && S.myTasks && S.myTasks.length) h += myTaskCard();
   var n = hubCols();
@@ -836,7 +876,7 @@ function renderHub() {
   h += '<div class="sub" style="padding-left:4px">' + esc(s.name + (s.full ? '（' + s.full + '）' : '') + '・' + s.role) + '　' + (PCAPP ? '電腦版' : '網頁版') + ' ' + WEB_VERSION + '</div>';
   // iPhone 桌面小工具（使用者 2026-11-10 選「甲」：用免費的 Scriptable）
   // iPad 一樣；Mac 借 iPhone 的小工具（macOS 14 以上可以把 iPhone 的小工具放到 Mac 桌面）
-  if (IOS || MAC) h += '<button class="ghost" style="margin-top:8px" data-act="widgethelp">' + (MAC ? '🖥️ 放到 Mac 桌面的小工具（教學）' : '📱 放到 ' + DEV + ' 桌面的小工具（教學）') + '</button>' +
+  if ((IOS || MAC) && (S.code || S.saved)) h += '<button class="ghost" style="margin-top:8px" data-act="widgethelp">' + (MAC ? '🖥️ 放到 Mac 桌面的小工具（教學）' : '📱 放到 ' + DEV + ' 桌面的小工具（教學）') + '</button>' +
     '<div class="note" style="padding:0 4px">網頁版關著時不會跳通知；打開就會更新。</div></div>';
   else if (ANDROID && !PCAPP) h += '<button class="ghost" style="margin-top:8px" data-act="apkhelp">📲 下載 Android App（安裝檔）</button>' +
     '<div class="note" style="padding:0 4px">App 有桌面小工具，關著也會跳通知；網頁版要打開才會更新。</div></div>';
@@ -1024,11 +1064,13 @@ function renderWork() {
     '<div class="note" style="margin-top:6px">沒有你的工地？選「未分組」，新增時自己打工地名稱，管理者會再歸到正確的工地。</div></div>';
   if (S.err) h += '<div class="err">' + esc(S.err) + '</div>';
   h += '<button class="big" data-act="add"' + (S.site ? '' : ' disabled') + '>＋ 新增我的工作</button>';
+  // 管理者（第 13 版）：幫施工人員補一筆（跟 App「＋ 幫施工人員補一筆（他忘了寫）」一樣）
+  if (isAdmin() && !S.asCode && S.site) h += '<button class="ghost" data-act="addfor">＋ 幫施工人員補一筆（他忘了寫）</button>';
   if (hasFeed() && S.site && S.site !== UNFILED) h += '<button class="ghost" data-act="logsfromwork">📋 看「' + esc(S.site) + '」的施工日誌</button>';
   var groups = {}, order = [];
   S.entries.forEach(function (e) { if (!groups[e.date]) { groups[e.date] = []; order.push(e.date); } groups[e.date].push(e); });
   order.sort().reverse();
-  if (!order.length && !S.loading) h += '<div class="card note" style="font-size:15px">這 ' + s.days + ' 天這個工地還沒有人上傳。</div>';
+  if (!order.length && !S.loading) h += '<div class="card note" style="font-size:15px">' + (isAdmin() ? '最近 ' + (S.site === UNFILED ? 62 : 31) : '這 ' + s.days) + ' 天這個工地還沒有人上傳。</div>';
   order.forEach(function (d) {
     var people = {}; groups[d].forEach(function (e) { people[e.name] = 1; });
     h += '<div class="card"><b>' + md(d) + '（' + dayName(d) + '）' + esc(S.site === UNFILED ? '未分組' : S.site) + '・' + Object.keys(people).length + ' 個人上傳</b>' +
@@ -1041,12 +1083,15 @@ function renderWork() {
 function editOk() {
   var d = S.d, n = d.remote.length + d.local.length + d.remoteR.length + d.localR.length;
   var filled = d.mats.filter(function (m) { return (m.vendor || '').trim() || (m.qty || '').trim(); }).length;
-  return !S.busy && d.cat && (S.site !== UNFILED || d.siteText.trim()) && (d.text.trim() || n || filled);
+  return !S.busy && d.cat && d.forName !== '?' && (S.site !== UNFILED || d.siteText.trim()) && (d.text.trim() || n || filled);
 }
 
 function renderEdit() {
-  var d = S.d, s = S.s, proxy = d.proxy && s.role !== '管理者';
-  var h = topBar(d.id ? '修改我的工作' : '新增我的工作', 'work') + '<div class="wrap">';
+  var d = S.d, s = S.s, proxy = d.proxy && s.role !== '管理者', adm = isAdmin() && !S.asCode;
+  var other = d.orig && d.orig.name && d.orig.name !== s.name ? d.orig.name : '';
+  var title = d.id ? (other ? '改 ' + other + ' 的工作' : '修改我的工作') : d.forName && d.forName !== '?' ? '幫 ' + d.forName + ' 補一筆' : d.forName === '?' ? '幫施工人員補一筆' : '新增我的工作';
+  var h = topBar(title, S.editFrom || 'work') + '<div class="wrap">';
+  if (adm) h += adminEditBox(d);
   if (proxy) {
     h += '<div class="box"><b style="color:var(--warn)">這筆是管理者幫你填的</b><div>可以照你實際做的改；改的內容要等管理者按「同意」才會換（照片直接加）。</div>' +
       (d.reqStatus ? '<div style="font-weight:bold;color:' + reqColor(d.reqStatus) + '">' + esc(reqLabel(d.reqStatus)) + (d.pending ? '（下面是你上次改的）' : '') + '</div>' : '') +
@@ -1058,8 +1103,11 @@ function renderEdit() {
     s.weathers.map(function (w) { return chip('wx', w, w, d.weather === w, true); }).join('') + '</div></div></div>';
   if (!d.touchedWx && auto && d.weather === auto.weather) h += '<div class="note">' + esc(wxNote(auto)) + '</div>';
   if (S.site === UNFILED) h += '<div style="margin-top:8px"><div class="label">工地名稱（你知道的叫法就好）</div><input type="text" data-f="siteText" value="' + esc(d.siteText) + '" placeholder="例：新竹王先生透天" maxlength="60"><div class="note">管理者會再歸到正確的工地。</div></div>';
+  // 管理者可以改任何一天（第 13 版修正：以前 7 天前那筆打開來日期會被偷偷換成今天）
+  var dd = windowDays(); if (d.date && dd.indexOf(d.date) < 0) dd = dd.concat([d.date]);
   h += '<div class="label" style="margin-top:10px">哪一天的工作' + (s.role === '管理者' ? '' : '（只能傳 ' + s.days + ' 天內的）') + '</div><div class="chips">' +
-    windowDays().map(function (x) { var n = dayName(x); return chip('date', x, n.indexOf('/') >= 0 ? md(x) : n + ' ' + md(x), d.date === x); }).join('') + '</div></div>';
+    dd.map(function (x) { var n = dayName(x); return chip('date', x, n.indexOf('/') >= 0 ? md(x) : n + ' ' + md(x), d.date === x); }).join('') + '</div>' +
+    (s.role === '管理者' ? '<div class="row" style="margin-top:8px"><span class="sub" style="font-size:14px">其他日子</span><input type="date" data-f="date" value="' + esc(d.date) + '" max="' + esc(s.today) + '" style="max-width:190px"></div>' : '') + '</div>';
   h += '<div class="card"><div class="label">大項</div><div class="chips">' + uniq(s.categories.map(canonCat)).map(function (c) { return chip('cat', c, c, d.cat === c, true); }).join('') + '</div>' +
     '<div class="label" style="margin-top:10px">工數</div><div class="chips">' +
     s.hours.map(function (x) { var l = hoursLabel(x); return chip('hours', x, /工$/.test(l) ? x : l + ' ' + x, d.hours === x); }).join('') + '</div></div>';
@@ -1091,7 +1139,7 @@ function renderEdit() {
   h += '</div>' + (n < MAX_PHOTOS ? '<div class="row2"><button class="ghost" style="margin:0" data-act="cam">📷 拍照</button><button class="ghost" style="margin:0" data-act="pick">🖼 從相簿選</button></div>' : '') +
     '<div class="note" style="margin-top:6px">照片會先縮小（長邊 1600）再上傳。</div></div>';
   if (S.err) h += '<div class="err">' + esc(S.err) + '</div>';
-  h += '<button class="big" data-act="save"' + (editOk() ? '' : ' disabled') + '>' + (S.busy ? esc(S.progress || '上傳中…') : proxy ? '送出（等管理者同意）' : '上傳') + '</button>';
+  h += '<button class="big" data-act="save"' + (editOk() ? '' : ' disabled') + '>' + (S.busy ? esc(S.progress || '上傳中…') : proxy ? '送出（等管理者同意）' : d.forName === '?' ? '先選是誰的' : !d.id && d.forName ? '上傳（幫 ' + esc(d.forName) + ' 補）' : '上傳') + '</button>';
   if (d.id && !proxy) h += '<button class="ghost red" data-act="del">刪除這一筆</button>';
   if (proxy) h += '<div class="note" style="text-align:center">管理者填的這筆不能刪；不是你做的請跟管理者說。</div>';
   h += '<div class="note" style="text-align:center;margin-top:10px">' + (s.role === '管理者' ? '管理者可以改任何一天。' : '傳了以後 ' + s.days + ' 天內還可以改；過了就只有管理者能改。') + '</div>';
@@ -1153,6 +1201,8 @@ function renderSite() {
   h += tile('派工', taskLine(site), '#F28C28', '📋', 'tasks');
   // 3D 結構（使用者 2026-11-10：結構體、點一筆灌漿亮那幾區、點柱或梁看配筋）：開發者、老闆、主任（「3d不提供給公司跟施工人員」）
   if (isLead()) h += tile('3D 結構', '柱梁版牆・灌漿區・配筋', '#4F6BD8', '🏗️', '3d');
+  // 管理者（第 13 版，跟摺疊機一樣）：這個工地施工人員傳的、幫補一筆、同意修改
+  if (isAdmin() && !S.asCode) h += tile('施工人員傳的', '幫補一筆・同意修改・改或刪', '#2D9CDB', '👷', 'work');
   h += '</div>';
   if (o && S.officeErr) h += '<div class="sub">' + esc(S.officeErr) + '</div>';
   return h + '</div>';
@@ -1305,7 +1355,9 @@ function renderLogs() {
       if (head) h += '<div class="sub" style="font-size:14px">' + esc(head) + '</div>';
       item.lines.forEach(function (l) { h += '<div style="font-size:15px;line-height:21px">' + esc(l) + '</div>'; });
     }
-    wl.forEach(function (e) { h += '<div style="font-size:14.5px;color:var(--blue);line-height:20px;margin-top:3px;white-space:pre-wrap">👷 ' + esc(e.name + (String(e.hours || '').trim() ? '（' + e.hours + '）' : '') + '：' + e.text) + '</div>'; });
+    // 管理者點施工人員那一行就可以改（第 13 版，跟摺疊機一樣）
+    var canW = isAdmin() && !S.asCode;
+    wl.forEach(function (e) { h += '<div' + (canW ? ' class="wlog" data-act="logw" data-v="' + esc(e.id) + '"' : '') + ' style="font-size:14.5px;color:var(--blue);line-height:20px;margin-top:3px;white-space:pre-wrap">👷 ' + esc(e.name + (String(e.hours || '').trim() ? '（' + e.hours + '）' : '') + '：' + e.text) + (canW ? ' <b style="color:var(--orange)">✎</b>' : '') + '</div>'; });
     var n = (log && log.photos ? log.photos.filter(function (p) { return p.category === c && p.driveId; }).length : 0) + wl.reduce(function (a, e) { return a + (e.photos || []).length; }, 0);
     if (n) h += '<div style="font-size:13px;color:var(--warn);margin-top:3px">📷 ' + n + ' 張（在最下面）</div>';
     h += '</div>';
@@ -1380,6 +1432,7 @@ function modalOk(m) {
   if (m.type === 'todoadd') return !!(m.text.trim() && m.site);
   if (m.type === 'todoedit') return !!m.text.trim();
   if (m.type === 'task') return !m.busy && !!m.text.trim() && m.to.length > 0;
+  if (m.type === 'padd') return !m.busy && !!m.name.trim();
   return true;
 }
 
@@ -1501,6 +1554,8 @@ function go(r) {
 
 /** 記住的代碼不能用了（管理者換了代碼或停用）：清掉，回登入畫面重新輸入 */
 function codeGone(msg) {
+  // 開發者用 Google 登入的：切換成別人測試時那個人的代碼不能用了 → 回到開發者；這台記的代碼不動
+  if (S.gMode) { if (S.asCode) ACT.asend(); else gsGone(msg); return; }
   LS.set('code', ''); LS.set('feed', ''); LS.set('here', ''); LS.set('fc', ''); LS.set('seen', ''); LS.set('sess', '');
   LOGCACHE = {};
   S.saved = ''; S.code = ''; S.s = null; S.entries = []; S.codeInput = ''; S.feed = null; S.office = null; S.route = 'login'; S.modal = null; renderModal();
@@ -1520,7 +1575,8 @@ function setSite(v) { if (v && v !== S.site) { S.site = v; LS.set('site', v); S.
 function refresh() {
   if (!S.site) { S.loading = false; render(); return Promise.resolve(); }
   S.loading = true; render();
-  return api('recent', { site: S.site, days: 7 }).then(function (r) {
+  // 管理者看最近 31 天（未分組 62 天，跟 App 一樣）；施工人員收件服務只給可以改的那幾天
+  return api('recent', { site: S.site, days: isAdmin() ? (S.site === UNFILED ? 62 : 31) : 7 }).then(function (r) {
     S.entries = r.entries || []; if (r.today) S.s.today = r.today; S.err = ''; S.loading = false; render();
   }).catch(function (e) { S.loading = false; var m = failMsg(e); if (m) { S.err = m; render(); } });
 }
@@ -1530,8 +1586,11 @@ function openEdit(e) {
   var days = windowDays(), s = S.s;
   var pending = !!(e && e.reqStatus === '待確認');
   var src = (e && e.proxy && pending && s.role !== '管理者' && e.req) ? e.req : (e || {});
+  // 改完回哪裡：施工人員待處理、施工日誌、我的工作
+  if (S.route !== 'edit') S.editFrom = S.route === 'adminq' || S.route === 'logs' ? S.route : 'work';
   S.d = {
-    id: e ? e.id : '', date: e && days.indexOf(e.date) >= 0 ? e.date : days[0],
+    // 管理者打開以前的那筆：日期照原本的（以前會被換成今天）
+    id: e ? e.id : '', date: e && (s.role === '管理者' || days.indexOf(e.date) >= 0) ? e.date : days[0], forName: '', fileTo: '',
     cat: src.category || '', hours: src.hours || s.hours[0], text: src.text || '', weather: src.weather || '',
     mats: (src.materials || []).map(function (m) { return { vendor: m.vendor || '', qty: m.qty || '', unit: m.unit || '' }; }),
     siteText: e ? (e.siteText || '') : '', remote: e ? (e.photos || []).slice() : [], removed: [], local: [],
@@ -1731,7 +1790,8 @@ function openNotice(n) { markSeen([n.key]); S.modal = { type: 'nview', n: n, ask
 var ACT = {
   login: function () {
     var c = S.saved || (S.codeInput || '').trim().toUpperCase(); if (!c || S.busy) return;
-    S.code = c; S.err = '';
+    S.code = c; S.err = ''; S.gMode = false; S.asCode = ''; S.asName = '';   // 用代碼登入：不帶 Google 通行證
+    S.people = null; S.adminAll = null; S.adminAt = 0;   // 之前開發者讀的名單（有代碼）不要留著
     // 快一點（使用者 2026-11-10「優化速度」）：記住的代碼＋上次的資料 → 直接進首頁，登入、最新消息在背景同時問；
     // 代碼被換掉、停用（CODE）或鎖住（LOCKED）一樣會被請回登入畫面
     var sess = S.saved ? LS.getJSON('sess') : null;
@@ -1853,6 +1913,7 @@ var ACT = {
     var mats = d.mats.filter(function (m) { return (m.vendor || '').trim() || (m.qty || '').trim(); });
     var entry = { date: d.date, site: S.site, category: d.cat, hours: d.hours, text: d.text.trim(), weather: d.weather, materials: mats, siteText: d.siteText.trim() };
     if (d.id) entry.id = d.id;
+    else if (d.forName && d.forName !== '?') entry.name = d.forName;   // 管理者幫施工人員補一筆
     var chain = api('save', { entry: entry }).then(function (r) { d.id = r.id; });
     d.removed.concat(d.removedR).forEach(function (fid) {
       chain = chain.then(function () { return api('delphoto', { id: d.id, fileId: fid }); })
@@ -1869,14 +1930,14 @@ var ACT = {
         else { d.remote.push(r.fileId); d.local = d.local.filter(function (y) { return y !== x.p; }); }
       });
     });
-    chain.then(function () { S.busy = false; S.progress = ''; S.feedStale = true; go('work'); refresh(); })
+    chain.then(function () { S.busy = false; S.progress = ''; S.feedStale = true; editDone(); })
       .catch(function (e) { S.busy = false; S.progress = ''; var m = failMsg(e); if (m) { S.err = m + (d.id && (d.local.length || d.localR.length) ? '（已經傳上去的不會重複，再按一次會接著傳）' : ''); render(); } });
   },
   del: function () {
     var d = S.d; if (!d.id || S.busy) return;
     if (!confirm('要刪除這一筆嗎？內容和照片都會拿掉（管理者那邊會留紀錄）。')) return;
     S.busy = true; render();
-    api('delete', { id: d.id }).then(function () { S.busy = false; S.feedStale = true; go('work'); refresh(); })
+    api('delete', { id: d.id }).then(function () { S.busy = false; S.feedStale = true; editDone(); })
       .catch(function (e) { S.busy = false; var m = failMsg(e); if (m) { S.err = m; render(); } });
   },
   // 工地頁
@@ -1885,6 +1946,7 @@ var ACT = {
     else if (v === 'todo') openTodo('site');
     else if (v === '3d') open3d();
     else if (v === 'tasks') openTasks('site');
+    else if (v === 'work') openWork('site');   // 管理者：這個工地施工人員傳的
     else openOffice(v);
   },
   officereload: function () { loadOffice(); },
@@ -1925,8 +1987,8 @@ var ACT = {
   mclose: function () { if (S.modal && S.modal.busy) return; closeModal(); render(); },
   widgethelp: function () { S.modal = { type: 'widget' }; renderModal(); },
   widgetcopy: function () {
-    var m = S.modal; if (!m || !S.code) return;
-    copyText(widgetInstaller(S.code)).then(function () { m.copied = true; m.err = ''; renderModal(); },
+    var m = S.modal, wc = S.code || S.saved; if (!m || !wc) return;
+    copyText(widgetInstaller(wc)).then(function () { m.copied = true; m.err = ''; renderModal(); },
       function () { m.err = '複製不了：請再按一次；還是不行就找管理者'; renderModal(); });
   },
   apkhelp: function () {
@@ -2021,6 +2083,7 @@ document.addEventListener('input', function (ev) {
     return;
   }
   var d = S.d; if (!d) return;
+  if (k === 'date') { if (/^\d{4}-\d{2}-\d{2}$/.test(v) && v <= S.s.today) { d.date = v; applyWx(); } return; }   // 管理者選其他日子（change 時重畫）
   if (k === 'text' || k === 'siteText') { d[k] = v; }
   else if (k.indexOf('mat.') === 0) { var p = k.split('.'); d.mats[+p[1]][p[2]] = v; }
   // 上傳按鈕要不要亮：只改按鈕，不整個重畫（不然打字會跳掉）
@@ -2438,9 +2501,322 @@ function openNoteEditor(pi) {
   drawTools(); fit(); redraw();
 }
 
+// ===================== 第 13 版：最終權限＝開發者 Google 驗證、管理者畫面（使用者 2026-11-11） =====================
+// 「管理員可以多個，但只有一個是最終權限」「讓開發者要登入他的 Google 帳號做驗證比較保險」「iPad 版本的管理者也要跟摺疊屏一樣有完整功能」
+// 第一步：人員管理、施工人員待處理（同意修改、未分組歸檔）、幫補一筆、從日誌點施工人員那筆改、切換身分測試。
+var GIS = { loading: false, inited: false, cbs: [] };
+S.gs = ''; S.gMode = false; S.gBusy = false; S.gErr = ''; S.asCode = ''; S.asName = '';
+S.people = null; S.peopleErr = ''; S.peopleBusy = false; S.peopleOpen = ''; S.peopleMore = {};
+S.adminAll = null; S.adminAt = 0; S.editFrom = 'work';
+var ROLE_ORDER = ['管理者', '老闆', '主任', '公司', '施工人員'];
+function isAdmin() { return !!S.s && S.s.role === '管理者'; }
+function isOwner() { return !!S.s && !!S.s.owner && !S.asCode; }
+/** 這台可以用 Google 登入（開發者）：iPad、Mac、電腦（iPhone、Android 手機不顯示，免得施工人員看到） */
+function gAllowed() { return IPAD || MAC || PCAPP || (!IOS && !ANDROID); }
+
+function loadGis(cb) {
+  if (window.google && google.accounts && google.accounts.id) { cb(); return; }
+  GIS.cbs.push(cb);
+  if (GIS.loading) return;
+  GIS.loading = true;
+  var sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true;
+  sc.onload = function () { GIS.loading = false; var l = GIS.cbs; GIS.cbs = []; l.forEach(function (f) { try { f(); } catch (e) { } }); };
+  sc.onerror = function () { GIS.loading = false; GIS.cbs = []; S.gErr = '連不上 Google（網路有問題，等一下再試）'; render(); renderModal(); };
+  document.head.appendChild(sc);
+}
+/** 畫面上有 <div id="gbtn"> 就放 Google 的登入按鈕（每次重畫都要重放） */
+function mountGis() {
+  loadGis(function () {
+    var el = $('gbtn'); if (!el) return;
+    if (!GIS.inited) {
+      google.accounts.id.initialize({ client_id: WEB_CLIENT_ID, callback: onGoogle, auto_select: false, cancel_on_tap_outside: true, ux_mode: 'popup' });
+      GIS.inited = true;
+    }
+    el.innerHTML = '';
+    google.accounts.id.renderButton(el, { theme: 'filled_blue', size: 'large', text: 'signin_with', shape: 'pill', locale: 'zh-TW', width: Math.max(200, Math.min(320, el.clientWidth || 300)) });
+  });
+}
+/** Google 回來了：把 ID 權杖交給收件服務確認是開發者本人 → 拿通行證 */
+function onGoogle(resp) {
+  if (!resp || !resp.credential || S.gBusy) return;
+  S.gBusy = true; S.gErr = ''; render(); renderModal();
+  var keep = S.code, keepMode = S.gMode; S.code = ''; S.gMode = false;
+  api('gauth', { idToken: resp.credential }).then(function (r) {
+    S.gBusy = false; S.gs = r.gs; LS.set('gs', r.gs);
+    if (S.modal && S.modal.type === 'gverify') closeModal();
+    gsEnter(false);
+  }).catch(function (e) {
+    S.gBusy = false; S.code = keep; S.gMode = keepMode;
+    S.gErr = errText(e); render(); renderModal();
+  });
+}
+/** 用 Google 通行證進去（開發者本人；fast：先用上次的資料直接進首頁） */
+function gsEnter(fast) {
+  if (!S.gs || S.busy) return;
+  S.gMode = true; S.code = ''; S.asCode = ''; S.asName = ''; S.err = ''; S.people = null; S.adminAll = null; S.adminAt = 0; S.office = null; LOGCACHE = {};
+  var sess = fast ? LS.getJSON('gsess') : null;
+  if (sess && sess.today && sess.owner) {
+    S.s = sess; S.site = LS.get('site'); pickSite(sess);
+    loadSeen(); S.feed = LS.getJSON('feed'); S.here = LS.getJSON('here'); S.fc = LS.getJSON('fc');
+    go('hub'); loadFeed(false);
+    api('login').then(function (s) { if (S.asCode || !S.gMode) return; S.s = s; LS.setJSON('gsess', s); pickSite(s); renderSoft(); }).catch(function (e) { failMsg(e); });
+    return;
+  }
+  S.busy = true; render();
+  api('login').then(function (s) {
+    S.busy = false; S.s = s; LS.setJSON('gsess', s); S.site = LS.get('site'); pickSite(s);
+    loadSeen(); S.feed = LS.getJSON('feed'); S.here = LS.getJSON('here'); S.fc = LS.getJSON('fc');
+    go('hub'); loadFeed(true);
+  }).catch(function (e) { S.busy = false; var m = failMsg(e); if (m) { S.err = m; S.gMode = false; S.route = 'login'; render(); } });
+}
+/** Google 通行證不能用了（過期、被登出）：回登入畫面（這台記的代碼不動） */
+function gsGone(msg) {
+  LS.set('gs', ''); LS.set('gsess', ''); LOGCACHE = {};
+  S.gs = ''; S.gMode = false; S.asCode = ''; S.asName = ''; S.code = ''; S.s = null; S.feed = null; S.office = null; S.people = null; S.adminAll = null;
+  S.busy = false; S.route = 'login'; S.modal = null; renderModal();
+  S.err = msg || 'Google 驗證已經過期，請再用 Google 登入一次'; render();
+}
+ACT.glogin = function () { gsEnter(true); };
+ACT.gout = function () {
+  if (!confirm('這台登出 Google（開發者）？之後要再用 Google 登入，或用代碼登入。')) return;
+  LS.set('gs', ''); LS.set('gsess', ''); S.gs = ''; S.gMode = false; S.s = null; S.people = null; S.adminAll = null; S.route = 'login'; S.err = ''; render();
+};
+ACT.gverify = function () { S.gErr = ''; S.modal = { type: 'gverify' }; renderModal(); };
+function gVerifyModal(m) {
+  return '<h3>🔐 用 Google 登入（開發者）</h3><div class="note" style="font-size:15px">只有開發者本人的 Google 帳號可以。登入後這台跟摺疊機一樣有最終權限（人員名單、代碼），一次可以用 30 天。</div>' +
+    '<div id="gbtn" style="margin:14px 0;min-height:44px"></div>' + (S.gBusy ? '<div class="sub">Google 確認中…</div>' : '') +
+    (S.gErr ? '<div class="err">' + esc(S.gErr) + '</div>' : '') + '<button class="ghost" data-act="mclose">取消</button>';
+}
+
+// ---------- 切換身分（開發者用別人的代碼測試；本人用過的不能換） ----------
+function asBar() {
+  return '<div class="asbar">🔁 測試中：<b>' + esc(S.asName) + '</b>（' + esc(S.s ? S.s.role : '') + '）<button data-act="asend">回到開發者</button></div>';
+}
+ACT.asgo = function (name) {
+  var p = ((S.people && S.people.people) || []).filter(function (x) { return x.name === name; })[0];
+  if (!p || !p.code || S.busy || !S.gMode) return;
+  S.busy = true; S.peopleErr = ''; render();
+  S.code = p.code;
+  api('login').then(function (s) {
+    S.busy = false; S.asCode = p.code; S.asName = p.name; S.s = s; S.feed = null; S.office = null; S.adminAll = null; S.myTasks = null; LOGCACHE = {};
+    pickSite(s); go('hub'); loadFeed(true);
+  }).catch(function (e) { S.busy = false; S.code = ''; S.peopleErr = '切換不了：' + errText(e); render(); });
+};
+ACT.asend = function () { S.asCode = ''; S.asName = ''; S.feed = null; S.office = null; S.myTasks = null; gsEnter(false); };
+
+// ---------- 人員管理 ----------
+function openPeople() { S.peopleErr = ''; S.peopleOpen = ''; go('people'); loadPeople(); }
+function loadPeople() {
+  S.peopleBusy = true; renderSoft();
+  return api('people').then(function (r) { S.people = r; S.peopleBusy = false; renderSoft(); })
+    .catch(function (e) { S.peopleBusy = false; var m = failMsg(e); if (m) { S.peopleErr = m; renderSoft(); } });
+}
+function findP(name) { return ((S.people && S.people.people) || []).filter(function (x) { return x.name === name; })[0]; }
+function renderPeople() {
+  var P = S.people, own = (P ? !!P.owner : isOwner()) && !S.asCode;   // 還在讀：先照登入時的
+  var h = topBar('人員管理', 'hub', S.peopleBusy ? '更新中…' : '⟳ 更新', 'peoplereload') + '<div class="wrap narrow">';
+  if (own) h += '<div class="box" style="border-color:var(--green);background:#EAF6EF"><b>⭐ 開發者（Google 已驗證）</b><div>最終權限：新增、剔除、換代碼、看代碼、改角色、解除鎖住的手機。</div></div>';
+  else h += '<div class="box"><b>只看得到名單</b><div>代碼、新增、剔除、換代碼只有開發者本人可以' + (gAllowed() ? '：按下面「用 Google 登入（開發者）」。' : '（摺疊機 App，或 iPad／電腦用 Google 登入）。') + '</div>' +
+    (gAllowed() ? '<button class="ghost" style="margin:8px 0 0" data-act="gverify">🔐 用 Google 登入（開發者）</button>' : '') + '</div>';
+  if (S.peopleErr) h += '<div class="err">' + esc(S.peopleErr) + '</div>';
+  if (!P) return h + '<div class="card sub" style="font-size:15px">讀取中…</div></div>';
+  if (own) h += '<button class="big" data-act="padd">＋ 新增人員（自動給代碼）</button>';
+  ROLE_ORDER.forEach(function (role) {
+    var list = (P.people || []).filter(function (p) { return (p.role || '施工人員') === role; });
+    if (list.length) h += '<div class="card"><div class="ttl">' + esc(role) + '（' + list.length + '）</div>' + list.map(function (p) { return personRow(p, own); }).join('') + '</div>';
+  });
+  if ((P.locks || []).length) h += '<div class="card"><div class="ttl">🔒 鎖住的手機（' + P.locks.length + '）</div>' + P.locks.map(function (l) {
+    return '<div class="prow" style="cursor:default"><div class="grow"><b>' + esc(l.short) + '</b>・' + esc(l.client) + '<div class="sub">' + (l.perm ? '一直鎖住' : '鎖到 ' + esc(l.until)) +
+      '・打錯 ' + l.tries + ' 次' + (l.last ? '・最後 ' + esc(l.last) : '') + '</div></div>' + (own ? '<button class="mini" data-act="punlock" data-v="' + esc(l.device) + '">解除</button>' : '') + '</div>';
+  }).join('') + '</div>';
+  if (own) {
+    var g = P.gs || [];
+    h += '<div class="card"><div class="ttl">🔐 用 Google 登入過的 iPad／電腦（' + g.length + '）</div>' +
+      g.map(function (x) { return '<div class="sub" style="font-size:14px;line-height:21px">' + esc(x.created) + ' 登入・' + esc(x.client) + (x.device ? '・' + esc(x.device) : '') + '・可以用到 ' + esc(String(x.until).slice(0, 10)) + '</div>'; }).join('') +
+      (g.length ? '<button class="ghost red" style="margin:8px 0 0" data-act="gsout">全部登出（這台也會登出）</button>' : '') + '</div>';
+  }
+  h += listCard('🕘 最近登入', (P.logins || []).map(function (x) { return x.time + '　' + x.name + '（' + x.role + '）・' + x.client; }), 'logins');
+  h += listCard('⚠️ 打錯代碼', (P.fails || []).map(function (x) { return x.time + '　' + x.client + (x.device ? '・' + String(x.device).slice(0, 6) : '') + (x.code ? '・打「' + x.code + '」' : '') + '・' + x.result; }), 'fails');
+  return h + '</div>';
+}
+function listCard(title, rows, key) {
+  if (!rows.length) return '';
+  var more = S.peopleMore[key], shown = more ? rows : rows.slice(0, 8);
+  return '<div class="card"><div class="ttl">' + title + '（' + rows.length + '）</div>' + shown.map(function (t) { return '<div class="sub" style="font-size:13.5px;line-height:21px">' + esc(t) + '</div>'; }).join('') +
+    (rows.length > 8 ? '<button class="link" data-act="pmore" data-v="' + key + '">' + (more ? '收起來' : '看全部') + '</button>' : '') + '</div>';
+}
+function personRow(p, own) {
+  var open = S.peopleOpen === p.name;
+  var info = [p.lastLogin ? '最後登入 ' + p.lastLogin + (p.client ? '・' + p.client : '') : '還沒登入過'];
+  if (p.used) info.push('本人用過');
+  var h = '<div class="prow' + (p.on ? '' : ' off') + '" data-act="popen" data-v="' + esc(p.name) + '"><div class="grow"><b style="font-size:17px">' + esc(p.name) + '</b>' + (p.full ? '　' + esc(p.full) : '') +
+    (p.owner ? ' <span class="ptag">⭐ 最終權限</span>' : '') + (p.on ? '' : ' <span class="ptag red">已剔除</span>') +
+    '<div class="sub">' + esc(info.join('・')) + '</div></div>' + (own && p.code ? '<span class="pcode">' + esc(p.code) + '</span>' : '') + '<span class="chev">' + (open ? '▲' : '▼') + '</span></div>';
+  if (!open) return h;
+  h += '<div class="pact">';
+  if (!own) return h + '<div class="sub" style="font-size:14px">要改這個人：開發者用 Google 登入。</div></div>';
+  if (p.owner) return h + '<div class="sub" style="font-size:14px">開發者本人（最終權限）：不能剔除、刪除或改角色。</div>' +
+    '<div class="row2" style="margin-top:8px"><button class="mini" data-act="pcode" data-v="' + esc(p.name) + '">換代碼</button><button class="mini" data-act="pcopy" data-v="' + esc(p.name) + '">複製代碼</button></div></div>';
+  h += '<div class="label">角色</div><div class="chips">' + ROLE_ORDER.map(function (r) { return chip('prole', p.name + '|' + r, r, p.role === r, true); }).join('') + '</div>';
+  h += '<div class="row2" style="margin-top:10px"><button class="mini" data-act="pon" data-v="' + esc(p.name) + '">' + (p.on ? '剔除' : '恢復') + '</button>' +
+    '<button class="mini" data-act="pcode" data-v="' + esc(p.name) + '">換代碼</button><button class="mini" data-act="pcopy" data-v="' + esc(p.name) + '">複製代碼</button></div>' +
+    '<div class="row2" style="margin-top:8px">' + (p.on && p.role !== '管理者' ? '<button class="mini" data-act="asgo" data-v="' + esc(p.name) + '">🔁 切換成他測試</button>' : '<span></span>') +
+    '<button class="mini red" data-act="pdel" data-v="' + esc(p.name) + '">整列刪除</button></div>';
+  return h + '</div>';
+}
+/** 改人員：做完重新讀名單 */
+function pEdit(body) {
+  if (S.peopleBusy) return Promise.resolve(null);
+  S.peopleBusy = true; S.peopleErr = ''; render();
+  return api('person', body).then(function (r) { S.peopleBusy = false; return loadPeople().then(function () { return r; }); })
+    .catch(function (e) { S.peopleBusy = false; var m = failMsg(e); if (m) { S.peopleErr = m; render(); } return null; });
+}
+ACT.people = function () { openPeople(); };
+ACT.peoplereload = function () { loadPeople(); };
+ACT.popen = function (v) { S.peopleOpen = S.peopleOpen === v ? '' : v; render(); };
+ACT.pmore = function (v) { S.peopleMore[v] = !S.peopleMore[v]; render(); };
+ACT.prole = function (v) {
+  var i = v.indexOf('|'), name = v.slice(0, i), role = v.slice(i + 1), p = findP(name);
+  if (!p || p.role === role) return;
+  if (!confirm('把「' + name + '」的角色改成「' + role + '」？')) return;
+  pEdit({ op: 'role', name: name, role: role });
+};
+ACT.pon = function (v) {
+  var p = findP(v); if (!p) return;
+  if (p.on && !confirm('剔除「' + v + '」？他就不能再登入（以前傳的都還在，之後可以恢復）。')) return;
+  pEdit({ op: 'on', name: v, on: !p.on });
+};
+ACT.pcode = function (v) {
+  var p = findP(v); if (!p) return;
+  if (!confirm('幫「' + v + '」換新代碼？舊的代碼馬上不能用' + (p.owner ? '（摺疊機 App 要重新輸入新代碼）' : '，要把新代碼告訴他') + '。')) return;
+  pEdit({ op: 'code', name: v }).then(function (r) { if (r && r.code) { S.modal = { type: 'pnew', name: v, code: r.code, title: '新代碼' }; renderModal(); } });
+};
+ACT.pcopy = function (v) { var p = findP(v); if (p && p.code) { S.modal = { type: 'pnew', name: v, code: p.code, title: '代碼' }; renderModal(); } };
+ACT.pdel = function (v) {
+  if (!confirm('整列刪掉「' + v + '」？（以前傳的工作還在）要暫時不讓他用，選「剔除」就好。')) return;
+  pEdit({ op: 'del', name: v });
+};
+ACT.punlock = function (v) { pEdit({ op: 'unlock', target: v }); };
+ACT.gsout = function () { if (!confirm('用 Google 登入過的 iPad／電腦全部登出？（這台也會登出，要再用 Google 登入一次）')) return; pEdit({ op: 'gsout' }); };
+ACT.padd = function () { S.modal = { type: 'padd', name: '', full: '', role: '施工人員', busy: false, err: '' }; renderModal(); };
+ACT.mprole = function (v) { S.modal.role = v; renderModal(); };
+ACT.mpadd = function () {
+  var m = S.modal; if (!m || m.busy || !m.name.trim()) return;
+  m.busy = true; m.err = ''; renderModal();
+  api('person', { op: 'add', name: m.name.trim(), full: m.full.trim(), role: m.role }).then(function (r) {
+    S.modal = { type: 'pnew', name: m.name.trim(), code: r.code, title: '新增好了' }; renderModal(); loadPeople();
+  }).catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = x; renderModal(); } });
+};
+ACT.mpcopy = function () { var m = S.modal; copyText(m.code).then(function () { m.copied = true; renderModal(); }, function () { m.err = '複製不了，請自己抄下來'; renderModal(); }); };
+function personAddModal(m) {
+  return '<h3>＋ 新增人員</h3><div class="label">名字（寫在日誌上的叫法，例：吉）</div><input type="text" data-f="m.name" maxlength="10" value="' + esc(m.name) + '">' +
+    '<div class="label" style="margin-top:8px">全名（可以不填）</div><input type="text" data-f="m.full" maxlength="30" value="' + esc(m.full) + '">' +
+    '<div class="label" style="margin-top:8px">角色</div><div class="chips">' + ROLE_ORDER.map(function (r) { return chip('mprole', r, r, m.role === r, true); }).join('') + '</div>' +
+    (m.role === '管理者' ? '<div class="note" style="color:var(--warn);margin-top:6px">其他管理者可以做每天的工作（補一筆、同意修改、歸檔、匯出）；人員名單只有開發者能改。</div>' : '') +
+    (m.err ? '<div class="err" style="margin-top:8px">' + esc(m.err) + '</div>' : '') +
+    '<button class="big" style="margin-top:12px" id="msave" data-act="mpadd"' + (m.name.trim() && !m.busy ? '' : ' disabled') + '>' + (m.busy ? '新增中…' : '新增（自動給代碼）') + '</button>' +
+    '<button class="ghost" data-act="mclose">取消</button>';
+}
+function personNewModal(m) {
+  return '<h3>' + esc(m.title) + '：' + esc(m.name) + '</h3><div class="label">代碼（給他自己登入用，不要傳給別人）</div>' +
+    '<div style="font-size:34px;letter-spacing:8px;font-weight:800;text-align:center;padding:10px;border:2px dashed var(--line);border-radius:12px;font-family:Consolas,Menlo,monospace">' + esc(m.code) + '</div>' +
+    (m.err ? '<div class="err" style="margin-top:8px">' + esc(m.err) + '</div>' : '') +
+    '<button class="big" style="margin-top:12px" data-act="mpcopy">' + (m.copied ? '✓ 已複製' : '複製代碼') + '</button><button class="ghost" data-act="mclose">關閉</button>';
+}
+
+// ---------- 施工人員待處理（等你同意、未分組）＋管理者首頁卡片 ----------
+function loadAdminAll() {
+  if (!isAdmin() || S.asCode) return Promise.resolve();
+  S.adminAt = Date.now();
+  return api('recent', { site: '', days: 62 }).then(function (r) { S.adminAll = r.entries || []; renderSoft(); }).catch(function (e) { failMsg(e); });
+}
+function adminCounts() {
+  var a = S.adminAll || [];
+  return { pending: a.filter(function (e) { return e.reqStatus === '待確認'; }).length, unfiled: a.filter(function (e) { return e.site === UNFILED; }).length };
+}
+function adminCard() {
+  var c = adminCounts(), own = isOwner(), n = c.pending + c.unfiled;
+  var h = '<div class="card admin"><b style="font-size:17px">' + (own ? '⭐ 開發者（Google 已驗證）' : '管理者') + '</b>';
+  h += '<div class="row2" style="margin-top:8px"><button class="ghost" style="margin:0" data-act="people">👥 人員管理</button>' +
+    '<button class="ghost" style="margin:0" data-act="adminq">👷 施工人員待處理' + badgeHtml(n) + '</button></div>';
+  if (S.adminAll) h += '<div class="sub" style="margin-top:6px">等你同意 ' + c.pending + ' 筆 ・ 未分組 ' + c.unfiled + ' 筆（最近 62 天）</div>';
+  if (!own && gAllowed()) h += '<button class="link" data-act="gverify">🔐 要改人員名單：用 Google 登入（開發者）</button>';
+  return h + '</div>';
+}
+function renderAdminQ() {
+  var a = S.adminAll;
+  var h = topBar('施工人員待處理', 'hub', '⟳ 更新', 'adminqreload') + '<div class="wrap">';
+  if (!a) return h + '<div class="card sub" style="font-size:15px">讀取中…</div></div>';
+  var pend = a.filter(function (e) { return e.reqStatus === '待確認'; }), unf = a.filter(function (e) { return e.site === UNFILED; });
+  function rows(list) {
+    return list.length ? list.map(function (e) {
+      return '<div class="sub" style="margin-top:10px;font-weight:bold;font-size:14px">' + md(e.date) + '（' + dayName(e.date) + '）' + esc(e.site === UNFILED ? '未分組' : e.site) + '</div>' +
+        entryRow(e).replace('data-act="open"', 'data-act="qopen"');
+    }).join('') : '<div class="sub" style="padding:8px 0;font-size:14.5px">沒有</div>';
+  }
+  h += '<div class="card"><div class="ttl">等你同意（' + pend.length + '）</div><div class="sub">施工人員改了你幫他填的那筆；點進去按「同意」或「不同意」。</div>' + rows(pend) + '</div>';
+  h += '<div class="card"><div class="ttl">未分組（' + unf.length + '）</div><div class="sub">施工人員找不到工地、自己打名稱的；點進去選正確的工地歸檔。</div>' + rows(unf) + '</div>';
+  return h + '</div>';
+}
+ACT.adminq = function () { go('adminq'); loadAdminAll(); };
+ACT.adminqreload = function () { S.adminAll = null; render(); loadAdminAll(); };
+ACT.qopen = function (id) { var e = (S.adminAll || []).filter(function (x) { return x.id === id; })[0]; if (!e) return; S.site = e.site; openEdit(e); };
+ACT.logw = function (id) { var e = ((S.log && S.log.workers) || []).filter(function (x) { return x.id === id; })[0]; if (e) openEdit(e); };
+ACT.addfor = function () { openEdit(null); S.d.forName = '?'; render(); };
+ACT.forname = function (v) { S.d.forName = v; render(); };
+ACT.fsite = function (v) { S.d.fileTo = v; render(); };
+
+/** 管理者在「修改」畫面多的：這筆是誰的、等你同意、未分組歸檔 */
+function adminEditBox(d) {
+  var s = S.s, o = d.orig, h = '';
+  if (!d.id && d.forName) {
+    h += '<div class="card"><div class="label"' + (d.forName === '?' ? ' style="color:var(--red)"' : '') + '>幫誰補（一定要選）</div><div class="chips">' +
+      (s.people || []).map(function (n) { return chip('forname', n, n, d.forName === n, true); }).join('') + '</div>' +
+      '<div class="note" style="margin-top:6px">他看得到這筆，但不能直接改，只能申請修改（你同意才換）。</div></div>';
+  } else if (d.id && o && o.name && o.name !== s.name) {
+    h += '<div class="box" style="border-color:#2D9CDB;background:#EEF6FD"><b>' + esc(o.name) + ' 的工作</b>' + (o.proxy ? '（你幫他填的）' : '') + '<div class="sub">管理者可以直接改、刪。</div></div>';
+  }
+  if (d.id && d.pending && o && o.req) {
+    h += '<div class="box"><b style="color:var(--warn)">' + esc(o.name) + ' 申請修改，等你決定</b><div style="white-space:pre-wrap;margin-top:4px;font-size:15px">' + esc(o.reqText || '') + '</div>' +
+      '<div class="row2" style="margin-top:10px"><button class="big" style="margin:0" data-act="decide" data-v="1"' + (S.busy ? ' disabled' : '') + '>✓ 同意（照他改的）</button>' +
+      '<button class="ghost red" style="margin:0" data-act="decide" data-v="0"' + (S.busy ? ' disabled' : '') + '>✗ 不同意</button></div></div>';
+  }
+  if (d.id && S.site === UNFILED) {
+    var sites = uniq(siteNames().concat(s.sites || [])).filter(function (n) { return n !== UNFILED; });
+    h += '<div class="box" style="border-color:var(--teal);background:#E9F7F6"><b>歸檔到哪個工地</b><div class="sub">他打的：' + esc(d.siteText || '（沒打）') + '</div>' +
+      '<div class="chips" style="margin-top:6px">' + sites.map(function (n) { return chip('fsite', n, n, d.fileTo === n, true); }).join('') + '</div>' +
+      '<button class="big" style="margin:10px 0 0" data-act="fileit"' + (d.fileTo && !S.busy ? '' : ' disabled') + '>' + (d.fileTo ? '歸檔到「' + esc(d.fileTo) + '」' : '先選工地') + '</button>' +
+      '<div class="note" style="margin-top:4px">新的工地要先在摺疊機「＋ 新增工地」。</div></div>';
+  }
+  return h;
+}
+ACT.decide = function (v) {
+  var d = S.d; if (!d || !d.id || S.busy) return;
+  if (!confirm(v === '1' ? '同意他的修改？（照他改的換掉）' : '不同意？（維持你填的原本）')) return;
+  S.busy = true; S.err = ''; render();
+  api('decide', { id: d.id, ok: v === '1' }).then(function () { S.busy = false; S.feedStale = true; editDone(); })
+    .catch(function (e) { S.busy = false; var m = failMsg(e); if (m) { S.err = m; render(); } });
+};
+ACT.fileit = function () {
+  var d = S.d; if (!d || !d.id || !d.fileTo || S.busy) return;
+  S.busy = true; S.err = ''; render();
+  api('file', { id: d.id, site: d.fileTo }).then(function () { S.busy = false; S.feedStale = true; editDone(); })
+    .catch(function (e) { S.busy = false; var m = failMsg(e); if (m) { S.err = m; render(); } });
+};
+/** 存好、刪掉、同意、歸檔以後：回到原本那一頁並更新 */
+function editDone() {
+  var f = S.editFrom || 'work';
+  if (f === 'adminq') { go('adminq'); loadAdminAll(); return; }
+  if (f === 'logs') { LOGCACHE = {}; go('logs'); loadLog(S.log ? S.log.date : null); }
+  else { go('work'); refresh(); }
+  if (isAdmin()) loadAdminAll();
+}
+document.addEventListener('change', function (ev) { if (ev.target.getAttribute && ev.target.getAttribute('data-f') === 'date' && S.route === 'edit') render(); });
+
 // ---------- 開始 ----------
 // 記住的代碼：顯示鎖住的 ●●●●●●，按「登入」才進去（使用者 2026-11-08）
 S.saved = LS.get('code');
+S.gs = LS.get('gs');   // 這台用 Google 登入過（開發者）
 S.site = LS.get('site');
 render();
 </script>
