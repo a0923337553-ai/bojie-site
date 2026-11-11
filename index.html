@@ -117,6 +117,11 @@ textarea { min-height:76px; resize:vertical; }
 .entry .body { flex:1; min-width:0; }
 .thumbs { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-bottom:8px; }
 .thumb { position:relative; padding-top:75%; background:#d5dde3; border-radius:8px; overflow:hidden; }
+/* 單據的施作位置（2026-11-11）：沒填＝有框的「＋ 施作位置」，填了＝橘色 */
+.loctag { display:block; width:100%; margin-top:4px; padding:3px 6px; border:1.5px solid var(--navy); border-radius:7px; background:#fff; color:var(--navy);
+  font:inherit; font-size:13px; font-weight:bold; text-align:left; line-height:1.25; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.loctag.on { border-color:#E0662B; background:#FFF3E6; color:#B5440F; }
+.locline { margin:-4px 0 10px; padding:6px 10px; background:#FFF3E6; color:#B5440F; font-weight:bold; border-radius:0 0 10px 10px; }
 .thumb img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 .thumb .x { position:absolute; top:3px; right:3px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:10px; padding:1px 8px; font-weight:bold; }
 .thumb .new { position:absolute; left:3px; bottom:3px; background:var(--orange); color:#fff; font-size:11px; border-radius:6px; padding:0 5px; }
@@ -1132,10 +1137,15 @@ function renderEdit() {
   // 單據照片（材料單、重機具單；只有開發者、老闆、主任和自己看得到；App 0.9.20 起有）
   var rn = d.remoteR.length + d.localR.length;
   h += '<div class="card" style="background:#FFFBF0"><div class="label">🧾 單據照片（材料單、重機具單；' + rn + ' 張）</div>' + (rn ? '<div class="thumbs">' : '');
-  d.remoteR.forEach(function (id) { h += '<div class="thumb"><img data-pid="' + esc(id) + '" alt=""><button class="x" data-act="rmremoter" data-v="' + esc(id) + '">✕</button></div>'; });
-  d.localR.forEach(function (p, i) { h += '<div class="thumb"><img src="' + p.url + '" alt=""><button class="x" data-act="rmlocalr" data-v="' + i + '">✕</button><span class="new">未上傳</span></div>'; });
-  h += (rn ? '</div>' : '') + '<div class="row2"><button class="ghost" style="margin:0" data-act="camr">📷 拍單據</button><button class="ghost" style="margin:0" data-act="pickr">🖼 從相簿選</button></div>' +
-    '<div class="note" style="margin-top:6px">單據只有開發者、老闆、主任和你自己看得到。</div></div>';
+  // 每張單據下面一個施作位置（使用者 2026-11-11）：填了＝橘色「📍 2F 樓板」，沒填＝有框的「＋ 施作位置」，點了改
+  var locTag = function (loc, key) { return '<button class="loctag' + (loc ? ' on' : '') + '" data-act="rloc" data-v="' + esc(key) + '">' + (loc ? '📍 ' + esc(loc) : '＋ 施作位置') + '</button>'; };
+  d.remoteR.forEach(function (id) { h += '<div><div class="thumb"><img data-pid="' + esc(id) + '" alt=""><button class="x" data-act="rmremoter" data-v="' + esc(id) + '">✕</button></div>' + locTag(d.rLocs[id] || '', 'r:' + id) + '</div>'; });
+  d.localR.forEach(function (p, i) { h += '<div><div class="thumb"><img src="' + p.url + '" alt=""><button class="x" data-act="rmlocalr" data-v="' + i + '">✕</button><span class="new">未上傳</span></div>' + locTag(p.loc || '', 'l:' + i) + '</div>'; });
+  var locs = locChoices(d);
+  h += (rn ? '</div>' : '') + '<div class="label" style="margin-top:4px">下一張單據的施作位置</div><input type="text" data-f="nextLoc" maxlength="60" value="' + esc(d.nextLoc) + '" placeholder="例：2F 樓板（可以不填，之後再補）">' +
+    (locs.length ? '<div class="chips" style="margin-top:6px">' + locs.map(function (c) { return chip('nextloc', c, c, d.nextLoc.trim() === c, true); }).join('') + '</div>' : '') +
+    '<div class="row2" style="margin-top:8px"><button class="ghost" style="margin:0" data-act="camr">📷 拍單據</button><button class="ghost" style="margin:0" data-act="pickr">🖼 從相簿選</button></div>' +
+    '<div class="note" style="margin-top:6px">單據只有開發者、老闆、主任和你自己看得到。施作位置可以先填再拍，或拍完點單據下面補。</div></div>';
   h += '<div class="card"><div class="label">做了什麼（位置、內容）</div><textarea data-f="text" placeholder="例：地梁綁紮（A 區）">' + esc(d.text) + '</textarea></div>';
   // 照片
   var n = d.remote.length + d.local.length;
@@ -1162,7 +1172,10 @@ function renderView() {
     (e.materials && e.materials.length ? '<div style="color:var(--navy)">材料/機具：' + esc(e.materials.map(matText).join('、')) + '</div>' : '') + '</div>';
   h += '<div class="full">' + (e.photos || []).map(function (id) { return '<img data-pid="' + esc(id) + '" alt="">'; }).join('') + '</div>';
   if (!(e.photos || []).length) h += '<div class="card note">沒有照片</div>';
-  if ((e.receipts || []).length) h += '<div class="card"><div class="ttl">🧾 單據照片（' + e.receipts.length + ' 張）</div></div><div class="full">' + e.receipts.map(function (id) { return '<img data-pid="' + esc(id) + '" alt="">'; }).join('') + '</div>';
+  if ((e.receipts || []).length) h += '<div class="card"><div class="ttl">🧾 單據照片（' + e.receipts.length + ' 張）</div></div><div class="full">' + e.receipts.map(function (id) {
+    var loc = (e.receiptLocs || {})[id];
+    return '<img data-pid="' + esc(id) + '" alt="">' + (loc ? '<div class="locline">📍 施作位置：' + esc(loc) + '</div>' : '');
+  }).join('') + '</div>';
   return h + '</div>';
 }
 
@@ -1332,13 +1345,19 @@ function dayPhotos(log, ws, cats, date) {
   var roc = rocDate(date), out = [], photos = (log && log.photos) || [];
   uniq(cats.concat(photos.map(function (p) { return p.category; }))).forEach(function (c) {
     var it = logItem(log, c), vq = it ? [it.vendor, it.qty ? it.qty + it.unit : ''].filter(Boolean).join('-') : '';
-    photos.filter(function (p) { return p.category === c && p.driveId; }).forEach(function (p) { out.push({ id: p.driveId, cat: c, line: [vq, p.line].filter(Boolean).join('\n'), date: roc }); });
+    photos.filter(function (p) { return p.category === c && p.driveId; }).forEach(function (p) {
+      var line = c === '材料單據' && p.line ? '📍 ' + p.line : p.line;   // 開發者的單據：內容＝施作位置
+      out.push({ id: p.driveId, cat: c, line: [vq, line].filter(Boolean).join('\n'), date: roc });
+    });
     ws.filter(function (e) { return e.category === c; }).forEach(function (e) {
       var first = String(e.text || '').split('\n').filter(function (x) { return x.trim(); })[0];
       (e.photos || []).forEach(function (id) { out.push({ id: id, w: 1, cat: c, line: '👷 ' + e.name + (first ? '：' + first : ''), date: roc }); });
     });
   });
-  ws.forEach(function (e) { (e.receipts || []).forEach(function (id) { out.push({ id: id, w: 1, cat: '材料單據', line: '👷 ' + e.name + '（' + e.category + '）', date: roc }); }); });
+  ws.forEach(function (e) { (e.receipts || []).forEach(function (id) {
+    var loc = (e.receiptLocs || {})[id];   // 單據的施作位置（收件服務第 18 版）
+    out.push({ id: id, w: 1, cat: '材料單據', line: '👷 ' + e.name + '（' + e.category + '）' + (loc ? '\n📍 ' + loc : ''), date: roc });
+  }); });
   return out;
 }
 function renderLogs() {
@@ -1619,6 +1638,8 @@ function openEdit(e) {
     mats: (src.materials || []).map(function (m) { return { vendor: m.vendor || '', qty: m.qty || '', unit: m.unit || '' }; }),
     siteText: e ? (e.siteText || '') : '', remote: e ? (e.photos || []).slice() : [], removed: [], local: [],
     remoteR: e ? (e.receipts || []).slice() : [], removedR: [], localR: [],
+    // 單據的施作位置（收件服務第 18 版，使用者 2026-11-11）：雲端編號 → 位置；rLocs0＝打開時雲端上的；nextLoc＝下一張的
+    rLocs: Object.assign({}, e && e.receiptLocs || {}), rLocs0: Object.assign({}, e && e.receiptLocs || {}), nextLoc: '',
     touchedWx: false, lastAuto: '', proxy: !!(e && e.proxy), pending: pending, reqStatus: e ? (e.reqStatus || '') : '', orig: e
   };
   S.wx = {};
@@ -1664,7 +1685,9 @@ function addFiles(files, receipt) {
     chain = chain.then(function () {
       if (S.d !== d) return;
       if (list.length > 1) show('加入照片 ' + (i + 1) + '/' + list.length + '…');
-      return shrink(f).then(function (p) { (receipt ? d.localR : d.local).push(p); }, function () { bad++; });
+      return shrink(f).then(function (p) {
+        if (receipt) { p.loc = String(d.nextLoc || '').trim().slice(0, 60); d.localR.push(p); } else d.local.push(p);   // 單據帶「下一張的施作位置」
+      }, function () { bad++; });
     });
   });
   chain.then(function () {
@@ -1672,6 +1695,14 @@ function addFiles(files, receipt) {
     if (bad) S.err = bad + ' 張照片讀不出來，沒有加進去';
     if (S.d === d) render();
   });
+}
+/** 施作位置的快選：已經填過的位置＋「做了什麼」寫的每一行（去掉「1.」） */
+function locChoices(d) {
+  var seen = {}, out = [];
+  Object.keys(d.rLocs || {}).map(function (k) { return d.rLocs[k]; })
+    .concat((d.localR || []).map(function (p) { return p.loc || ''; }), String(d.text || '').split('\n'))
+    .forEach(function (x) { x = String(x || '').replace(/^\d+\./, '').trim(); if (x && !seen[x] && out.length < 10) { seen[x] = 1; out.push(x); } });
+  return out;
 }
 function pickPhoto(kind, camera) { if (S.busy) return; S.pickFor = kind; var el = $(camera ? 'cam' : 'pick'); el.value = ''; el.click(); }
 
@@ -1939,6 +1970,20 @@ var ACT = {
   matu: function (v) { var i = +v.split('|')[0]; S.d.mats[i].unit = v.slice(v.indexOf('|') + 1); render(); },
   rmremote: function (v) { var d = S.d; d.remote = d.remote.filter(function (x) { return x !== v; }); d.removed.push(v); render(); },
   rmlocal: function (v) { S.d.local.splice(+v, 1); render(); },
+  // 單據的施作位置（使用者 2026-11-11）：nextloc＝下一張的快選；rloc＝改某一張（r:雲端編號、l:還沒傳的第幾張）
+  nextloc: function (v) { var d = S.d; d.nextLoc = d.nextLoc.trim() === v ? '' : v; render(); },
+  rloc: function (v) {
+    var d = S.d; if (!d || S.busy) return;
+    var remote = v.indexOf('r:') === 0, key = v.slice(2), p = remote ? null : d.localR[+key];
+    if (!remote && !p) return;
+    var cur = remote ? (d.rLocs[key] || '') : (p.loc || '');
+    var hint = locChoices(d).slice(0, 4).join('、');
+    var nv = window.prompt('這張單據的施作位置' + (hint ? '\n（例：' + hint + '）' : '') + '\n清空＝不填', cur);
+    if (nv === null) return;
+    nv = String(nv).replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (remote) { if (nv) d.rLocs[key] = nv; else delete d.rLocs[key]; } else p.loc = nv;
+    render();
+  },
   rmremoter: function (v) { var d = S.d; d.remoteR = d.remoteR.filter(function (x) { return x !== v; }); d.removedR.push(v); render(); },
   rmlocalr: function (v) { S.d.localR.splice(+v, 1); render(); },
   cam: function () { pickPhoto('photo', true); },
@@ -1969,17 +2014,31 @@ var ACT = {
     batches.forEach(function (b) {
       chain = chain.then(function () {
         S.progress = todo.length === 1 ? '上傳照片…' : '上傳照片 ' + (done + 1) + '–' + (done + b.length) + '/' + todo.length + '…'; render();
-        return api('photos', { id: d.id, items: b.map(function (x) { return { name: (x.r ? '單據_' : '') + x.p.name, mime: 'image/jpeg', data: x.p.data, receipt: x.r }; }) });
+        return api('photos', { id: d.id, items: b.map(function (x) { return { name: (x.r ? '單據_' : '') + x.p.name, mime: 'image/jpeg', data: x.p.data, receipt: x.r, loc: x.r ? (x.p.loc || '') : '' }; }) });
       }).then(function (r) {
         b.forEach(function (x, k) {
           var res = (r.results || [])[k] || {};
           if (!res.fileId) { if (!firstErr) firstErr = res.error || '傳不上去'; return; }
           S.photos['w:' + res.fileId] = x.p.url;
-          if (x.r) { d.remoteR.push(res.fileId); d.localR = d.localR.filter(function (y) { return y !== x.p; }); }
+          if (x.r) {
+            d.remoteR.push(res.fileId); d.localR = d.localR.filter(function (y) { return y !== x.p; });
+            if (x.p.loc) { d.rLocs[res.fileId] = x.p.loc; d.rLocs0[res.fileId] = x.p.loc; }   // 位置跟著傳上去了
+          }
           else { d.remote.push(res.fileId); d.local = d.local.filter(function (y) { return y !== x.p; }); }
         });
         done += b.length;
       });
+    });
+    // 已經傳上去的單據，施作位置有改的（補填、改、清掉）一張一張存
+    chain = chain.then(function () {
+      var changed = d.remoteR.filter(function (id) { return (d.rLocs[id] || '') !== (d.rLocs0[id] || ''); }), c2 = Promise.resolve();
+      changed.forEach(function (id, i) {
+        c2 = c2.then(function () {
+          S.progress = '存施作位置 ' + (i + 1) + '/' + changed.length + '…'; render();
+          return api('rcptloc', { id: d.id, fileId: id, loc: d.rLocs[id] || '' });
+        }).then(function () { d.rLocs0[id] = d.rLocs[id] || ''; });
+      });
+      return c2;
     });
     chain.then(function () {
       S.busy = false; S.progress = ''; S.feedStale = true;
@@ -2138,7 +2197,7 @@ document.addEventListener('input', function (ev) {
   }
   var d = S.d; if (!d) return;
   if (k === 'date') { if (/^\d{4}-\d{2}-\d{2}$/.test(v) && v <= S.s.today) { d.date = v; applyWx(); } return; }   // 管理者選其他日子（change 時重畫）
-  if (k === 'text' || k === 'siteText') { d[k] = v; }
+  if (k === 'text' || k === 'siteText' || k === 'nextLoc') { d[k] = v; }
   else if (k.indexOf('mat.') === 0) { var p = k.split('.'); d.mats[+p[1]][p[2]] = v; }
   // 上傳按鈕要不要亮：只改按鈕，不整個重畫（不然打字會跳掉）
   var sb = document.querySelector('[data-act="save"]');
