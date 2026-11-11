@@ -287,7 +287,8 @@ var ANDROID = /Android/i.test(navigator.userAgent);
 var INAPP = /\bLine\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent) || (ANDROID && /; wv\)/.test(navigator.userAgent));
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 var UNFILED = '未分組';
-var MAX_PHOTOS = 12, MAX_MATS = 9, MAX_RECEIPTS = 12;
+// 照片、單據一筆不限張數（使用者 2026-11-11「一起放寬」）；收件服務第 17 版起一次傳 PHOTOS_BATCH 張
+var MAX_MATS = 9, PHOTOS_BATCH = 8;
 var OFFICE_ROLES = ['管理者', '老闆', '主任', '公司'];
 var OFFICE_KINDS = ['pour', 'sheet', 'contract', 'cal', 'todo'];
 var WEEK_HEAD = ['日', '一', '二', '三', '四', '五', '六'];
@@ -1133,7 +1134,7 @@ function renderEdit() {
   h += '<div class="card" style="background:#FFFBF0"><div class="label">🧾 單據照片（材料單、重機具單；' + rn + ' 張）</div>' + (rn ? '<div class="thumbs">' : '');
   d.remoteR.forEach(function (id) { h += '<div class="thumb"><img data-pid="' + esc(id) + '" alt=""><button class="x" data-act="rmremoter" data-v="' + esc(id) + '">✕</button></div>'; });
   d.localR.forEach(function (p, i) { h += '<div class="thumb"><img src="' + p.url + '" alt=""><button class="x" data-act="rmlocalr" data-v="' + i + '">✕</button><span class="new">未上傳</span></div>'; });
-  h += (rn ? '</div>' : '') + (rn < MAX_RECEIPTS ? '<div class="row2"><button class="ghost" style="margin:0" data-act="camr">📷 拍單據</button><button class="ghost" style="margin:0" data-act="pickr">🖼 從相簿選</button></div>' : '') +
+  h += (rn ? '</div>' : '') + '<div class="row2"><button class="ghost" style="margin:0" data-act="camr">📷 拍單據</button><button class="ghost" style="margin:0" data-act="pickr">🖼 從相簿選</button></div>' +
     '<div class="note" style="margin-top:6px">單據只有開發者、老闆、主任和你自己看得到。</div></div>';
   h += '<div class="card"><div class="label">做了什麼（位置、內容）</div><textarea data-f="text" placeholder="例：地梁綁紮（A 區）">' + esc(d.text) + '</textarea></div>';
   // 照片
@@ -1141,8 +1142,8 @@ function renderEdit() {
   h += '<div class="card"><div class="label">照片（' + n + ' 張）</div><div class="thumbs">';
   d.remote.forEach(function (id) { h += '<div class="thumb"><img data-pid="' + esc(id) + '" alt=""><button class="x" data-act="rmremote" data-v="' + esc(id) + '">✕</button></div>'; });
   d.local.forEach(function (p, i) { h += '<div class="thumb"><img src="' + p.url + '" alt=""><button class="x" data-act="rmlocal" data-v="' + i + '">✕</button><span class="new">未上傳</span></div>'; });
-  h += '</div>' + (n < MAX_PHOTOS ? '<div class="row2"><button class="ghost" style="margin:0" data-act="cam">📷 拍照</button><button class="ghost" style="margin:0" data-act="pick">🖼 從相簿選</button></div>' : '') +
-    '<div class="note" style="margin-top:6px">照片會先縮小（長邊 1600）再上傳。</div></div>';
+  h += '</div><div class="row2"><button class="ghost" style="margin:0" data-act="cam">📷 拍照</button><button class="ghost" style="margin:0" data-act="pick">🖼 從相簿選</button></div>' +
+    '<div class="note" style="margin-top:6px">照片會先縮小（長邊 1600）再上傳；張數不限，一次可以選很多張。</div></div>';
   if (S.err) h += '<div class="err">' + esc(S.err) + '</div>';
   h += '<button class="big" data-act="save"' + (editOk() ? '' : ' disabled') + '>' + (S.busy ? esc(S.progress || '上傳中…') : proxy ? '送出（等管理者同意）' : d.forName === '?' ? '先選是誰的' : !d.id && d.forName ? '上傳（幫 ' + esc(d.forName) + ' 補）' : '上傳') + '</button>';
   if (d.id && !proxy) h += '<button class="ghost red" data-act="del">刪除這一筆</button>';
@@ -1530,11 +1531,23 @@ function fillPhotos() {
     }
   });
 }
+// 一筆照片不限張數以後，一次幾十張同時問收件服務會超過它同時能跑的數量：排隊，一次最多 4 張
+var photoQ = [], photoRun = 0;
 function loadPhoto(attr, kind, id) {
   var key = kind + ':' + id;
   S.photos[key] = 'loading';
+  photoQ.push([attr, kind, id]); pumpPhotos();
+}
+function pumpPhotos() {
+  while (photoRun < 4 && photoQ.length) {
+    var j = photoQ.shift(); photoRun++;
+    fetchPhoto(j[0], j[1], j[2]).then(function () { photoRun--; pumpPhotos(); });
+  }
+}
+function fetchPhoto(attr, kind, id) {
+  var key = kind + ':' + id;
   var p = kind === 'w' ? api('photoget', { fileId: id }) : kind === 'l' ? api('logphoto', { id: id }) : api('notice', { op: 'photo', id: id });
-  p.then(function (r) {
+  return p.then(function (r) {
     S.photos[key] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.data;
     var imgs = document.querySelectorAll('img[data-' + attr + '="' + id + '"]');
     for (var i = 0; i < imgs.length; i++) imgs[i].src = S.photos[key];
@@ -1637,17 +1650,30 @@ function shrink(file, max, q) {
     img.src = url;
   });
 }
+/**
+ * 選的照片縮小後放進這一筆（還沒上傳）。一筆不限張數（2026-11-11）：一張一張縮（一次全部解開 iPhone 記憶體會不夠），
+ * 加的時候上傳按鈕顯示「加入照片 3/40…」、不能按。
+ */
 function addFiles(files, receipt) {
-  var d = S.d; if (!d) return;
+  var d = S.d; if (!d || S.busy) return;
   var list = Array.prototype.slice.call(files || []);
-  var room = receipt ? MAX_RECEIPTS - d.remoteR.length - d.localR.length : MAX_PHOTOS - d.remote.length - d.local.length;
-  list = list.slice(0, Math.max(0, room));
-  Promise.all(list.map(function (f) { return shrink(f).catch(function () { return null; }); })).then(function (ps) {
-    ps.forEach(function (p) { if (p) (receipt ? d.localR : d.local).push(p); });
-    render();
+  if (!list.length) return;
+  S.busy = true; var bad = 0, chain = Promise.resolve();
+  var show = function (t) { S.progress = t; var b = document.querySelector('[data-act="save"]'); if (b) { b.textContent = t; b.disabled = true; } };
+  list.forEach(function (f, i) {
+    chain = chain.then(function () {
+      if (S.d !== d) return;
+      if (list.length > 1) show('加入照片 ' + (i + 1) + '/' + list.length + '…');
+      return shrink(f).then(function (p) { (receipt ? d.localR : d.local).push(p); }, function () { bad++; });
+    });
+  });
+  chain.then(function () {
+    S.busy = false; S.progress = '';
+    if (bad) S.err = bad + ' 張照片讀不出來，沒有加進去';
+    if (S.d === d) render();
   });
 }
-function pickPhoto(kind, camera) { S.pickFor = kind; var el = $(camera ? 'cam' : 'pick'); el.value = ''; el.click(); }
+function pickPhoto(kind, camera) { if (S.busy) return; S.pickFor = kind; var el = $(camera ? 'cam' : 'pick'); el.value = ''; el.click(); }
 
 /** 工地頁的資料（施工單、灌漿數量、發包） */
 function loadOffice() {
@@ -1931,18 +1957,35 @@ var ACT = {
       chain = chain.then(function () { return api('delphoto', { id: d.id, fileId: fid }); })
         .then(function () { d.removed = d.removed.filter(function (x) { return x !== fid; }); d.removedR = d.removedR.filter(function (x) { return x !== fid; }); });
     });
+    // 照片、單據一次傳好幾張（收件服務第 17 版 photos；一筆不限張數，2026-11-11）：一批最多 8 張、約 4 MB
     var todo = d.local.map(function (p) { return { p: p, r: false }; }).concat(d.localR.map(function (p) { return { p: p, r: true }; }));
-    todo.forEach(function (x, i) {
+    var batches = [], cur = [], bytes = 0, done = 0, firstErr = '';
+    todo.forEach(function (x) {
+      var n = x.p.data.length * 3 / 4;
+      if (cur.length && (cur.length >= PHOTOS_BATCH || bytes + n > 4e6)) { batches.push(cur); cur = []; bytes = 0; }
+      cur.push(x); bytes += n;
+    });
+    if (cur.length) batches.push(cur);
+    batches.forEach(function (b) {
       chain = chain.then(function () {
-        S.progress = (x.r ? '上傳單據 ' : '上傳照片 ') + (i + 1) + '/' + todo.length + '…'; render();
-        return api('photo', { id: d.id, name: (x.r ? '單據_' : '') + x.p.name, mime: 'image/jpeg', data: x.p.data, receipt: x.r });
+        S.progress = todo.length === 1 ? '上傳照片…' : '上傳照片 ' + (done + 1) + '–' + (done + b.length) + '/' + todo.length + '…'; render();
+        return api('photos', { id: d.id, items: b.map(function (x) { return { name: (x.r ? '單據_' : '') + x.p.name, mime: 'image/jpeg', data: x.p.data, receipt: x.r }; }) });
       }).then(function (r) {
-        S.photos['w:' + r.fileId] = x.p.url;
-        if (x.r) { d.remoteR.push(r.fileId); d.localR = d.localR.filter(function (y) { return y !== x.p; }); }
-        else { d.remote.push(r.fileId); d.local = d.local.filter(function (y) { return y !== x.p; }); }
+        b.forEach(function (x, k) {
+          var res = (r.results || [])[k] || {};
+          if (!res.fileId) { if (!firstErr) firstErr = res.error || '傳不上去'; return; }
+          S.photos['w:' + res.fileId] = x.p.url;
+          if (x.r) { d.remoteR.push(res.fileId); d.localR = d.localR.filter(function (y) { return y !== x.p; }); }
+          else { d.remote.push(res.fileId); d.local = d.local.filter(function (y) { return y !== x.p; }); }
+        });
+        done += b.length;
       });
     });
-    chain.then(function () { S.busy = false; S.progress = ''; S.feedStale = true; editDone(); })
+    chain.then(function () {
+      S.busy = false; S.progress = ''; S.feedStale = true;
+      if (firstErr) { S.err = '有 ' + (d.local.length + d.localR.length) + ' 張沒傳上去：' + firstErr + '（再按一次上傳會接著傳，傳好的不會重複）'; render(); return; }
+      editDone();
+    })
       .catch(function (e) { S.busy = false; S.progress = ''; var m = failMsg(e); if (m) { S.err = m + (d.id && (d.local.length || d.localR.length) ? '（已經傳上去的不會重複，再按一次會接著傳）' : ''); render(); } });
   },
   del: function () {
