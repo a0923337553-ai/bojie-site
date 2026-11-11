@@ -253,7 +253,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/10n';
+var WEB_VERSION = '11/11';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
 var PCAPP = /[?&]app=pc\b/.test(location.search);
 // 哪一種蘋果裝置（使用者 2026-11-10「ipad也要適配」「macbook pro 16也要」）：
@@ -272,7 +272,10 @@ var MAX_PHOTOS = 12, MAX_MATS = 9, MAX_RECEIPTS = 12;
 var OFFICE_ROLES = ['管理者', '老闆', '主任', '公司'];
 var OFFICE_KINDS = ['pour', 'sheet', 'contract', 'cal', 'todo'];
 var WEEK_HEAD = ['日', '一', '二', '三', '四', '五', '六'];
-var DEFAULT_CATS = ['放樣工程', '模板工程', '鐵筋工程', '鋼構工程', '水電消防', '灌漿雜項', '泥作工程', '機械設備', '搭架工程', '門窗工程', '雜項工程'];
+var DEFAULT_CATS = ['放樣工程', '模板工程', '鐵筋工程', '鋼構工程', '水電消防', '灌漿雜項', '泥作工程', '開挖整地', '搭架工程', '門窗工程', '雜項工程'];
+// 大項改名（使用者 2026-11-11「機械設備名稱改成開挖整地」）：手機裡暫存的舊資料也換成新名字
+var OLD_CATS = { '機械設備': '開挖整地' };
+function canonCat(c) { c = String(c == null ? '' : c).trim(); return OLD_CATS[c] || c; }
 
 var S = {
   code: '', saved: '', s: null, site: '', entries: [], route: 'login', busy: false, loading: false, err: '', locked: '', progress: '', codeInput: '',
@@ -1057,7 +1060,7 @@ function renderEdit() {
   if (S.site === UNFILED) h += '<div style="margin-top:8px"><div class="label">工地名稱（你知道的叫法就好）</div><input type="text" data-f="siteText" value="' + esc(d.siteText) + '" placeholder="例：新竹王先生透天" maxlength="60"><div class="note">管理者會再歸到正確的工地。</div></div>';
   h += '<div class="label" style="margin-top:10px">哪一天的工作' + (s.role === '管理者' ? '' : '（只能傳 ' + s.days + ' 天內的）') + '</div><div class="chips">' +
     windowDays().map(function (x) { var n = dayName(x); return chip('date', x, n.indexOf('/') >= 0 ? md(x) : n + ' ' + md(x), d.date === x); }).join('') + '</div></div>';
-  h += '<div class="card"><div class="label">大項</div><div class="chips">' + s.categories.map(function (c) { return chip('cat', c, c, d.cat === c, true); }).join('') + '</div>' +
+  h += '<div class="card"><div class="label">大項</div><div class="chips">' + uniq(s.categories.map(canonCat)).map(function (c) { return chip('cat', c, c, d.cat === c, true); }).join('') + '</div>' +
     '<div class="label" style="margin-top:10px">工數</div><div class="chips">' +
     s.hours.map(function (x) { var l = hoursLabel(x); return chip('hours', x, /工$/.test(l) ? x : l + ' ' + x, d.hours === x); }).join('') + '</div></div>';
   // 材料/機具
@@ -1253,7 +1256,7 @@ function todoRowPage(t) {
 // ===================== 施工日誌（只能看） =====================
 function logItem(log, c) {
   if (!log || !log.items) return null;
-  var x = log.items.filter(function (i) { return i.category === c; })[0]; if (!x) return null;
+  var x = log.items.filter(function (i) { return canonCat(i.category) === c; })[0]; if (!x) return null;
   var people = Number(x.people) || 0, hours = x.hours || '1';
   var lines = (x.lines || []).map(function (l, i) {
     if (l.full) return l.full;
@@ -1291,10 +1294,10 @@ function renderLogs() {
   var log = L.log, ws = L.workers || [];
   if (!log && !ws.length) return h + '<div class="card sub" style="font-size:15px">這天沒有日誌。按 ‹ › 看別天。</div></div>';
   if (log && log.weather) h += '<div style="font-size:15px;font-weight:bold;margin:0 4px 10px">天氣：' + weatherEmoji(log.weather) + ' ' + esc(log.weather) + '</div>';
-  var cats = uniq((s.categories && s.categories.length ? s.categories : DEFAULT_CATS).concat(((log && log.items) || []).map(function (x) { return x.category; })).concat(ws.map(function (e) { return e.category; })));
+  var cats = uniq((s.categories && s.categories.length ? s.categories : DEFAULT_CATS).concat(((log && log.items) || []).map(function (x) { return x.category; })).concat(ws.map(function (e) { return e.category; })).map(canonCat));
   h += '<div class="logcards">';   // 寬螢幕：大項卡片排兩、三欄
   cats.forEach(function (c) {
-    var item = logItem(log, c), wl = ws.filter(function (e) { return e.category === c; });
+    var item = logItem(log, c), wl = ws.filter(function (e) { return canonCat(e.category) === c; });
     if (!item && !wl.length) return;
     h += '<div class="card"><div class="ttl">' + esc(c) + '</div>';
     if (item) {
