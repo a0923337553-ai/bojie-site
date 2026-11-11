@@ -275,7 +275,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/11j';
+var WEB_VERSION = '11/11k';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1338,8 +1338,12 @@ function logItem(log, c) {
     return (i + 1) + '.' + t + (l.workers && l.workers.length ? '(' + l.workers.join('+') + ')' : '');
   }).filter(Boolean);
   var qtyText = String(x.qtyText || '');   // 電腦（Excel）傳來、不是「人數*工時」的數量（例：2 台、2*1+2*0.625）
-  if (!(people > 0) && !lines.length && !qtyText) return null;
-  return { vendor: x.vendor != null ? x.vendor : '柏捷', unit: x.unit != null ? x.unit : '工', qty: people > 0 ? people + '*' + hours : qtyText, lines: lines, pc: x.src === '電腦' };
+  // 第二組人數×工時（App 0.9.65 起，使用者 2026-11-11「工人沒有一起到場做」）：4*0.25+2*1
+  var people2 = Number(x.people2) || 0, grp = [];
+  if (people > 0) grp.push(people + '*' + hours);
+  if (people2 > 0) grp.push(people2 + '*' + (x.hours2 || '1'));
+  if (!grp.length && !lines.length && !qtyText) return null;
+  return { vendor: x.vendor != null ? x.vendor : '柏捷', unit: x.unit != null ? x.unit : '工', qty: grp.length ? grp.join('+') : qtyText, lines: lines, pc: x.src === '電腦' };
 }
 var PC_TAG = ' <span title="電腦（Excel 施工日誌）傳來的" style="font-size:13px">🖥</span>';
 /** 這天的照片：照大項的順序，先開發者日誌的（雲端有編號的），再施工人員傳的；單據放最後 */
