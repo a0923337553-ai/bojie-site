@@ -1337,9 +1337,11 @@ function logItem(log, c) {
     var t = String(l.text || '').trim(); if (!t) return '';
     return (i + 1) + '.' + t + (l.workers && l.workers.length ? '(' + l.workers.join('+') + ')' : '');
   }).filter(Boolean);
-  if (!(people > 0) && !lines.length) return null;
-  return { vendor: x.vendor != null ? x.vendor : '柏捷', unit: x.unit != null ? x.unit : '工', qty: people > 0 ? people + '*' + hours : '', lines: lines };
+  var qtyText = String(x.qtyText || '');   // 電腦（Excel）傳來、不是「人數*工時」的數量（例：2 台、2*1+2*0.625）
+  if (!(people > 0) && !lines.length && !qtyText) return null;
+  return { vendor: x.vendor != null ? x.vendor : '柏捷', unit: x.unit != null ? x.unit : '工', qty: people > 0 ? people + '*' + hours : qtyText, lines: lines, pc: x.src === '電腦' };
 }
+var PC_TAG = ' <span title="電腦（Excel 施工日誌）傳來的" style="font-size:13px">🖥</span>';
 /** 這天的照片：照大項的順序，先開發者日誌的（雲端有編號的），再施工人員傳的；單據放最後 */
 function dayPhotos(log, ws, cats, date) {
   var roc = rocDate(date), out = [], photos = (log && log.photos) || [];
@@ -1379,7 +1381,7 @@ function renderLogs() {
   cats.forEach(function (c) {
     var item = logItem(log, c), wl = ws.filter(function (e) { return canonCat(e.category) === c; });
     if (!item && !wl.length) return;
-    h += '<div class="card"><div class="ttl">' + esc(c) + '</div>';
+    h += '<div class="card"><div class="ttl">' + esc(c) + (item && item.pc ? PC_TAG : '') + '</div>';
     if (item) {
       var head = [item.vendor, item.qty ? item.qty + item.unit : ''].filter(Boolean).join(' ・ ');
       if (head) h += '<div class="sub" style="font-size:14px">' + esc(head) + '</div>';
@@ -1393,8 +1395,8 @@ function renderLogs() {
     h += '</div>';
   });
   var mats = ((log && log.materials) || []).filter(function (m) { return String(m.vendor || '').trim() || String(m.qty || '').trim(); });
-  if (mats.length) h += '<div class="card"><div class="ttl">材料／機具</div>' + mats.map(function (m) { return '<div style="font-size:15px">' + esc(m.vendor + '　' + m.qty + ' ' + m.unit) + '</div>'; }).join('') + '</div>';
-  if (log && String(log.discussion || '').trim()) h += '<div class="card"><div class="ttl">與業主、建築師討論</div><div style="font-size:15px;line-height:21px;white-space:pre-wrap">' + esc(log.discussion) + '</div></div>';
+  if (mats.length) h += '<div class="card"><div class="ttl">材料／機具' + (log.materialsSrc === '電腦' ? PC_TAG : '') + '</div>' + mats.map(function (m) { return '<div style="font-size:15px">' + esc(m.vendor + '　' + m.qty + ' ' + m.unit) + '</div>'; }).join('') + '</div>';
+  if (log && String(log.discussion || '').trim()) h += '<div class="card"><div class="ttl">與業主、建築師討論' + (log.discussionSrc === '電腦' ? PC_TAG : '') + '</div><div style="font-size:15px;line-height:21px;white-space:pre-wrap">' + esc(log.discussion) + '</div></div>';
   h += '</div>';
   var ph = dayPhotos(log, ws, cats, L.date);
   h += '<div class="card"><div class="ttl">📷 這天的照片（' + ph.length + ' 張）</div><div class="sub" style="font-size:12.5px">開發者拍的、施工人員傳的都在這裡（跟匯出的 PDF 一樣一排兩張）</div>' +
