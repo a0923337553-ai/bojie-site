@@ -275,7 +275,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/11i';
+var WEB_VERSION = '11/11j';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1551,7 +1551,8 @@ function datesModal() {
   var lead = new Date(y, mo - 1, 1, 12).getDay(), n = new Date(y, mo, 0, 12).getDate();
   var cnt = L.dates.filter(function (d) { return d.slice(0, 7) === m.month; }).length;
   var acnt = (L.noteDates || []).filter(function (d) { return d.slice(0, 7) === m.month; }).length;
-  var h = '<h3>選哪一天</h3><div class="sub" style="font-size:13px;margin-top:-4px">點日子打開那天；下面是這個月每天做了什麼</div>' +
+  var sel = m.sel || L.date, dayMode = (S.calSum || LS.get('calSum')) !== 'month';
+  var h = '<h3>選哪一天</h3><div class="sub" style="font-size:13px;margin-top:-4px">點日子，下面看那天做了什麼；按「看這天」打開</div>' +
     '<div style="display:flex;align-items:center;gap:6px;margin:2px 0 8px"><div style="flex:1"><b style="font-size:17px">' + (y - 1911) + ' 年 ' + mo + ' 月</b>' +
     '<div class="sub" style="font-size:13px">' + (cnt ? '這個月有資料 ' + cnt + ' 天' : '這個月沒有資料') + (acnt ? '，工作狀況 ' + acnt + ' 天' : '') + '</div></div>' +
     '<button class="ghost" style="margin:0;width:auto;padding:4px 16px;font-size:20px" data-act="mlogmonth" data-v="-1">‹</button>' +
@@ -1560,11 +1561,11 @@ function datesModal() {
   '日一二三四五六'.split('').forEach(function (w) { h += '<div class="sub" style="font-size:13px;padding-bottom:4px">' + w + '</div>'; });
   for (var i = 0; i < lead; i++) h += '<div></div>';
   for (var dd = 1; dd <= n; dd++) {
-    var ds = m.month + '-' + (dd < 10 ? '0' : '') + dd, on = ds === L.date, ok = ds <= today, dot = has[ds], red = alert[ds];
+    var ds = m.month + '-' + (dd < 10 ? '0' : '') + dd, on = ds === sel, ok = ds <= today, dot = has[ds], red = alert[ds];
     // 青點＝有資料；紅點＝有記工作狀況（選到的那天底色青色：青點變白、紅點加白框）
     var dots = (dot || !red ? '<span style="width:6px;height:6px;border-radius:50%;background:' + (dot ? (on ? '#fff' : 'var(--teal)') : 'transparent') + '"></span>' : '') +
       (red ? '<span style="width:7px;height:7px;border-radius:50%;box-sizing:border-box;background:var(--red)' + (on ? ';border:1.5px solid #fff' : '') + '"></span>' : '');
-    h += '<button data-act="mlogdate" data-v="' + ds + '"' + (ok ? '' : ' disabled') + ' style="border:0;border-radius:50%;aspect-ratio:1;width:100%;max-width:46px;margin:0 auto;font-size:16px;font-family:inherit;' +
+    h += '<button data-act="mlogsel" data-v="' + ds + '"' + (ok ? '' : ' disabled') + ' style="border:0;border-radius:50%;aspect-ratio:1;width:100%;max-width:46px;margin:0 auto;font-size:16px;font-family:inherit;' +
       'font-weight:' + (dot || red || on ? '800' : '400') + ';background:' + (on ? 'var(--teal)' : 'transparent') + ';color:' + (on ? '#fff' : ok ? 'var(--ink)' : 'var(--line)') +
       ';display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0' + (ds === today && !on ? ';box-shadow:inset 0 0 0 1.5px var(--teal)' : '') + '">' + dd +
       '<span style="display:flex;gap:3px;align-items:center;margin-top:1px">' + dots + '</span></button>';
@@ -1572,11 +1573,34 @@ function datesModal() {
   h += '</div>';
   h += '<div class="sub" style="font-size:13px;margin-top:8px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--teal);vertical-align:middle"></span> ＝有資料的日子（日誌或施工人員傳的）</div>';
   if (seesNotes) h += '<div class="sub" style="font-size:13px;margin-top:4px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);vertical-align:middle"></span> ＝有記工作狀況（提早下班、請假…）</div>';
-  // 這個月做了什麼（使用者 2026-11-11「行事曆能否在下面顯示大概做了哪些工作」→「改成 B」：不用一天一天點，整個月列在月曆下面）
+  // 下面（使用者 2026-11-11「行事曆能否在下面顯示大概做了哪些工作」→「改成 B」→「點選那一天就只顯示那一天，不過這功能可以保留讓使用者切換要哪一種模式」）：
+  // 「這一天」＝只顯示點的那天（一段一行）；「整個月」＝每天一段往下滑，點那一天就打開。選哪一種記在這台
   var mk = S.site + '|' + m.month, mc = MONTHCACHE[mk], body, nd = 0;
+  var tog = '<div style="display:inline-flex;border:1px solid var(--teal);border-radius:16px;overflow:hidden;margin-bottom:8px">' +
+    [['這一天', 'day'], ['整個月', 'month']].map(function (o) {
+      var on = (o[1] === 'day') === dayMode;
+      return '<button data-act="mlogmode" data-v="' + o[1] + '" style="margin:0;width:auto;border:0;border-radius:0;padding:5px 16px;font-size:14px;font-weight:700;background:' + (on ? 'var(--teal)' : '#fff') + ';color:' + (on ? '#fff' : 'var(--teal)') + '">' + o[0] + '</button>';
+    }).join('') + '</div>';
   if (mc && mc.err) body = '<div style="font-size:13.5px;color:var(--warn)">讀不到：' + esc(mc.err) + '</div>';
   else if (!mc || !mc.days) { body = '<div class="sub" style="font-size:13.5px">讀取中…</div>'; monthLoad(S.site, m.month); }
-  else {
+  if (dayMode) {
+    var x = mc && mc.days ? mc.days.filter(function (d) { return d.date === sel; })[0] : null;
+    var head = '<b style="font-size:15px">' + (+sel.slice(5, 7)) + '/' + (+sel.slice(8, 10)) + '（' + weekday(sel).replace('週', '') + '）做了什麼</b>' +
+      (x && x.weather ? ' <span class="sub" style="font-size:13px">' + esc(x.weather) + '</span>' : '');
+    if (sel.slice(0, 7) !== m.month) body = '<div class="sub" style="font-size:13.5px">點上面的日曆選一天</div>';
+    else if (mc && mc.days) {
+      if (!x) body = '<div class="sub" style="font-size:13.5px">這天沒有資料</div>';
+      else {
+        var s = monthText(x);
+        body = s.parts.map(function (p) { return '<div style="font-size:14px;line-height:20px;margin-top:3px">・' + esc(p.replace(/^📷(\d+)$/, '照片 $1 張')) + '</div>'; }).join('') +
+          (s.alert ? '<div style="font-size:14px;line-height:20px;margin-top:3px;color:var(--red)">工作狀況：' + esc(s.alert) + '</div>' : '') +
+          '<div class="sub" style="font-size:12.5px;margin-top:6px">點日曆換一天；按「看這天」打開</div>';
+      }
+    }
+    h += '<div style="margin-top:10px;background:var(--bg);border-radius:14px;padding:10px 12px">' + tog + '<div>' + head + '</div>' + body + '</div>';
+    return h + '<div class="btns"><button class="dim" data-act="mclose">關閉</button><button data-act="mloggo">看這天</button></div>';
+  }
+  if (mc && mc.days) {
     nd = mc.days.length;
     body = nd ? mc.days.map(function (x, k) {
       var s = monthText(x), on = x.date === L.date;
@@ -1587,9 +1611,9 @@ function datesModal() {
         (s.alert ? '<div style="font-size:13.5px;line-height:18px;color:var(--red)">工作狀況：' + esc(s.alert) + '</div>' : '') + '</div>';
     }).join('') : '<div class="sub" style="font-size:13.5px">這個月沒有資料</div>';
   }
-  h += '<div style="margin-top:10px;background:var(--bg);border-radius:14px;padding:10px 12px"><b style="font-size:15px">' + mo + ' 月做了什麼' + (nd ? '（' + nd + ' 天）' : '') + '</b>' +
+  h += '<div style="margin-top:10px;background:var(--bg);border-radius:14px;padding:10px 12px">' + tog + '<div><b style="font-size:15px">' + mo + ' 月做了什麼' + (nd ? '（' + nd + ' 天）' : '') + '</b></div>' +
     (nd ? '<div class="sub" style="font-size:12.5px">點一天就打開那天</div>' : '') + body + '</div>';
-  return h + '<div class="btns"><button class="dim" data-act="mclose">關閉</button></div>';
+  return h + '<div class="btns"><button class="dim" data-act="mclose">關閉</button><button data-act="mloggo">看這天</button></div>';
 }
 /** 整個月的摘要（收件服務 logmonth）：記 10 分鐘；打開日誌就先在背景讀那個月 */
 var MONTHCACHE = {};
@@ -1614,7 +1638,7 @@ function monthText(x) {
   if (x.disc) p.push('討論 ' + x.disc);
   if (x.photos) p.push('📷' + x.photos);
   (x.workers || []).forEach(function (w) { p.push(w.name + '傳的 ' + [String(w.c || '').replace(/工程$/, ''), w.t].filter(Boolean).join(' ')); });
-  return { text: p.join('・'), alert: (x.notes || []).join('、') };
+  return { text: p.join('・'), alert: (x.notes || []).join('、'), parts: p };
 }
 
 /** 雲端的照片：第一次跟收件服務拿，之後用記住的。data-pid＝施工人員傳的、data-lid＝日誌的、data-nid＝注意事項的 */
@@ -2232,6 +2256,10 @@ var ACT = {
     closeModal(); todoDelNow(m.t.id);   // 馬上從畫面拿掉，收件服務在背景刪（使用者 2026-11-11「同步太慢，會讓人以為還沒刪除掉」）
   },
   mlogdate: function (v) { closeModal(); if (v !== S.log.date) loadLog(v); },
+  // 月曆點日子＝選它（下面看那天）；再點一次同一天或按「看這天」才打開
+  mlogsel: function (v) { var m = S.modal; if (!m) return; if ((m.sel || S.log.date) === v) { ACT.mlogdate(v); return; } m.sel = v; renderModal(); },
+  mloggo: function () { var m = S.modal; ACT.mlogdate((m && m.sel) || S.log.date); },
+  mlogmode: function (v) { S.calSum = v === 'month' ? 'month' : 'day'; LS.set('calSum', v === 'month' ? 'month' : ''); renderModal(); },
   mlogmonth: function (v) { var m = S.modal; if (!m) return; m.month = shiftMonth(m.month, +v); renderModal(); },
   mcaldate: function (v) { var m = S.modal; if (m.ev.series) return; m.date = addDays(m.date, +v); renderModal(); },
   mallday: function (v) { var m = S.modal; if (m.ev.series) return; m.allDay = v === '1'; if (!m.allDay && !m.start) m.start = '09:00'; renderModal(); },
