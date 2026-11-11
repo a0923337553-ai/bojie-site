@@ -135,6 +135,21 @@ textarea { min-height:76px; resize:vertical; }
 .pgrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
 .pgrid .ph { position:relative; padding-top:75%; border-radius:8px; overflow:hidden; background:#DDE5EA; }
 .pgrid .ph img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+/* 點照片放大（使用者 2026-11-11）：黑底整頁，兩指縮放、點兩下放大／還原、左右滑換張 */
+img[data-cap] { cursor:zoom-in; }
+#pv { position:fixed; inset:0; z-index:1100; background:#000; color:#fff; overflow:hidden; user-select:none; -webkit-user-select:none; }
+#pvstage { position:absolute; inset:0; touch-action:none; }
+#pvimg { position:absolute; left:0; top:0; width:100%; height:100%; object-fit:contain; transform-origin:50% 50%; will-change:transform; -webkit-user-drag:none; }
+#pvmsg { position:absolute; left:0; right:0; top:45%; text-align:center; font-size:15px; color:rgba(255,255,255,.8); line-height:22px; }
+#pv .pvtop { position:absolute; left:0; right:0; top:0; display:flex; align-items:center; justify-content:space-between; background:rgba(0,0,0,.65); padding:calc(4px + env(safe-area-inset-top)) 14px 4px 6px; }
+#pv .pvtop button { background:none; border:0; color:#fff; font-size:18px; font-weight:bold; padding:10px 12px; }
+#pv .pvbot { position:absolute; left:0; right:0; bottom:0; background:rgba(0,0,0,.65); padding:10px 16px calc(10px + env(safe-area-inset-bottom)); }
+#pv .pvbot b { font-size:16px; }
+#pv #pvx { font-size:14px; line-height:19px; color:rgba(255,255,255,.9); white-space:pre-wrap; }
+#pv .pvhint { font-size:12px; line-height:16px; color:rgba(255,255,255,.6); margin-top:6px; }
+#pv .pvnav { position:absolute; top:50%; transform:translateY(-50%); width:44px; height:64px; border:0; border-radius:12px; background:rgba(0,0,0,.4); color:#fff; font-size:30px; left:8px; }
+#pv .pvnav.r { left:auto; right:8px; }
+#pv.nobars .pvtop, #pv.nobars .pvbot, #pv.nobars .pvnav { display:none; }
 /* 月曆 */
 .mgrid { display:grid; grid-template-columns:repeat(7, 1fr); text-align:center; }
 .mgrid .h { font-size:12.5px; color:var(--muted); padding:4px 0; }
@@ -275,7 +290,7 @@ textarea { min-height:76px; resize:vertical; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/11k';
+var WEB_VERSION = '11/11l';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1170,11 +1185,13 @@ function renderView() {
     '<div style="font-weight:bold;margin-top:4px">' + esc(catHours(e.category, e.hours)) + '</div><div style="font-size:19px;margin-top:4px;white-space:pre-wrap">' + esc(e.text || '（沒寫內容）') + '</div>' +
     (e.weather ? '<div style="color:var(--navy);margin-top:6px">天氣：' + esc(e.weather) + '</div>' : '') +
     (e.materials && e.materials.length ? '<div style="color:var(--navy)">材料/機具：' + esc(e.materials.map(matText).join('、')) + '</div>' : '') + '</div>';
-  h += '<div class="full">' + (e.photos || []).map(function (id) { return '<img data-pid="' + esc(id) + '" alt="">'; }).join('') + '</div>';
+  // data-cap：點照片放大時下面寫的字（第一行粗體）
+  var cap = '👷 ' + e.name + '・' + (e.category || '') + '\n' + (String(e.text || '').split('\n').filter(function (x) { return x.trim(); })[0] || '');
+  h += '<div class="full">' + (e.photos || []).map(function (id) { return '<img data-pid="' + esc(id) + '" data-cap="' + esc(cap) + '" alt="">'; }).join('') + '</div>';
   if (!(e.photos || []).length) h += '<div class="card note">沒有照片</div>';
   if ((e.receipts || []).length) h += '<div class="card"><div class="ttl">🧾 單據照片（' + e.receipts.length + ' 張）</div></div><div class="full">' + e.receipts.map(function (id) {
     var loc = (e.receiptLocs || {})[id];
-    return '<img data-pid="' + esc(id) + '" alt="">' + (loc ? '<div class="locline">📍 施作位置：' + esc(loc) + '</div>' : '');
+    return '<img data-pid="' + esc(id) + '" data-cap="' + esc('🧾 單據照片\n' + (loc ? '📍 施作位置：' + loc : '')) + '" alt="">' + (loc ? '<div class="locline">📍 施作位置：' + esc(loc) + '</div>' : '');
   }).join('') + '</div>';
   return h + '</div>';
 }
@@ -1407,9 +1424,9 @@ function renderLogs() {
     sn.map(function (n) { return '<div style="font-size:15px;line-height:21px;margin-top:4px">' + esc((n.who ? n.who + '：' : '') + n.text) + '</div>'; }).join('') + '</div>';
   h += '</div>';
   var ph = dayPhotos(log, ws, cats, L.date);
-  h += '<div class="card"><div class="ttl">📷 這天的照片（' + ph.length + ' 張）</div><div class="sub" style="font-size:12.5px">開發者拍的、施工人員傳的都在這裡（跟匯出的 PDF 一樣一排兩張）</div>' +
+  h += '<div class="card"><div class="ttl">📷 這天的照片（' + ph.length + ' 張）</div><div class="sub" style="font-size:12.5px">開發者拍的、施工人員傳的都在這裡（跟匯出的 PDF 一樣一排兩張），點照片可以放大</div>' +
     (ph.length ? '<div class="pgrid">' + ph.map(function (p) {
-      return '<div><div class="ph"><img ' + (p.w ? 'data-pid' : 'data-lid') + '="' + esc(p.id) + '" alt=""></div><div style="font-size:14px;font-weight:bold;margin-top:4px">' + esc(p.cat) + '</div>' +
+      return '<div><div class="ph"><img ' + (p.w ? 'data-pid' : 'data-lid') + '="' + esc(p.id) + '" data-cap="' + esc([p.cat, p.line, p.date].filter(Boolean).join('\n')) + '" alt=""></div><div style="font-size:14px;font-weight:bold;margin-top:4px">' + esc(p.cat) + '</div>' +
         (p.line ? '<div style="font-size:13px;line-height:17px;white-space:pre-wrap">' + esc(p.line) + '</div>' : '') + '<div class="sub" style="font-size:12px">' + esc(p.date) + '</div></div>';
     }).join('') + '</div>' : '<div class="sub" style="padding:8px 0;font-size:14.5px">這天沒有照片</div>') + '</div>';
   return h + '</div>';
@@ -1694,7 +1711,179 @@ function open3d(rel) {   // rel：鋼筋第幾批（點「鋼筋發布」消息�
 }
 function drop3d() { var d = $('d3'); if (d) { d.parentNode.removeChild(d); document.body.style.overflow = ''; } }
 window.close3d = function () { if (history.state && history.state.d3) history.back(); else drop3d(); };
-window.addEventListener('popstate', function () { drop3d(); });
+window.addEventListener('popstate', function () { drop3d(); pvDrop(); });
+
+/**
+ * 點照片放大（使用者 2026-11-11「點下去讓他有放大的功能然後放大後可以縮放大小」）：
+ * 黑底整頁；兩指張開放大、捏回縮小（1～5 倍），放大後一指拖著看，點兩下放大／還原，沒放大時左右滑換張；
+ * 點一下藏起／叫出上下的字。電腦：滾輪縮放、拖曳、← → 換張、Esc 關。手機往回滑、按返回也是關掉。
+ * 這一頁所有有 data-cap 的照片排成一串（data-cap 第一行＝粗體標題，其他行＝說明）。
+ */
+var PV = null;
+document.addEventListener('click', function (ev) {
+  var img = ev.target && ev.target.closest ? ev.target.closest('img[data-cap]') : null;
+  if (img && !$('pv')) { ev.preventDefault(); pvOpen(img); }
+});
+function pvOpen(img) {
+  var list = Array.prototype.slice.call(document.querySelectorAll('#app img[data-cap]'));
+  var i = list.indexOf(img); if (i < 0) return;
+  var d = document.createElement('div'); d.id = 'pv';
+  d.innerHTML = '<div id="pvstage"><img id="pvimg" alt="" draggable="false"><div id="pvmsg"></div></div>' +
+    '<div class="pvtop"><button type="button" data-pv="close">‹ 關閉</button><span id="pvn" style="font-size:16px"></span></div>' +
+    '<button type="button" class="pvnav" data-pv="prev">‹</button><button type="button" class="pvnav r" data-pv="next">›</button>' +
+    '<div class="pvbot"><b id="pvt"></b><div id="pvx"></div><div class="pvhint">兩指張開＝放大、捏回＝縮小・點兩下＝放大／還原' + (list.length > 1 ? '・左右滑＝換一張' : '') + '</div></div>';
+  document.body.appendChild(d); document.body.style.overflow = 'hidden';
+  PV = { list: list, i: i, s: 1, x: 0, y: 0, d: d, t: null, tap: 0, tx: 0, ty: 0, timer: 0 };
+  d.addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('[data-pv]') : null; if (!b) return;
+    ev.preventDefault(); ev.stopPropagation();
+    var a = b.getAttribute('data-pv');
+    if (a === 'close') pvClose(); else pvGo(a === 'next' ? 1 : -1);
+  });
+  var st = $('pvstage');
+  st.addEventListener('touchstart', pvTouchStart, { passive: false });
+  st.addEventListener('touchmove', pvTouchMove, { passive: false });
+  st.addEventListener('touchend', pvTouchEnd, { passive: false });
+  st.addEventListener('touchcancel', pvTouchEnd, { passive: false });
+  d.addEventListener('gesturestart', function (ev) { ev.preventDefault(); });   // iPhone Safari：兩指別放大整個網頁
+  st.addEventListener('wheel', function (ev) {
+    ev.preventDefault();
+    var r = st.getBoundingClientRect();
+    pvZoomAt(PV.s * (ev.deltaY < 0 ? 1.15 : 1 / 1.15), ev.clientX - r.left, ev.clientY - r.top);
+  }, { passive: false });
+  st.addEventListener('mousedown', function (ev) {
+    if (ev.button !== 0) return;
+    var x0 = ev.clientX, y0 = ev.clientY, px = PV.x, py = PV.y, moved = false;
+    function mv(e) { if (PV.s > 1) { moved = true; PV.x = px + e.clientX - x0; PV.y = py + e.clientY - y0; pvApply(); } }
+    function up(e) {
+      window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up);
+      if (PV.s <= 1 && Math.abs(e.clientX - x0) > 60) pvGo(e.clientX < x0 ? 1 : -1);
+    }
+    window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+  });
+  st.addEventListener('dblclick', function (ev) {
+    if (PV.touched) return;
+    var r = st.getBoundingClientRect(); pvToggleZoom(ev.clientX - r.left, ev.clientY - r.top);
+  });
+  try { history.pushState({ pv: 1 }, ''); } catch (e) { }
+  pvShow();
+}
+function pvClose() { if (history.state && history.state.pv) history.back(); else pvDrop(); }
+function pvDrop() {
+  var d = $('pv'); if (!d) return;
+  if (PV && PV.timer) clearInterval(PV.timer);
+  d.parentNode.removeChild(d); document.body.style.overflow = ''; PV = null;
+}
+document.addEventListener('keydown', function (ev) {
+  if (!PV) return;
+  if (ev.key === 'Escape') pvClose(); else if (ev.key === 'ArrowRight') pvGo(1); else if (ev.key === 'ArrowLeft') pvGo(-1);
+});
+function pvGo(k) {
+  var n = PV.i + k; if (n < 0 || n >= PV.list.length) { pvApply(); return; }
+  PV.i = n; pvShow();
+}
+function pvShow() {
+  var el = PV.list[PV.i], im = $('pvimg'), msg = $('pvmsg');
+  PV.s = 1; PV.x = 0; PV.y = 0; PV.sw = 0;
+  var cap = String(el.getAttribute('data-cap') || '').split('\n');
+  $('pvt').textContent = cap[0] || '';
+  $('pvx').textContent = cap.slice(1).filter(function (x) { return x; }).join('\n');
+  $('pvn').textContent = PV.list.length > 1 ? (PV.i + 1) + ' / ' + PV.list.length : '';
+  var navs = PV.d.querySelectorAll('.pvnav');
+  navs[0].style.visibility = PV.i > 0 ? 'visible' : 'hidden';
+  navs[1].style.visibility = PV.i < PV.list.length - 1 ? 'visible' : 'hidden';
+  if (PV.timer) { clearInterval(PV.timer); PV.timer = 0; }
+  function put() {
+    var src = el.getAttribute('src');
+    if (src) { im.src = src; im.style.display = ''; msg.textContent = ''; return true; }
+    return false;
+  }
+  if (!put()) {   // 照片還在跟收件服務拿：等它
+    im.removeAttribute('src'); im.style.display = 'none'; msg.textContent = '照片讀取中…';
+    var tries = 0;
+    PV.timer = setInterval(function () {
+      if (put() || ++tries > 120) { clearInterval(PV.timer); PV.timer = 0; if (!el.getAttribute('src')) msg.textContent = '讀不到這張照片（網路？）'; }
+    }, 400);
+  }
+  pvApply();
+}
+/** 放大了最多拖到照片的邊 */
+function pvClamp() {
+  var im = $('pvimg'), st = $('pvstage');
+  var W = st.clientWidth, H = st.clientHeight, nw = im.naturalWidth || W, nh = im.naturalHeight || H;
+  var f = Math.min(W / nw, H / nh), dw = nw * f, dh = nh * f;
+  var mx = Math.max(0, (dw * PV.s - W) / 2), my = Math.max(0, (dh * PV.s - H) / 2);
+  PV.x = Math.max(-mx, Math.min(mx, PV.x)); PV.y = Math.max(-my, Math.min(my, PV.y));
+}
+function pvApply(anim) {
+  if (PV.s <= 1.001) { PV.s = 1; PV.x = 0; PV.y = 0; } else pvClamp();
+  var im = $('pvimg');
+  im.style.transition = anim ? 'transform .2s' : 'none';
+  im.style.transform = 'translate(' + (PV.x + (PV.sw || 0)) + 'px,' + PV.y + 'px) scale(' + PV.s + ')';
+}
+/** 以畫面上 (cx,cy) 那一點為中心縮放到 ns 倍 */
+function pvZoomAt(ns, cx, cy, anim) {
+  var st = $('pvstage');
+  ns = Math.max(1, Math.min(5, ns));
+  var k = ns / PV.s, ox = cx - st.clientWidth / 2, oy = cy - st.clientHeight / 2;
+  PV.x = ox * (1 - k) + PV.x * k; PV.y = oy * (1 - k) + PV.y * k; PV.s = ns;
+  pvApply(anim);
+}
+function pvToggleZoom(cx, cy) { if (PV.s > 1.01) { PV.s = 1; pvApply(true); } else pvZoomAt(2.5, cx, cy, true); }
+function pvTouchStart(ev) {
+  ev.preventDefault(); PV.touched = true;
+  var r = $('pvstage').getBoundingClientRect(), t = ev.touches;
+  if (t.length >= 2) {
+    var a = t[0], b = t[1];
+    PV.t = { pinch: true, d: Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY) || 1, s: PV.s, x: PV.x, y: PV.y,
+      mx: (a.clientX + b.clientX) / 2 - r.left, my: (a.clientY + b.clientY) / 2 - r.top };
+  } else if (t.length === 1) {
+    PV.t = { pinch: false, sx: t[0].clientX, sy: t[0].clientY, x: PV.x, y: PV.y, at: Date.now(), moved: false, multi: !!(PV.t && PV.t.pinch) };
+  }
+}
+function pvTouchMove(ev) {
+  ev.preventDefault();
+  var g = PV.t; if (!g) return;
+  var r = $('pvstage').getBoundingClientRect(), t = ev.touches;
+  if (g.pinch && t.length >= 2) {
+    var a = t[0], b = t[1];
+    var d = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY) || 1;
+    var mx = (a.clientX + b.clientX) / 2 - r.left, my = (a.clientY + b.clientY) / 2 - r.top;
+    var ns = Math.max(1, Math.min(5, g.s * d / g.d)), k = ns / g.s;
+    var ox = g.mx - r.width / 2, oy = g.my - r.height / 2;
+    PV.s = ns; PV.x = ox * (1 - k) + g.x * k + (mx - g.mx); PV.y = oy * (1 - k) + g.y * k + (my - g.my);
+    pvApply();
+  } else if (!g.pinch && t.length === 1) {
+    var dx = t[0].clientX - g.sx, dy = t[0].clientY - g.sy;
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) g.moved = true;
+    if (PV.s > 1.01) { PV.x = g.x + dx; PV.y = g.y + dy; pvApply(); }
+    else if (PV.list.length > 1) { PV.sw = dx; pvApply(); }   // 沒放大：照片跟著手指左右移，放開才換
+  }
+}
+function pvTouchEnd(ev) {
+  ev.preventDefault();
+  var g = PV.t, t = ev.touches;
+  if (t.length === 1) {   // 兩指放開一指：剩下那指接著拖
+    PV.t = { pinch: false, sx: t[0].clientX, sy: t[0].clientY, x: PV.x, y: PV.y, at: 0, moved: true, multi: true };
+    return;
+  }
+  if (t.length >= 2 || !g) return;
+  PV.t = null;
+  var sw = PV.sw || 0; PV.sw = 0;
+  if (!g.pinch && PV.s <= 1.01 && Math.abs(sw) > 60) { pvGo(sw < 0 ? 1 : -1); return; }
+  pvApply(sw !== 0);
+  if (!g.pinch && !g.moved && !g.multi && Date.now() - g.at < 300) {
+    var r = $('pvstage').getBoundingClientRect(), now = Date.now();
+    var ct = ev.changedTouches[0], cx = ct.clientX - r.left, cy = ct.clientY - r.top;
+    if (now - PV.tap < 300 && Math.abs(cx - PV.tx) < 40 && Math.abs(cy - PV.ty) < 40) {   // 點兩下
+      PV.tap = 0; clearTimeout(PV.tapT); pvToggleZoom(cx, cy);
+    } else {   // 點一下：等一下看是不是點兩下，不是就藏起／叫出上下的字
+      PV.tap = now; PV.tx = cx; PV.ty = cy;
+      clearTimeout(PV.tapT);
+      PV.tapT = setTimeout(function () { if (PV && PV.tap === now) PV.d.classList.toggle('nobars'); }, 300);
+    }
+  }
+}
 
 function go(r) {
   S.route = r; S.err = ''; render(); window.scrollTo(0, 0);
