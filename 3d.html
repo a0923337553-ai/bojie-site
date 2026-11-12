@@ -48,7 +48,7 @@ button{font:inherit}
 #laps .lb.top{background:#1D4ED8}
 /* 梁配筋圖（照 DXF 的那張，使用者 2026-11-10「除了顯示3d也要有配筋圖」）：卡片裡一小張、可以放大 */
 .dwg{margin-top:8px;border-radius:10px;overflow:hidden;background:#1E2228;border:1px solid #2B3138}
-.dwg svg{display:block;width:100%;height:auto}
+.dwg svg{display:block;width:100%;height:auto;max-height:280px}
 #dwgView{position:fixed;inset:0;z-index:30;background:#14171B;display:none;flex-direction:column}
 #dwgView .bar{display:flex;align-items:center;gap:8px;padding:8px 10px;color:#fff;font-weight:700;background:#1E2228}
 #dwgView .bar .t{flex:1;font-size:15px}
@@ -1055,10 +1055,11 @@ function drawingSvg(R, crop, widthCss) {
   return s + '</svg>';
 }
 let DWG_ZOOM = 2.2;
-function openDrawing(m) {
-  const R = rebarOf(m); if (!R || !R.dw) return;
+/** 全螢幕看配筋圖：m＝構件（rb 的那張，橘框）；R、title＝直接給（施工單那幾張：{dw: 識別}） */
+function openDrawing(m, R, title) {
+  R = R || rebarOf(m); if (!R || !R.dw) return;
   const v = document.getElementById('dwgView'), b = document.getElementById('dwgBody');
-  document.getElementById('dwgTitle').textContent = '📐 ' + (m.f || '') + ' ' + (m.c || m.n || '') + ' 的配筋圖（橘框＝' + thisOne(m) + '）';
+  document.getElementById('dwgTitle').textContent = title || ('📐 ' + (m.f || '') + ' ' + (m.c || m.n || '') + ' 的配筋圖（橘框＝' + thisOne(m) + '）');
   const draw = () => { b.innerHTML = drawingSvg(R, false, Math.round(DWG_ZOOM * 100) + '%'); };
   draw(); v.style.display = 'flex';
   // 先捲到這一跨
@@ -1066,6 +1067,12 @@ function openDrawing(m) {
   document.getElementById('dwgIn').onclick = () => { DWG_ZOOM = Math.min(8, DWG_ZOOM * 1.4); draw(); };
   document.getElementById('dwgOut').onclick = () => { DWG_ZOOM = Math.max(1, DWG_ZOOM / 1.4); draw(); };
   document.getElementById('dwgClose').onclick = () => { v.style.display = 'none'; b.innerHTML = ''; };
+}
+/** 這個構件的鋼筋出自哪幾張施工單（rj 的 dws，外掛 11/12 起匯出；有圖的才算，不重複） */
+function sheetDws(m) {
+  const out = [];
+  jobsOf(m).forEach(j => (j.dws || []).forEach(id => { if (M.rd && M.rd[id] && !out.includes(id)) out.push(id); }));
+  return out;
 }
 /** 橘框框的是什麼：梁一跨、柱一支、牆一道、版／基礎一塊、樓梯一座 */
 function thisOne(m) { return ({ '梁': '這一跨', '地梁': '這一跨', '柱': '這一支', '牆': '這一道', '版': '這一塊', '基礎': '這一塊', '樓梯': '這一座' })[m && m.k] || '這一個'; }
@@ -1161,6 +1168,9 @@ function renderSide() {
     const R1 = rebarOf(m), selDw = !!(R1 && R1.dw && M.rd && M.rd[R1.dw]);
     h += '<div class="card"><div class="t"><span class="k" style="background:' + (KIND_COLOR[m.k] || '#999') + '">' + esc(m.k) + '</span>' + esc(m.n || m.c || '') + '</div>'
       + (selDw ? '<div style="margin-top:8px;font-weight:700">📐 配筋圖 <span class="muted" style="font-weight:400">（專案裡畫的；橘框＝' + thisOne(m) + '，點圖放大）</span></div><div class="dwg" id="dwgCard">' + drawingSvg(R1, true) + '</div>' : '')
+      // 牆、版、基礎：它的鋼筋出自哪幾張施工單（rj 的 dws；基礎配筋圖、牆／版出圖），一張一張畫
+      + sheetDws(m).map((id, k) => '<div style="margin-top:8px;font-weight:700">📐 ' + esc(M.rd[id].n || '施工單') + ' <span class="muted" style="font-weight:400">（點圖放大）</span></div>'
+        + '<div class="dwg dwgSheet" data-k="' + k + '">' + drawingSvg({ dw: id }, false) + '</div>').join('')
       + table([['樓層', m.f], ['灌漿區', m.gp]].concat(m.v ? [['混凝土', m.v.toFixed(2) + ' m³']] : []).concat(rows))
       + '<div class="row">' + (canRebar ? '<button class="btn solid" id="showRebar">🔩 看配筋</button>' : (m.k === '柱' || m.k === '梁' || m.k === '地梁') && !m.dc ? '<span class="muted">這支在配筋表找不到</span>' : '')
       + '<button class="btn ghost" id="unsel">取消</button></div></div>';
@@ -1216,6 +1226,7 @@ function renderSide() {
   B.querySelectorAll('.mk').forEach(x => x.onclick = () => selectMark(x.dataset.mk, true));
   on('exitRebar', () => { st.rebar = null; apply(); fitTo(visibleObjs(), false); });
   { const dc = document.getElementById('dwgCard'), m = st.rebar || st.sel; if (dc && m) { dc.style.cursor = 'zoom-in'; dc.onclick = () => openDrawing(m); } }
+  if (st.sel) { const ids = sheetDws(st.sel); document.querySelectorAll('.dwgSheet').forEach(el => { const id = ids[+el.dataset.k]; el.style.cursor = 'zoom-in'; el.onclick = () => openDrawing(st.sel, { dw: id }, '📐 ' + (M.rd[id].n || '施工單')); }); }
   on('showRebar', () => { st.rebar = st.sel; st.focus = focusOf(st.rebar); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); });
   on('unsel', () => { st.sel = null; apply(); });
   on('barsOff', () => { st.bars = false; apply(); });
@@ -1254,7 +1265,9 @@ function zoneList() {
 }
 function pourList(tip) {
   let h = tip ? '<div class="tip">🔩 <b>看鋼筋</b>：按上面「🔩 鋼筋」看整層；或點一支柱或梁，再按「看配筋」</div>' : '';
-  h += '<div class="muted" style="margin:2px 0 8px">點一區，3D 會把那一區亮起來（橘色）；<b>可以點好幾區一起亮</b>，再點一次取消。分區跟 BricsCAD 灌漿數量一樣</div>';
+  // 加標題（使用者 2026-11-12「你有做好幾區的功能嗎？還是我誤會你了」：接在構件卡片下面沒有標題，看起來像在講那支梁）
+  h += '<div style="font-weight:700;margin:12px 0 2px">🚚 灌漿區</div>'
+    + '<div class="muted" style="margin:2px 0 8px">點下面一區，3D 會把那一區亮起來（橘色）；<b>可以點好幾區一起亮</b>，再點一次取消。分區跟 BricsCAD 灌漿數量一樣</div>';
   if (st.pour && st.pour.ids.size > 1) h += '<div class="row" style="margin:-2px 0 8px"><span class="muted">選了 ' + st.pour.ids.size + ' 區</span><button class="btn ghost" id="pourClear">全部取消</button></div>';
   h += zoneList().map(z => {
     const days = z.up.map(p => roc(p.date)).filter(Boolean);
