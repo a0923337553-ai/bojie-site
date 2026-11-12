@@ -298,7 +298,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/12a';
+var WEB_VERSION = '11/12b';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1098,6 +1098,8 @@ function entryRow(e) {
   var rc = (e.receipts || []).length;
   return '<div class="entry' + (e.mine ? ' mine' : '') + '" data-act="open" data-v="' + esc(e.id) + '"><div class="who2">' + esc(e.name) + '</div><div class="body">' +
     '<div class="sub">' + esc(catHours(e.category, e.hours) + workHText(e.workH) + (e.proxy ? '｜管理者代填' : '')) + '</div>' + otHtml(e.otH) +
+    // 管理者確認了沒（收件服務第 25 版，使用者 2026-11-12「全a可以」）
+    (e.mine && S.s && Number(S.s.version) >= 25 ? '<div class="sub" style="font-weight:bold;color:' + (e.ok ? 'var(--green)' : '#8A96A3') + '">' + (e.ok ? '✓ 管理者確認了' : '等管理者確認') + '</div>' : '') +
     (e.site === UNFILED ? '<div class="sub" style="color:var(--warn);font-weight:bold">他打的工地：' + esc(e.siteText || '（沒打）') + '</div>' : '') +
     '<div>' + esc(e.text || '（沒寫內容）') + '</div>' +
     (x.length ? '<div class="sub" style="color:var(--navy)">' + esc(x.join('｜')) + '</div>' : '') +
@@ -1436,7 +1438,9 @@ function renderLogs() {
     }
     // 管理者點施工人員那一行就可以改（第 13 版，跟摺疊機一樣）
     var canW = isAdmin() && !S.asCode;
-    wl.forEach(function (e) { h += '<div' + (canW ? ' class="wlog" data-act="logw" data-v="' + esc(e.id) + '"' : '') + ' style="font-size:14.5px;color:var(--blue);line-height:20px;margin-top:3px;white-space:pre-wrap">👷 ' + esc(e.name + (String(e.hours || '').trim() ? '（' + e.hours + '）' : '') + '：' + e.text) + (canW ? ' <b style="color:var(--orange)">✎</b>' : '') + '</div>' + otHtml(e.otH); });
+    // 還沒確認的（收件服務第 25 版）：灰色、寫「待確認」，不算進數量、累計
+    var cv = S.s && Number(S.s.version) >= 25;
+    wl.forEach(function (e) { var wait = cv && !e.ok; h += '<div' + (canW ? ' class="wlog" data-act="logw" data-v="' + esc(e.id) + '"' : '') + ' style="font-size:14.5px;color:' + (wait ? '#8A96A3' : 'var(--blue)') + ';line-height:20px;margin-top:3px;white-space:pre-wrap">👷 ' + esc(e.name + (String(e.hours || '').trim() ? '（' + e.hours + '）' : '') + '：' + e.text) + (wait ? '（待確認）' : '') + (canW ? ' <b style="color:var(--orange)">✎</b>' : '') + '</div>' + otHtml(e.otH); });
     var n = (log && log.photos ? log.photos.filter(function (p) { return p.category === c && p.driveId; }).length : 0) + wl.reduce(function (a, e) { return a + (e.photos || []).length; }, 0);
     if (n) h += '<div style="font-size:13px;color:var(--warn);margin-top:3px">📷 ' + n + ' 張（在最下面）</div>';
     h += '</div>';
