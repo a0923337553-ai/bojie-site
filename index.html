@@ -298,7 +298,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/12b';
+var WEB_VERSION = '11/12c';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -503,6 +503,8 @@ function hoursLabel(h) { h = String(h == null ? '' : h).trim(); return !h ? '' :
 // 工時、加班（收件服務第 24 版，使用者 2026-11-12「新增一個讓他們填小時的以及加班的（小時計），然後自動換算成工，加班的累計不要算到一般的累積他要分開然後加班用紅字」）：
 // 8 小時＝1 工，打工時工數跟著換；加班另外存，不加進工數，紅字
 var HOURS_PER_DAY = 8;
+/** 管理者確認時改的那一份（e.conf）蓋上去；沒有就是原文 */
+function effW(e) { return e && e.conf ? Object.assign({}, e, e.conf, { category: e.conf.category || e.category, hours: e.conf.hours || e.hours }) : e; }
 function hasHours() { return !!S.s && Number(S.s.version) >= 24; }
 function hrsOf(h) { var s = String(h == null ? '' : h).trim(); if (!s) return null; var n = Number(s); return isFinite(n) && n > 0 && n <= 24 ? n : null; }
 function numTxt(v) { return String(Math.round(v * 1000) / 1000); }
@@ -1428,7 +1430,8 @@ function renderLogs() {
   var cats = uniq((s.categories && s.categories.length ? s.categories : DEFAULT_CATS).concat(((log && log.items) || []).map(function (x) { return x.category; })).concat(ws.map(function (e) { return e.category; })).map(canonCat));
   h += '<div class="logcards">';   // 寬螢幕：大項卡片排兩、三欄
   cats.forEach(function (c) {
-    var item = logItem(log, c), wl = ws.filter(function (e) { return canonCat(e.category) === c; });
+    // 管理者確認時改的那一份（e.conf，收件服務第 25 版；施工人員寫的原文不動，使用者 2026-11-12）：日誌照這一份放大項、寫內容
+    var item = logItem(log, c), wl = ws.map(effW).filter(function (e) { return canonCat(e.category) === c; });
     if (!item && !wl.length) return;
     h += '<div class="card"><div class="ttl">' + esc(c) + (item && item.pc ? PC_TAG : '') + '</div>';
     if (item) {
@@ -1954,6 +1957,8 @@ function openEdit(e) {
   var days = windowDays(), s = S.s;
   var pending = !!(e && e.reqStatus === '待確認');
   var src = (e && e.proxy && pending && s.role !== '管理者' && e.req) ? e.req : (e || {});
+  // 管理者改施工人員傳的：從你上次確認改的那一份開始改（他寫的原文不動）
+  if (e && e.conf && s.role === '管理者') src = effW(e);
   // 改完回哪裡：施工人員待處理、施工日誌、我的工作
   if (S.route !== 'edit') S.editFrom = S.route === 'adminq' || S.route === 'logs' ? S.route : 'work';
   S.d = {
@@ -3229,7 +3234,9 @@ function adminEditBox(d) {
       (s.people || []).map(function (n) { return chip('forname', n, n, d.forName === n, true); }).join('') + '</div>' +
       '<div class="note" style="margin-top:6px">他看得到這筆，但不能直接改，只能申請修改（你同意才換）。</div></div>';
   } else if (d.id && o && o.name && o.name !== s.name) {
-    h += '<div class="box" style="border-color:#2D9CDB;background:#EEF6FD"><b>' + esc(o.name) + ' 的工作</b>' + (o.proxy ? '（你幫他填的）' : '') + '<div class="sub">管理者可以直接改、刪。</div></div>';
+    h += '<div class="box" style="border-color:#2D9CDB;background:#EEF6FD"><b>' + esc(o.name) + ' 的工作</b>' + (o.proxy ? '（你幫他填的）' : '') +
+      (!o.proxy && Number(s.version) >= 25 ? '<div style="margin-top:4px">他原本寫的：' + esc(canonCat(o.category) + '｜' + hoursLabel(o.hours) + workHText(o.workH) + (otLabel(o.otH) ? '｜' + otLabel(o.otH) : '') + '｜' + (o.text || '（沒寫內容）')) + '</div>' +
+        '<div class="sub">你改了存檔＝確認：只改你的日誌（數量、累計、PDF、Excel）；他寫的不會被改，他只會看到「✓ 已確認」。</div>' : '<div class="sub">管理者可以直接改、刪。</div>') + '</div>';
   }
   if (d.id && d.pending && o && o.req) {
     h += '<div class="box"><b style="color:var(--warn)">' + esc(o.name) + ' 申請修改，等你決定</b><div style="white-space:pre-wrap;margin-top:4px;font-size:15px">' + esc(o.reqText || '') + '</div>' +
