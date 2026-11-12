@@ -1069,10 +1069,12 @@ function drawingSvg(R, crop, widthCss) {
       (r ? ' transform="rotate(' + f(-r) + ' ' + x + ' ' + yy + ')"' : '') + ' font-family="Microsoft JhengHei,PingFang TC,Noto Sans TC,sans-serif">' + esc(txt) + '</text>';
   });
   // 系統讀到的那幾格（外掛「配筋圖 → 梁配筋」放輸入框的地方，使用者 2026-11-12「我要像圖二」）：淡橘底、黑字蓋在原本的字上面
+  // 字寬照字算（@、中文比較寬），框比字寬一點，字才不會跑出框
+  const textW = t => [...String(t)].reduce((a, ch) => a + (ch === '@' ? 0.95 : /[⺀-￿]/.test(ch) ? 1 : /[A-Z#]/.test(ch) ? 0.68 : 0.58), 0);
   (R.sl || []).forEach(([a, b, c, d, txt]) => {
-    const th = Math.max(4, d - b), w = Math.max(c - a, String(txt).length * th * 0.62) + th * 0.5, x = a - th * 0.25, y = H - d - th * 0.2;
+    const th = Math.max(4, d - b), fs = th * 1.05, w = Math.max(c - a + th * 0.5, textW(txt) * fs + th * 0.7), x = a - th * 0.25, y = H - d - th * 0.2;
     s += '<rect x="' + f(x) + '" y="' + f(y) + '" width="' + f(w) + '" height="' + f(th * 1.4) + '" fill="#FFF4E2" stroke="#C97A1E" stroke-width="1" vector-effect="non-scaling-stroke" rx="1"/>'
-      + '<text x="' + f(x + th * 0.25) + '" y="' + f(y + th * 0.7) + '" font-size="' + f(th * 1.1) + '" fill="#111" dominant-baseline="central" font-family="Microsoft JhengHei,PingFang TC,Noto Sans TC,sans-serif">' + esc(txt) + '</text>';
+      + '<text x="' + f(x + th * 0.3) + '" y="' + f(y + th * 0.7) + '" font-size="' + f(fs) + '" fill="#111" dominant-baseline="central" font-family="Segoe UI,Roboto,Microsoft JhengHei,PingFang TC,sans-serif">' + esc(txt) + '</text>';
   });
   if (sb) s += '<rect x="' + f(sb[0]) + '" y="' + f(H - sb[3]) + '" width="' + f(sb[2] - sb[0]) + '" height="' + f(sb[3] - sb[1]) + '" fill="rgba(249,115,22,.10)" stroke="#F97316" stroke-width="2.5" vector-effect="non-scaling-stroke" rx="4"/>';
   return s + '</svg>';
