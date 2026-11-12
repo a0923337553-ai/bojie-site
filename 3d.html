@@ -420,6 +420,7 @@ function bindInput() {
   el.addEventListener('wheel', e => { e.preventDefault(); cam.dist *= Math.exp(e.deltaY * 0.0012); placeCamera(); hideHint(); }, { passive: false });
   el.addEventListener('dblclick', () => fitTo(st.rebar ? [...rebarGroup.children] : visibleObjs(), true));
   addEventListener('resize', layout);
+  if (window.visualViewport) visualViewport.addEventListener('resize', layout);
 }
 function pan(dx, dy) {
   const h = el.clientHeight || 1, k = 2 * cam.dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / h;
@@ -1057,7 +1058,7 @@ let DWG_ZOOM = 2.2;
 function openDrawing(m) {
   const R = rebarOf(m); if (!R || !R.dw) return;
   const v = document.getElementById('dwgView'), b = document.getElementById('dwgBody');
-  document.getElementById('dwgTitle').textContent = '📐 ' + (m.f || '') + ' ' + (m.c || m.n || '') + ' 的配筋圖（橘框＝這一跨）';
+  document.getElementById('dwgTitle').textContent = '📐 ' + (m.f || '') + ' ' + (m.c || m.n || '') + ' 的配筋圖（橘框＝' + thisOne(m) + '）';
   const draw = () => { b.innerHTML = drawingSvg(R, false, Math.round(DWG_ZOOM * 100) + '%'); };
   draw(); v.style.display = 'flex';
   // 先捲到這一跨
@@ -1066,6 +1067,8 @@ function openDrawing(m) {
   document.getElementById('dwgOut').onclick = () => { DWG_ZOOM = Math.max(1, DWG_ZOOM / 1.4); draw(); };
   document.getElementById('dwgClose').onclick = () => { v.style.display = 'none'; b.innerHTML = ''; };
 }
+/** 橘框框的是什麼：梁一跨、柱一支、牆一道、版／基礎一塊、樓梯一座 */
+function thisOne(m) { return ({ '梁': '這一跨', '地梁': '這一跨', '柱': '這一支', '牆': '這一道', '版': '這一塊', '基礎': '這一塊', '樓梯': '這一座' })[m && m.k] || '這一個'; }
 function lmr(a, size) { const t = (a || []).map(v => v ? v + (size ? '-' + size : '') : '—'); return '左 ' + t[0] + '・中 ' + t[1] + '・右 ' + t[2]; }
 function rebarRows(m) {
   const R = rebarOf(m), rows = [];
@@ -1153,7 +1156,11 @@ function renderSide() {
   } else if (st.sel) {
     const m = st.sel, rows = rebarRows(m), canRebar = hasBars(m) && ['柱', '梁', '地梁', '基礎', '牆', '版', '樓梯'].includes(m.k);
     T.textContent = '構件';
+    // 點了就出現專案裡畫的那張配筋圖（使用者 2026-11-12「點3d的梁會跑出像上圖這樣的梁配筋圖」「柱樑牆板基礎都是」）：
+    // 外掛匯出時有對到圖（rb 的 dw）就畫；柱、牆、版、基礎等外掛也匯出了就自動有
+    const R1 = rebarOf(m), selDw = !!(R1 && R1.dw && M.rd && M.rd[R1.dw]);
     h += '<div class="card"><div class="t"><span class="k" style="background:' + (KIND_COLOR[m.k] || '#999') + '">' + esc(m.k) + '</span>' + esc(m.n || m.c || '') + '</div>'
+      + (selDw ? '<div style="margin-top:8px;font-weight:700">📐 配筋圖 <span class="muted" style="font-weight:400">（專案裡畫的；橘框＝' + thisOne(m) + '，點圖放大）</span></div><div class="dwg" id="dwgCard">' + drawingSvg(R1, true) + '</div>' : '')
       + table([['樓層', m.f], ['灌漿區', m.gp]].concat(m.v ? [['混凝土', m.v.toFixed(2) + ' m³']] : []).concat(rows))
       + '<div class="row">' + (canRebar ? '<button class="btn solid" id="showRebar">🔩 看配筋</button>' : (m.k === '柱' || m.k === '梁' || m.k === '地梁') && !m.dc ? '<span class="muted">這支在配筋表找不到</span>' : '')
       + '<button class="btn ghost" id="unsel">取消</button></div></div>';
@@ -1208,7 +1215,7 @@ function renderSide() {
   });
   B.querySelectorAll('.mk').forEach(x => x.onclick = () => selectMark(x.dataset.mk, true));
   on('exitRebar', () => { st.rebar = null; apply(); fitTo(visibleObjs(), false); });
-  { const dc = document.getElementById('dwgCard'); if (dc && st.rebar) { const m = st.rebar; dc.style.cursor = 'zoom-in'; dc.onclick = () => openDrawing(m); } }
+  { const dc = document.getElementById('dwgCard'), m = st.rebar || st.sel; if (dc && m) { dc.style.cursor = 'zoom-in'; dc.onclick = () => openDrawing(m); } }
   on('showRebar', () => { st.rebar = st.sel; st.focus = focusOf(st.rebar); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); });
   on('unsel', () => { st.sel = null; apply(); });
   on('barsOff', () => { st.bars = false; apply(); });
@@ -1270,6 +1277,10 @@ function layout() {
   if (!renderer) return;
   const top = document.getElementById('top').offsetHeight, side = document.getElementById('side'), view = document.getElementById('view');
   document.documentElement.style.setProperty('--topH', top + 'px');
+  // 下面那塊的高度用程式量的畫面高度，不用 CSS 的 46vh（使用者 2026-11-12 直版機 App 點梁、點紅圈，下面那塊整個不見；
+  // 摺疊機打開是右邊一欄才看得到）：App 裡的網頁 vh 可能算成 0，面板就變 0 高、內容掉到螢幕外面
+  const scrH = Math.max(innerHeight || 0, document.documentElement.clientHeight || 0, (window.visualViewport && visualViewport.height) || 0);
+  side.style.maxHeight = WIDE() ? '' : Math.max(200, Math.round(scrH * 0.46)) + 'px';
   const sw = WIDE() ? side.offsetWidth : 0;
   view.style.top = top + 'px'; view.style.right = sw + 'px';
   view.style.bottom = WIDE() ? '0' : side.offsetHeight + 'px';
