@@ -298,7 +298,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/12c';
+var WEB_VERSION = '11/12d';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1393,18 +1393,26 @@ function logItem(log, c) {
   return { vendor: x.vendor != null ? x.vendor : '柏捷', unit: x.unit != null ? x.unit : '工', qty: grp.length ? grp.join('+') : qtyText, lines: lines, pc: x.src === '電腦' };
 }
 var PC_TAG = ' <span title="電腦（Excel 施工日誌）傳來的" style="font-size:13px">🖥</span>';
+/** 施工人員那張照片放哪個大項：電腦 Excel 照片紅框改過（log.pcPhotoCats）、而且比那一筆最後改的時間新 → 用電腦的（2026-11-12） */
+function wPhotoCat(log, id, e) {
+  var o = log && log.pcPhotoCats && log.pcPhotoCats[id];
+  if (!o || !o.cat) return e.category;
+  var t = function (s) { return String(s || '').replace(/\D/g, '').slice(0, 14); };
+  return t(e.modified) > t(o.at) ? e.category : canonCat(o.cat);
+}
 /** 這天的照片：照大項的順序，先開發者日誌的（雲端有編號的），再施工人員傳的；單據放最後 */
 function dayPhotos(log, ws, cats, date) {
   var roc = rocDate(date), out = [], photos = (log && log.photos) || [];
-  uniq(cats.concat(photos.map(function (p) { return p.category; }))).forEach(function (c) {
+  var pcc = log && log.pcPhotoCats ? Object.keys(log.pcPhotoCats).map(function (k) { return canonCat(log.pcPhotoCats[k].cat || ''); }).filter(Boolean) : [];
+  uniq(cats.concat(photos.map(function (p) { return p.category; })).concat(pcc)).forEach(function (c) {
     var it = logItem(log, c), vq = it ? [it.vendor, it.qty ? it.qty + it.unit : ''].filter(Boolean).join('-') : '';
     photos.filter(function (p) { return p.category === c && p.driveId; }).forEach(function (p) {
       var line = c === '材料單據' && p.line ? '📍 ' + p.line : p.line;   // 開發者的單據：內容＝施作位置
       out.push({ id: p.driveId, cat: c, line: [vq, line].filter(Boolean).join('\n'), date: roc });
     });
-    ws.filter(function (e) { return e.category === c; }).forEach(function (e) {
+    ws.forEach(function (e) {
       var first = String(e.text || '').split('\n').filter(function (x) { return x.trim(); })[0];
-      (e.photos || []).forEach(function (id) { out.push({ id: id, w: 1, cat: c, line: '👷 ' + e.name + (first ? '：' + first : ''), date: roc }); });
+      (e.photos || []).forEach(function (id) { if (wPhotoCat(log, id, e) === c) out.push({ id: id, w: 1, cat: c, line: '👷 ' + e.name + (first ? '：' + first : ''), date: roc }); });
     });
   });
   ws.forEach(function (e) { (e.receipts || []).forEach(function (id) {
@@ -1444,7 +1452,8 @@ function renderLogs() {
     // 還沒確認的（收件服務第 25 版）：灰色、寫「待確認」，不算進數量、累計
     var cv = S.s && Number(S.s.version) >= 25;
     wl.forEach(function (e) { var wait = cv && !e.ok; h += '<div' + (canW ? ' class="wlog" data-act="logw" data-v="' + esc(e.id) + '"' : '') + ' style="font-size:14.5px;color:' + (wait ? '#8A96A3' : 'var(--blue)') + ';line-height:20px;margin-top:3px;white-space:pre-wrap">👷 ' + esc(e.name + (String(e.hours || '').trim() ? '（' + e.hours + '）' : '') + '：' + e.text) + (wait ? '（待確認）' : '') + (canW ? ' <b style="color:var(--orange)">✎</b>' : '') + '</div>' + otHtml(e.otH); });
-    var n = (log && log.photos ? log.photos.filter(function (p) { return p.category === c && p.driveId; }).length : 0) + wl.reduce(function (a, e) { return a + (e.photos || []).length; }, 0);
+    var n = (log && log.photos ? log.photos.filter(function (p) { return p.category === c && p.driveId; }).length : 0) +
+      ws.map(effW).reduce(function (a, e) { return a + (e.photos || []).filter(function (id) { return wPhotoCat(log, id, e) === c; }).length; }, 0);
     if (n) h += '<div style="font-size:13px;color:var(--warn);margin-top:3px">📷 ' + n + ' 張（在最下面）</div>';
     h += '</div>';
   });
