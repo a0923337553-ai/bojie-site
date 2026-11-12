@@ -55,6 +55,23 @@ button{font:inherit}
 #dwgView .bar button{border:0;border-radius:10px;padding:7px 14px;font:inherit;font-size:16px;font-weight:700;background:#334155;color:#fff;cursor:pointer}
 #dwgView .sc{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
 #dwgView .sc svg{display:block;height:auto}
+/* 「專案 → 配筋圖」那幾頁（使用者 2026-11-12「我要像圖二抓裡面對應的配筋」）：柱配筋表各樓層、斷面、牆／版配筋表、基礎配筋 */
+.pg{margin-top:10px}
+.pg .h{font-weight:700}
+.pgt{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:6px;border:1px solid var(--line);border-radius:8px}
+.card .pgt table{border-collapse:collapse;margin:0;font-size:13px;min-width:100%}
+.card .pgt th,.card .pgt td{padding:4px 8px;border-bottom:1px solid #EEF1F4;white-space:nowrap;text-align:left;color:var(--ink);vertical-align:middle}
+.card .pgt th{background:#F4F6F8;font-weight:600;color:#52606D}
+.card .pgt tr.g th{background:#fff;color:var(--ink);font-weight:700;padding-top:8px}
+.card .pgt tr.on td{background:#FFE8CC;font-weight:700}
+.card .pgt tr.on td:first-child{box-shadow:inset 4px 0 0 #F97316}
+.secBox{margin-top:8px;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.secBox .st2{font-weight:700;font-size:14px}
+.secBox svg{display:block;width:100%;max-width:260px;height:auto;margin:6px auto;border-radius:6px}
+.secInfo{font-size:13px;line-height:1.6}
+.secInfo .warn{color:#D32F2F;font-weight:700}
+.shBtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+@media (min-width:900px){ .card .pgt table{font-size:14px} }
 .lapList{margin:6px 0 0;padding:0;list-style:none;font-size:14px}
 .lapList li{padding:2px 0}.lapList b{color:#15803D}
 #markBtn{position:fixed;z-index:6;border:0;border-radius:18px;padding:6px 12px;font-weight:700;background:#E03131;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;display:none}
@@ -1051,6 +1068,12 @@ function drawingSvg(R, crop, widthCss) {
     s += '<text x="' + x + '" y="' + yy + '" font-size="' + f(th * 1.3) + '" fill="' + aciHex(c) + '" text-anchor="' + anc + '" dominant-baseline="' + base + '"' +
       (r ? ' transform="rotate(' + f(-r) + ' ' + x + ' ' + yy + ')"' : '') + ' font-family="Microsoft JhengHei,PingFang TC,Noto Sans TC,sans-serif">' + esc(txt) + '</text>';
   });
+  // 系統讀到的那幾格（外掛「配筋圖 → 梁配筋」放輸入框的地方，使用者 2026-11-12「我要像圖二」）：淡橘底、黑字蓋在原本的字上面
+  (R.sl || []).forEach(([a, b, c, d, txt]) => {
+    const th = Math.max(4, d - b), w = Math.max(c - a, String(txt).length * th * 0.62) + th * 0.5, x = a - th * 0.25, y = H - d - th * 0.2;
+    s += '<rect x="' + f(x) + '" y="' + f(y) + '" width="' + f(w) + '" height="' + f(th * 1.4) + '" fill="#FFF4E2" stroke="#C97A1E" stroke-width="1" vector-effect="non-scaling-stroke" rx="1"/>'
+      + '<text x="' + f(x + th * 0.25) + '" y="' + f(y + th * 0.7) + '" font-size="' + f(th * 1.1) + '" fill="#111" dominant-baseline="central" font-family="Microsoft JhengHei,PingFang TC,Noto Sans TC,sans-serif">' + esc(txt) + '</text>';
+  });
   if (sb) s += '<rect x="' + f(sb[0]) + '" y="' + f(H - sb[3]) + '" width="' + f(sb[2] - sb[0]) + '" height="' + f(sb[3] - sb[1]) + '" fill="rgba(249,115,22,.10)" stroke="#F97316" stroke-width="2.5" vector-effect="non-scaling-stroke" rx="4"/>';
   return s + '</svg>';
 }
@@ -1058,14 +1081,22 @@ let DWG_ZOOM = 2.2;
 /** 全螢幕看配筋圖：m＝構件（rb 的那張，橘框）；R、title＝直接給（施工單那幾張：{dw: 識別}） */
 function openDrawing(m, R, title) {
   R = R || rebarOf(m); if (!R || !R.dw) return;
-  const v = document.getElementById('dwgView'), b = document.getElementById('dwgBody');
-  document.getElementById('dwgTitle').textContent = title || ('📐 ' + (m.f || '') + ' ' + (m.c || m.n || '') + ' 的配筋圖（橘框＝' + thisOne(m) + '）');
-  const draw = () => { b.innerHTML = drawingSvg(R, false, Math.round(DWG_ZOOM * 100) + '%'); };
-  draw(); v.style.display = 'flex';
   // 先捲到這一跨
-  const D = M.rd[R.dw]; if (R.sb && D) setTimeout(() => { b.scrollLeft = Math.max(0, (R.sb[0] + R.sb[2]) / 2 / D.w * b.scrollWidth - b.clientWidth / 2); }, 30);
-  document.getElementById('dwgIn').onclick = () => { DWG_ZOOM = Math.min(8, DWG_ZOOM * 1.4); draw(); };
-  document.getElementById('dwgOut').onclick = () => { DWG_ZOOM = Math.max(1, DWG_ZOOM / 1.4); draw(); };
+  const D = M.rd[R.dw];
+  openView(title || ('📐 ' + (m.f || '') + ' ' + (m.c || m.n || '') + ' 的配筋圖（橘框＝' + thisOne(m) + '）'), w => drawingSvg(R, false, w),
+    R.sb && D ? b => { b.scrollLeft = Math.max(0, (R.sb[0] + R.sb[2]) / 2 / D.w * b.scrollWidth - b.clientWidth / 2); } : null);
+}
+/** 全螢幕看一張圖：make(寬度)＝那張 SVG；zoom0＝一開始放大幾倍（斷面、基礎配筋圖 1 倍；配筋圖照上次的） */
+function openView(title, make, scrollTo, zoom0) {
+  const v = document.getElementById('dwgView'), b = document.getElementById('dwgBody');
+  let zoom = zoom0 || DWG_ZOOM;
+  const setZoom = z => { zoom = z; if (!zoom0) DWG_ZOOM = z; draw(); };
+  document.getElementById('dwgTitle').textContent = title;
+  const draw = () => { b.innerHTML = make(Math.round(zoom * 100) + '%'); };
+  draw(); v.style.display = 'flex';
+  if (scrollTo) setTimeout(() => scrollTo(b), 30);
+  document.getElementById('dwgIn').onclick = () => setZoom(Math.min(8, zoom * 1.4));
+  document.getElementById('dwgOut').onclick = () => setZoom(Math.max(zoom0 ? 0.5 : 1, zoom / 1.4));
   document.getElementById('dwgClose').onclick = () => { v.style.display = 'none'; b.innerHTML = ''; };
 }
 /** 這個構件的鋼筋出自哪幾張施工單（rj 的 dws，外掛 11/12 起匯出；有圖的才算，不重複） */
@@ -1076,6 +1107,146 @@ function sheetDws(m) {
 }
 /** 橘框框的是什麼：梁一跨、柱一支、牆一道、版／基礎一塊、樓梯一座 */
 function thisOne(m) { return ({ '梁': '這一跨', '地梁': '這一跨', '柱': '這一支', '牆': '這一道', '版': '這一塊', '基礎': '這一塊', '樓梯': '這一座' })[m && m.k] || '這一個'; }
+
+// ---------- 「專案 → 配筋圖」那幾頁（使用者 2026-11-12「我要像圖二抓裡面對應的配筋」「柱樑牆板基礎都是」） ----------
+// 外掛 11/12 起匯出 pg：col 柱配筋表、sec 斷面、wall 牆配筋表、slab 版配筋、ftg 基礎配筋、img 基礎配筋圖的底圖。舊的 3D 檔沒有 pg：柱照 rb 那一層畫
+let OPENERS = [];
+/** 點了放大的東西：卡片上的元素加 data-open，renderSide 最後接上 */
+function opener(fn) { OPENERS.push(fn); return ' data-open="' + (OPENERS.length - 1) + '"'; }
+function ci(obj, key) {
+  if (!obj || key == null) return null;
+  if (obj[key] != null) return obj[key];
+  const k = Object.keys(obj).find(x => x.toLowerCase() === String(key).toLowerCase());
+  return k != null ? obj[k] : null;
+}
+const sameF = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
+function pgTable(head, rows, onIdx) {
+  return '<div class="pgt"><table>' + (head ? '<tr>' + head.map(x => '<th>' + esc(x) + '</th>').join('') + '</tr>' : '')
+    + rows.map((r, i) => '<tr' + (i === onIdx ? ' class="on"' : '') + '>' + r.map(x => '<td>' + (x === '' || x == null ? '<span class="muted">—</span>' : esc(x)) + '</td>').join('') + '</tr>').join('') + '</table></div>';
+}
+function pageHtml(m) {
+  if (!m) return '';
+  if (m.k === '柱') return colPage(m);
+  if (m.k === '梁' || m.k === '地梁') return beamPage(m);
+  if (m.k === '牆') return wallPage(m);
+  if (m.k === '版') return slabPage(m);
+  if (m.k === '基礎') return ftgPage(m.c, '基礎配筋', '基礎配筋');
+  return '';
+}
+/** 柱：柱配筋表這個編號的各樓層（這一層標橘色）＋這一層的斷面（跟外掛「配筋圖 → 柱配筋」一樣） */
+function colPage(m) {
+  const R = rebarOf(m), PG = M.pg;
+  const no = (R && R.no) || m.c || '', rf = (R && R.rf) || m.f;
+  let rows = PG && PG.col ? ci(PG.col, no) : null;
+  if (!rows || !rows.length) {
+    if (!R || R.t !== '柱') return '';
+    rows = [[m.f, R.size || '', R.main || '', R.tieJoint || '', R.tieEnd || '', R.tieMid || '', R.cx || '', R.cy || '', -1]];
+  }
+  const on = rows.findIndex(r => sameF(r[0], rf));
+  const row = rows[on >= 0 ? on : 0];
+  let h = '<div class="pg"><div class="h">📋 ' + esc(no) + ' 柱配筋 <span class="muted" style="font-weight:400">（專案 → 配筋圖 → 柱配筋；橘色＝這一層）</span></div>'
+    + pgTable(['樓層', '柱尺寸', '主筋', '梁柱接頭箍筋', '柱端部區箍筋', '柱中央區箍筋', '繫筋（橫）', '繫筋（直）'], rows.map(r => r.slice(0, 8)), on);
+  // 斷面：外掛匯出的（照柱配筋表那一格畫）；舊的 3D 檔照 rb（3D 用的，跟這支柱的方向一樣）
+  let S = PG && PG.sec && row[8] >= 0 ? PG.sec[row[8]] : null;
+  if (!S && R && R.t === '柱' && (R.dots || R.loops) && m.b) {
+    const dx = m.b[3] - m.b[0], dy = m.b[4] - m.b[1], r0 = Math.max(dx, dy) * 0.02;
+    S = { w: dx, h: dy, d: (R.dots || []).flatMap(p => [p[0] * dx, p[1] * dy, r0]), lp: (R.loops || []).map(l => l.map((v, i) => v * (i % 2 ? dy : dx))),
+      ln: (R.lines || []).flatMap(l => [l[0] * dx, l[1] * dy, l[2] * dx, l[3] * dy]), wl: String(Math.round(dx)), hl: String(Math.round(dy)) };
+  }
+  const or = v => v || '—';
+  h += '<div class="secBox"><div class="st2">' + esc(no) + '　' + esc(row[0]) + ' 斷面</div>'
+    + (S ? '<div' + opener(() => openView('📐 ' + no + ' ' + row[0] + ' 斷面', w => sectionSvg(S, w), null, 1)) + '>' + sectionSvg(S) + '</div>' : '<div class="muted">柱配筋表這一層沒有讀到斷面圖</div>')
+    + '<div class="secInfo">柱尺寸：' + esc(or(row[1])) + '　主筋：' + esc(or(row[2])) + '<br>箍筋：樑柱接頭 ' + esc(or(row[3])) + '、端部區 ' + esc(or(row[4])) + '、中央區 ' + esc(or(row[5]))
+    + '<br>繫筋：橫 ' + esc(or(row[6])) + ' 根、直 ' + esc(or(row[7])) + ' 根'
+    + (S && S.sc ? '<br><span' + (S.sw ? ' class="warn"' : '') + '>' + esc(S.sc) + '</span>' : '') + '</div></div>';
+  return h + '</div>';
+}
+/** 柱斷面（跟外掛一樣：外框白、箍筋繫筋紅、主筋黃點，下面寫寬、左邊寫深） */
+function sectionSvg(S, widthCss) {
+  const size = Math.max(S.w, S.h), pad = size * 0.22, sw = Math.max(0.5, size * 0.012), fs = size * 0.08;
+  const f = v => Math.round(v * 100) / 100, X = x => f(pad + x), Y = y => f(pad + S.h - y);
+  let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + f(S.w + 2 * pad) + ' ' + f(S.h + 2 * pad) + '" style="background:#18191C' + (widthCss ? ';width:' + widthCss + ';max-width:none' : '') + '">';
+  s += '<rect x="' + f(pad) + '" y="' + f(pad) + '" width="' + f(S.w) + '" height="' + f(S.h) + '" fill="none" stroke="#fff" stroke-width="' + f(sw) + '"/>';
+  (S.lp || []).forEach(l => { const pts = []; for (let i = 0; i + 1 < l.length; i += 2) pts.push(X(l[i]) + ',' + Y(l[i + 1])); s += '<polygon points="' + pts.join(' ') + '" fill="none" stroke="#FF5555" stroke-width="' + f(sw) + '"/>'; });
+  const ln = S.ln || [];
+  for (let i = 0; i + 3 < ln.length; i += 4) s += '<line x1="' + X(ln[i]) + '" y1="' + Y(ln[i + 1]) + '" x2="' + X(ln[i + 2]) + '" y2="' + Y(ln[i + 3]) + '" stroke="#FF5555" stroke-width="' + f(sw) + '"/>';
+  const d = S.d || [];
+  for (let i = 0; i + 2 < d.length; i += 3) s += '<circle cx="' + X(d[i]) + '" cy="' + Y(d[i + 1]) + '" r="' + f(Math.max(d[i + 2], size * 0.012)) + '" fill="#FFD740"/>';
+  const font = ' font-size="' + f(fs) + '" fill="#A8B0B8" text-anchor="middle" font-family="Segoe UI,Roboto,sans-serif"';
+  s += '<text x="' + f(pad + S.w / 2) + '" y="' + f(pad + S.h + fs * 1.15) + '"' + font + '>' + esc(S.wl || '') + '</text>';
+  const hx = f(pad - fs * 0.55), hy = f(pad + S.h / 2);
+  s += '<text x="' + hx + '" y="' + hy + '" transform="rotate(-90 ' + hx + ' ' + hy + ')"' + font + '>' + esc(S.hl || '') + '</text>';
+  return s + '</svg>';
+}
+/** 梁：專案裡的梁配筋圖，系統讀到的那幾格標淡橘色（跟外掛「配筋圖 → 梁配筋」一樣），這一跨框橘色 */
+function beamPage(m) {
+  const R = rebarOf(m);
+  if (!R || !R.dw || !M.rd || !M.rd[R.dw]) return '';
+  return '<div class="pg"><div class="h">📋 梁配筋 <span class="muted" style="font-weight:400">（專案 → 配筋圖 → 梁配筋；' + (R.sl ? '淡橘格＝系統讀到的，' : '') + '橘框＝這一跨，點圖放大）</span></div>'
+    + '<div class="dwg"' + opener(() => openDrawing(m)) + '>' + drawingSvg(R, true) + '</div></div>';
+}
+/** 牆：牆配筋表（照牆厚），這道牆用的那一列標橘色；電梯間的牆用電梯牆那一組 */
+function wallPage(m) {
+  const W = M.pg && M.pg.wall;
+  if (!W || /^撐牆/.test(m.n || '')) return '';
+  const elev = jobsOf(m).some(j => j.k === '牆' && /電梯/.test(j.n || ''));
+  const tm = /t=(\d+(?:\.\d+)?)/.exec(m.n || '');
+  const t = tm ? +tm[1] : m.b ? Math.min(m.b[3] - m.b[0], m.b[4] - m.b[1]) : 0;
+  const list = W.t || [];
+  // 跟外掛 WallSpec.For 一樣：小於 12 照 12；在範圍裡的那一列，不然下一個比較厚的，再不然最後一列
+  const r = Math.max(12, Math.round(t));
+  let on = list.findIndex(x => r >= x[0] - 0.01 && r <= x[1] + 0.01);
+  if (on < 0) on = list.findIndex(x => x[0] >= r);
+  if (on < 0) on = list.length - 1;
+  const n = v => String(Math.round(v * 10) / 10);
+  const rows = list.map(x => [x[1] >= 999 ? n(x[0]) + ' 以上' : n(x[0]) + '～' + n(x[1]), x[2] ? '雙排' : '單排', x[3], x[4]]);
+  if (W.e) rows.push(['電梯牆', W.e[0] ? '雙排' : '單排', W.e[1], W.e[2]]);
+  const pick = elev && W.e ? rows.length - 1 : on;
+  return '<div class="pg"><div class="h">📋 牆配筋 <span class="muted" style="font-weight:400">（專案 → 配筋圖 → 牆配筋；橘色＝這道牆用的）</span></div>'
+    + pgTable(['牆厚 (cm)', '排數', '垂直筋', '水平筋'], rows, pick)
+    + '<div class="muted" style="margin-top:4px">' + (elev && W.e ? '電梯間的牆用「電梯牆」那一組' : '這道牆 t=' + n(t) + (pick >= 0 && rows[pick] ? ' → 用「' + rows[pick][0] + '」那一列' : '')) + '</div></div>';
+}
+/** 版：版配筋（一般版表格／一樓板／水池頂板），這一塊用的那一列標橘色 */
+function slabPage(m) {
+  const S = M.pg && M.pg.slab;
+  if (!S) return '';
+  const sr = m.sr || '';
+  if (sr.startsWith('w:')) return ftgPage(sr.slice(2), '版配筋 → 消防／滯洪池／水箱頂板', '水池頂板');
+  const head = '<div class="pg"><div class="h">📋 版配筋 <span class="muted" style="font-weight:400">（專案 → 配筋圖 → 版配筋 → ';
+  if (sr[0] === 'f') {
+    const on = +sr.slice(1);
+    return head + '一樓板；橘色＝這一塊用的）</span></div>'
+      + pgTable(['編號', '版厚', '層數', '短向（上層）', '長向（上層）', '下層短向', '下層長向', '位置'],
+        (S.f || []).map(x => [x[0], x[1], x[2] ? '雙層' : '單層', x[3], x[4], x[2] ? x[5] : '', x[2] ? x[6] : '', x[7] ? '放在地梁上' : '跟地梁同高']), on) + '</div>';
+  }
+  const on = sr[0] === 'g' ? +sr.slice(1) : -1;
+  return head + '一般版；橘色＝這一塊用的）</span></div>'
+    + pgTable(['樓層', '編號', '版厚', '上層短向', '上層長向', '下層短向', '下層長向', '備註'], (S.g || []).map(x => x.slice(0, 8)), on)
+    + (on < 0 ? '<div class="muted" style="margin-top:4px">版配筋表找不到 ' + esc(m.c || '') + '（' + esc(m.f) + '）</div>' : '') + '</div>';
+}
+/** 基礎（水池頂板也是同一份）：配筋資料欄位＋配筋圖（外掛的底圖、填的值疊上去，跟「配筋圖 → 基礎配筋」右邊那張一樣） */
+function ftgPage(code, path, what) {
+  const F = M.pg && ci(M.pg.ftg, code);
+  if (!F) return '';
+  let g = null, rows = '';
+  (F.f || []).forEach(([grp, lab, val]) => {
+    if (grp !== g) { g = grp; rows += '<tr class="g"><th colspan="2">' + esc(grp) + '</th></tr>'; }
+    rows += '<tr><td>' + esc(lab) + '</td><td>' + (val ? esc(val) : '<span class="muted">—</span>') + '</td></tr>';
+  });
+  const I = M.pg.img && M.pg.img[F.im];
+  return '<div class="pg"><div class="h">📋 ' + esc(code) + ' ' + esc(what) + ' <span class="muted" style="font-weight:400">（專案 → 配筋圖 → ' + esc(path) + '；' + esc(F.k) + '）</span></div>'
+    + (rows ? '<div class="pgt"><table>' + rows + '</table></div>' : '<div class="muted">' + esc(F.k) + '的配筋圖還沒有提供</div>')
+    + (I ? '<div class="muted" style="margin-top:8px">' + esc(F.t || '配筋圖') + '（點圖放大）</div><div class="dwg"' + opener(() => openView('📐 ' + code + ' ' + (F.t || '配筋圖'), w => ftgSvg(F, w), null, 1)) + '>' + ftgSvg(F) + '</div>' : '') + '</div>';
+}
+function ftgSvg(F, widthCss) {
+  const I = M.pg.img && M.pg.img[F.im]; if (!I) return '';
+  let s = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + I.w + ' ' + I.h + '" style="background:#18191C' + (widthCss ? ';width:' + widthCss + ';max-width:none' : '') + '">'
+    + '<image href="' + I.u + '" xlink:href="' + I.u + '" x="0" y="0" width="' + I.w + '" height="' + I.h + '"/>';
+  (F.s || []).forEach(([x, y, fs, a, c, t, e]) => {
+    s += '<text x="' + x + '" y="' + y + '" font-size="' + fs + '" fill="' + (e ? '#80868C' : c) + '" text-anchor="' + ['start', 'middle', 'end'][a] + '" dominant-baseline="central" font-family="Times New Roman,serif">' + esc(t) + '</text>';
+  });
+  return s + '</svg>';
+}
 function lmr(a, size) { const t = (a || []).map(v => v ? v + (size ? '-' + size : '') : '—'); return '左 ' + t[0] + '・中 ' + t[1] + '・右 ' + t[2]; }
 function rebarRows(m) {
   const R = rebarOf(m), rows = [];
@@ -1128,6 +1299,7 @@ function renderSide() {
   const T = document.getElementById('sideTitle'), B = document.getElementById('sideBody'), side = document.getElementById('side');
   side.classList.toggle('min', st.sideMin);
   document.getElementById('tog').textContent = st.sideMin ? '打開' : '收起';
+  OPENERS = [];
   let h = '';
   const mk = st.markSel ? marks.find(x => x.id === st.markSel) : null;
   if (st.draft) {
@@ -1152,25 +1324,23 @@ function renderSide() {
     const job = jobsOf(m).find(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
     T.textContent = '🔩 ' + (m.k === '版' ? m.f + ' 版 ' + (m.c || m.n || '') : job && job.k !== '柱' ? job.n : m.f + ' ' + m.k + ' ' + (m.c || '')) + ' 的配筋';
     const lapH = lapSummary(), cpN = CPLS.filter(c => c.j.k === '柱').length;
-    // 梁：旁邊畫 DXF 裡的那張梁配筋圖（這一跨框橘色），點一下放大
-    const R0 = rebarOf(m), hasDw = !!(R0 && R0.dw && M.rd && M.rd[R0.dw]);
-    h += '<div class="card">' + table(rebarRows(m))
-      + (hasDw ? '<div style="margin-top:8px;font-weight:700">📐 配筋圖 <span class="muted" style="font-weight:400">（橘框＝這一跨，點圖放大）</span></div><div class="dwg" id="dwgCard">' + drawingSvg(R0, true) + '</div>' : '')
+    // 外掛「配筋圖」那一頁的配筋（梁＝梁配筋圖這一跨框橘色，點一下放大）；施工單（基礎配筋圖、牆／版出圖）放下面按鈕，點了全螢幕看
+    const pg = pageHtml(m), shs = sheetDws(m);
+    h += '<div class="card">' + (pg && m.k === '柱' ? '' : table(rebarRows(m))) + pg
+      + (shs.length ? '<div style="margin-top:8px;font-weight:700">📄 施工單 <span class="muted" style="font-weight:400">（這' + thisOne(m).slice(1) + '的鋼筋出自這幾張）</span></div><div class="shBtns">'
+        + shs.map(id => '<button class="btn ghost"' + opener(() => openDrawing(m, { dw: id }, '📄 ' + (M.rd[id].n || '施工單'))) + '>' + esc(M.rd[id].n || '施工單') + '</button>').join('') + '</div>' : '')
       + (lapH ? '<div style="margin-top:8px;font-weight:700">搭接段（下層綠、上層藍）</div><ul class="lapList">' + lapH + '</ul>' : '')
       + (cpN ? '<div style="margin-top:6px">柱主筋接頭：<b style="color:#D6336C">續接器 ' + cpN + ' 個</b><span class="muted">（桃紅色，照升位圖；續接器沒有搭接長度）</span></div>' : '')
       + '<div class="muted" style="margin-top:8px">' + legend() + '</div>'
       + '<div class="row"><button class="btn solid" id="exitRebar">‹ 回到整棟</button></div></div>';
   } else if (st.sel) {
-    const m = st.sel, rows = rebarRows(m), canRebar = hasBars(m) && ['柱', '梁', '地梁', '基礎', '牆', '版', '樓梯'].includes(m.k);
+    const m = st.sel, canRebar = hasBars(m) && ['柱', '梁', '地梁', '基礎', '牆', '版', '樓梯'].includes(m.k);
     T.textContent = '構件';
-    // 點了就出現專案裡畫的那張配筋圖（使用者 2026-11-12「點3d的梁會跑出像上圖這樣的梁配筋圖」「柱樑牆板基礎都是」）：
-    // 外掛匯出時有對到圖（rb 的 dw）就畫；柱、牆、版、基礎等外掛也匯出了就自動有
-    const R1 = rebarOf(m), selDw = !!(R1 && R1.dw && M.rd && M.rd[R1.dw]);
+    // 點了就出現外掛「專案 → 配筋圖」那一頁裡這個構件的配筋（使用者 2026-11-12「我要像圖二抓裡面對應的配筋」「柱樑牆板基礎都是」）：
+    // 柱＝柱配筋表各樓層＋斷面、梁＝梁配筋圖（讀到的格子）、牆／版＝配筋表用的那一列、基礎＝配筋資料＋配筋圖
+    const pg = pageHtml(m), rows = pg && m.k === '柱' ? [] : rebarRows(m);
     h += '<div class="card"><div class="t"><span class="k" style="background:' + (KIND_COLOR[m.k] || '#999') + '">' + esc(m.k) + '</span>' + esc(m.n || m.c || '') + '</div>'
-      + (selDw ? '<div style="margin-top:8px;font-weight:700">📐 配筋圖 <span class="muted" style="font-weight:400">（專案裡畫的；橘框＝' + thisOne(m) + '，點圖放大）</span></div><div class="dwg" id="dwgCard">' + drawingSvg(R1, true) + '</div>' : '')
-      // 牆、版、基礎：它的鋼筋出自哪幾張施工單（rj 的 dws；基礎配筋圖、牆／版出圖），一張一張畫
-      + sheetDws(m).map((id, k) => '<div style="margin-top:8px;font-weight:700">📐 ' + esc(M.rd[id].n || '施工單') + ' <span class="muted" style="font-weight:400">（點圖放大）</span></div>'
-        + '<div class="dwg dwgSheet" data-k="' + k + '">' + drawingSvg({ dw: id }, false) + '</div>').join('')
+      + pg
       + table([['樓層', m.f], ['灌漿區', m.gp]].concat(m.v ? [['混凝土', m.v.toFixed(2) + ' m³']] : []).concat(rows))
       + '<div class="row">' + (canRebar ? '<button class="btn solid" id="showRebar">🔩 看配筋</button>' : (m.k === '柱' || m.k === '梁' || m.k === '地梁') && !m.dc ? '<span class="muted">這支在配筋表找不到</span>' : '')
       + '<button class="btn ghost" id="unsel">取消</button></div></div>';
@@ -1225,8 +1395,8 @@ function renderSide() {
   });
   B.querySelectorAll('.mk').forEach(x => x.onclick = () => selectMark(x.dataset.mk, true));
   on('exitRebar', () => { st.rebar = null; apply(); fitTo(visibleObjs(), false); });
-  { const dc = document.getElementById('dwgCard'), m = st.rebar || st.sel; if (dc && m) { dc.style.cursor = 'zoom-in'; dc.onclick = () => openDrawing(m); } }
-  if (st.sel) { const ids = sheetDws(st.sel); document.querySelectorAll('.dwgSheet').forEach(el => { const id = ids[+el.dataset.k]; el.style.cursor = 'zoom-in'; el.onclick = () => openDrawing(st.sel, { dw: id }, '📐 ' + (M.rd[id].n || '施工單')); }); }
+  // 點了放大（配筋圖、斷面、基礎配筋圖、施工單）
+  B.querySelectorAll('[data-open]').forEach(el => { const fn = OPENERS[+el.dataset.open]; if (!fn) return; if (el.tagName !== 'BUTTON') el.style.cursor = 'zoom-in'; el.onclick = fn; });
   on('showRebar', () => { st.rebar = st.sel; st.focus = focusOf(st.rebar); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); });
   on('unsel', () => { st.sel = null; apply(); });
   on('barsOff', () => { st.bars = false; apply(); });
@@ -1293,7 +1463,8 @@ function layout() {
   // 下面那塊的高度用程式量的畫面高度，不用 CSS 的 46vh（使用者 2026-11-12 直版機 App 點梁、點紅圈，下面那塊整個不見；
   // 摺疊機打開是右邊一欄才看得到）：App 裡的網頁 vh 可能算成 0，面板就變 0 高、內容掉到螢幕外面
   const scrH = Math.max(innerHeight || 0, document.documentElement.clientHeight || 0, (window.visualViewport && visualViewport.height) || 0);
-  side.style.maxHeight = WIDE() ? '' : Math.max(200, Math.round(scrH * 0.46)) + 'px';
+  // 截圖用 &sideh=0.7：下面那塊高一點，卡片整張拍得到
+  side.style.maxHeight = WIDE() ? '' : Math.max(200, Math.round(scrH * (+P.get('sideh') || 0.46))) + 'px';
   const sw = WIDE() ? side.offsetWidth : 0;
   view.style.top = top + 'px'; view.style.right = sw + 'px';
   view.style.bottom = WIDE() ? '0' : side.offsetHeight + 'px';
