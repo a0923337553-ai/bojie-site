@@ -296,6 +296,19 @@ img[data-cap] { cursor:zoom-in; }
 /* 待辦的刪除按鈕（使用者 2026-11-11「刪除目前是點紅色的字，不直覺」） */
 .tdel { flex:none; align-self:flex-start; margin:2px 0 0 6px; border:1.5px solid var(--red); background:#fff; color:var(--red); border-radius:10px; font-size:14px; font-weight:bold; padding:6px 10px; }
 .tdel.strong { background:var(--red); color:#fff; }
+/* 開發者寫日誌（2026-11-13） */
+.dlstate { font-size:14px; font-weight:bold; color:var(--navy); margin:0 4px 10px; }
+.dlstate.dirty { color:var(--warn); }
+.card.dlsum { display:block; width:100%; text-align:left; font:inherit; color:inherit; cursor:pointer; border:1px solid #DDE3E8; }
+.card.dled { border:2px solid #0F766E; }
+.card.dled input[type=number] { width:90px; font-size:18px; padding:9px 10px; border:1px solid #CBD5DC; border-radius:10px; background:#fff; color:inherit; }
+.dlphs { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; }
+.dlph { position:relative; border:2px solid transparent; border-radius:10px; padding:0; background:#F1F4F7; overflow:hidden; text-align:left; font:inherit; cursor:pointer; }
+.dlph.on { border-color:#0F766E; }
+.dlph img { display:block; width:100%; aspect-ratio:4/3; object-fit:cover; background:#DDE3E8; }
+.dlph .cap { display:block; font-size:12.5px; line-height:16px; padding:4px 6px; color:var(--text); }
+.dlph .new { position:absolute; top:6px; left:6px; background:var(--warn); color:#fff; font-size:11px; border-radius:6px; padding:1px 5px; }
+.big.dlsave { position:sticky; bottom:10px; z-index:5; box-shadow:0 4px 14px rgba(0,0,0,.18); }
 /* 開發者往左滑才出現「刪除」（使用者 2026-11-13「能否做成往左滑才會出現刪除」）：底下藏紅色按鈕，上面那列滑開 */
 .swp { position:relative; overflow:hidden; border-radius:12px; margin-bottom:9px; box-shadow:0 1px 2px rgba(24,59,86,.10); }
 .swp > .item { position:relative; z-index:1; margin:0; border-radius:0; box-shadow:none; transition:transform .2s ease; touch-action:pan-y; }
@@ -314,7 +327,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/13e';
+var WEB_VERSION = '11/13f';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -668,7 +681,7 @@ function render() {
     '<button class="ghost dim" data-act="tologin" style="margin-top:14px">回登入畫面</button></div>';
   else h = ({ hub: renderHub, work: renderWork, edit: renderEdit, view: renderView, site: renderSite, pours: renderPours, sheets: renderSheets,
     pdf: renderPdf, contracts: renderContracts, todo: renderTodo, logs: renderLogs, calendar: renderCal, tasks: renderTasks,
-    people: renderPeople, adminq: renderAdminQ }[S.route] || renderHub)();
+    people: renderPeople, adminq: renderAdminQ, dlog: renderDlog }[S.route] || renderHub)();
   if (S.asCode && S.route !== 'login') h = asBar() + h;   // 開發者切換成別人測試中
   $('app').innerHTML = h;
   if ($('gbtn')) mountGis();
@@ -1282,6 +1295,8 @@ function renderSite() {
   var cb = book ? contractBook(book) : null;
   h += '<div class="tiles">';
   h += tile('施工日誌', '每天的日誌、施工人員傳的、照片', '#2F80ED', '📋', 'logs');
+  // 開發者（Google 驗證過）在 iPad／電腦寫日誌（使用者 2026-11-13「iPad 完整功能」第 1 步）
+  if (isOwner()) h += tile('寫施工日誌（開發者）', '天氣、大項、材料、討論、拍照・跟摺疊機同一份', '#0F766E', '✏️', 'dlog').replace('data-act="tile"', 'data-act="dlopenday"').replace('data-v="dlog"', 'data-v=""');
   h += tile('鋼筋施工單', sheets + ' 份', '#16A6A0', '📐', 'sheets');
   h += tile('混凝土灌漿數量', next ? '下一次 ' + rocDate(pourOf(next).pourDate) + '（' + (pourOf(next).part || '') + '）' + (pourOf(next).m3 ? ' ・ ' + pourOf(next).m3 + ' m³' : '') : pours.length + ' 份', '#F2994A', '🚚', 'pours');
   h += tile('發包', cb ? '未發包 ' + cb.todo.length + ' ・ 已發包 ' + cb.done.length : '還沒有發包資料', '#9B51E0', '🤝', 'contracts');
@@ -1473,6 +1488,7 @@ function renderLogs() {
     '<button class="mid" style="border:0;background:none;font-size:18px;font-weight:800;padding:8px 0" data-act="logdates">' + rocDate(L.date) + '（' + weekday(L.date) + '）' + (L.dates.length ? ' <span class="chev">▼</span>' : '') + '</button>' +
     '<button data-act="logdate" data-v="' + (newer || '') + '"' + (newer ? '' : ' disabled') + '>›</button></div>';
   if (S.logBusy) h += '<div class="sub" style="margin:0 4px 8px">' + esc(S.logBusy) + '</div>';
+  if (isOwner()) h += '<button class="ghost" style="margin:0 0 10px" data-act="dlopenday" data-v="' + esc(L.date) + '">✏️ 寫／改這天的日誌（開發者）</button>';
   var log = L.log, ws = L.workers || [];
   if (!log && !ws.length) return h + '<div class="card sub" style="font-size:15px">這天沒有日誌。按 ‹ › 看別天。</div></div>';
   if (log && log.weather) h += '<div style="font-size:15px;font-weight:bold;margin:0 4px 10px">天氣：' + weatherEmoji(log.weather) + ' ' + esc(log.weather) + '</div>';
@@ -2634,7 +2650,8 @@ function onPicked(ev) {
   if (S.pickFor === 'notice' || S.pickFor === 'task') {
     var f = files && files[0], m = S.modal; if (!f || !m) return;
     shrink(f, 1000, 0.65).then(function (p) { if (S.modal === m) { m.photo = p; m.nophoto = false; renderModal(); } }).catch(function () { });
-  } else addFiles(files, S.pickFor === 'receipt');
+  } else if (S.pickFor === 'dlog') dlAddFiles(files);   // 開發者寫日誌（2026-11-13）
+  else addFiles(files, S.pickFor === 'receipt');
 }
 $('cam').addEventListener('change', onPicked);
 $('pick').addEventListener('change', onPicked);
@@ -3395,6 +3412,502 @@ ACT.sheetdirdel = function (f) {
     S.feedStale = true; render(); loadOffice();
   }).catch(function (e) { S.busy = false; var m = failMsg(e); S.sheetMsg = m ? '刪不掉：' + m : ''; render(); });
 };
+
+// ===================== 開發者在 iPad／電腦網頁寫施工日誌（使用者 2026-11-13「iPad 完整功能」第 1 步，4 題都選 A） =====================
+// ① 用開發者的 Google 帳號拿 drive.file（只碰 App 自己建的檔）權限，直接讀寫跟摺疊機同一個「工地App」資料夾：
+//    網頁的登入設定跟摺疊機、電腦在同一個 Google 專案，網頁建的檔摺疊機、電腦都看得到
+// ② 同一天兩台都改：一塊一塊（每個大項、天氣、材料、討論、每張照片）用最後改的那台；刪掉的記在 gone（跟摺疊機 App 0.9.82 一樣）
+// ③ 要有網路才能存；沒存成功的留在這台（IndexedDB），標「還沒存到雲端」
+var DRIVE_BASE = 'https://www.googleapis.com', DRIVE_TEST = false;   // 本機測試（webtest_proxy3）換成 /drive
+var DSCOPE = 'https://www.googleapis.com/auth/drive.file', DFOLDER = 'application/vnd.google-apps.folder', DL_RECEIPT = '材料單據', DL_UNCLS = '未分類';
+var DTOK = { token: '', exp: 0, client: null, pending: null };
+(function () { try { var t = JSON.parse(sessionStorage.getItem('bojie.dtok') || 'null'); if (t && t.exp > Date.now() + 60000) { DTOK.token = t.token; DTOK.exp = t.exp; } } catch (e) { } })();
+function dHasToken() { return DRIVE_TEST || (!!DTOK.token && Date.now() < DTOK.exp - 60000); }
+/** 跟 Google 要寫雲端的權限：要在按鈕的 click 裡直接叫（iPad 才跳得出視窗）；拿到就跑 then */
+function dLogin(then) {
+  if (dHasToken()) { then(); return; }
+  if (!(window.google && google.accounts && google.accounts.oauth2)) { loadGis(function () { }); if (S.dl) { S.dl.err = 'Google 還在載入，等一秒再按一次'; render(); } return; }
+  if (!DTOK.client) DTOK.client = google.accounts.oauth2.initTokenClient({ client_id: WEB_CLIENT_ID, scope: DSCOPE,
+    callback: function (r) {
+      var f = DTOK.pending; DTOK.pending = null;
+      if (!r || r.error || !r.access_token) { if (S.dl) { S.dl.err = 'Google 沒有給權限' + (r && r.error ? '（' + r.error + '）' : '') + '，再按一次，記得按「允許」'; render(); } return; }
+      DTOK.token = r.access_token; DTOK.exp = Date.now() + (Number(r.expires_in) || 3600) * 1000;
+      try { sessionStorage.setItem('bojie.dtok', JSON.stringify({ token: DTOK.token, exp: DTOK.exp })); } catch (e) { }
+      if (f) f();
+    },
+    error_callback: function (e) { DTOK.pending = null; if (S.dl) { S.dl.err = e && e.type === 'popup_closed' ? '登入視窗關掉了，再按一次' : 'Google 登入視窗打不開' + (e && e.type ? '（' + e.type + '）' : ''); render(); } } });
+  DTOK.pending = then;
+  DTOK.client.requestAccessToken({ prompt: '' });
+}
+function dFetch(method, path, body, ctype) {
+  if (!dHasToken()) return Promise.reject({ error: 'DLOGIN' });
+  var h = { Authorization: 'Bearer ' + (DRIVE_TEST ? 'proxy' : DTOK.token) };
+  if (ctype) h['Content-Type'] = ctype;
+  return fetch(DRIVE_BASE + path, { method: method, headers: h, body: body }).then(function (r) {
+    if (r.status === 401) { DTOK.token = ''; DTOK.exp = 0; try { sessionStorage.removeItem('bojie.dtok'); } catch (e) { } throw { error: 'DLOGIN' }; }
+    if (!r.ok) return r.text().then(function (t) { throw { error: 'DRIVE', message: '雲端回覆 ' + r.status + (t ? '：' + t.slice(0, 160) : '') }; });
+    return r;
+  }, function () { throw { error: 'NET', message: '連不上 Google 雲端（網路有問題）' }; });
+}
+function dJSON(method, path, body, ctype) { return dFetch(method, path, body, ctype).then(function (r) { return r.json(); }); }
+function dq(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+var DFIELDS = 'id,name,modifiedTime,mimeType';
+function dFind(parent, name, folder) {
+  var q = "name = '" + dq(name) + "' and '" + dq(parent) + "' in parents and trashed = false and mimeType " + (folder ? '=' : '!=') + " '" + DFOLDER + "'";
+  return dJSON('GET', '/drive/v3/files?fields=files(' + DFIELDS + ')&orderBy=' + encodeURIComponent('modifiedTime desc') + '&q=' + encodeURIComponent(q)).then(function (o) { return (o.files || [])[0] || null; });
+}
+function dChildren(parent) {
+  var out = [];
+  function page(tok) {
+    var q = "'" + dq(parent) + "' in parents and trashed = false";
+    return dJSON('GET', '/drive/v3/files?pageSize=200&fields=nextPageToken,files(' + DFIELDS + ')&q=' + encodeURIComponent(q) + (tok ? '&pageToken=' + encodeURIComponent(tok) : '')).then(function (o) {
+      out = out.concat(o.files || []); return o.nextPageToken ? page(o.nextPageToken) : out;
+    });
+  }
+  return page('');
+}
+var DPATH = {};
+/** 一層一層找資料夾（從「我的雲端硬碟」開始，跟摺疊機一樣）；第一層「工地App」不建（換錯 Google 帳號時不會多建一個） */
+function dPath(names, create) {
+  var parent = 'root', key = '', i = 0;
+  function step() {
+    if (i >= names.length) return Promise.resolve(parent);
+    var n = names[i++]; key += '/' + n;
+    if (DPATH[key]) { parent = DPATH[key]; return step(); }
+    return dFind(parent, n, true).then(function (f) {
+      if (f) { parent = DPATH[key] = f.id; return step(); }
+      if (!create || i === 1) return null;
+      return dJSON('POST', '/drive/v3/files?fields=' + DFIELDS, JSON.stringify({ name: n, mimeType: DFOLDER, parents: [parent] }), 'application/json; charset=UTF-8')
+        .then(function (nf) { parent = DPATH[key] = nf.id; return step(); });
+    });
+  }
+  return step();
+}
+function dCreate(parent, name, mime, blob) {
+  var b = 'bojie' + Date.now();
+  var body = new Blob(['--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify({ name: name, parents: [parent] }) + '\r\n--' + b + '\r\nContent-Type: ' + mime + '\r\n\r\n', blob, '\r\n--' + b + '--']);
+  return dJSON('POST', '/upload/drive/v3/files?uploadType=multipart&fields=' + DFIELDS, body, 'multipart/related; boundary=' + b);
+}
+function dUpdate(id, mime, blob) { return dJSON('PATCH', '/upload/drive/v3/files/' + encodeURIComponent(id) + '?uploadType=media&fields=' + DFIELDS, blob, mime); }
+function dTrash(id) { return dJSON('PATCH', '/drive/v3/files/' + encodeURIComponent(id) + '?fields=id', JSON.stringify({ trashed: true }), 'application/json; charset=UTF-8'); }
+function dText(id) { return dFetch('GET', '/drive/v3/files/' + encodeURIComponent(id) + '?alt=media').then(function (r) { return r.text(); }); }
+function dBlob(id) { return dFetch('GET', '/drive/v3/files/' + encodeURIComponent(id) + '?alt=media').then(function (r) { return r.blob(); }); }
+function b64Blob(b64, mime) { var s = atob(b64), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return new Blob([a], { type: mime }); }
+
+// ---------- 這台沒存到雲端的（③ 選 A）：IndexedDB ----------
+function dlIdb() { return new Promise(function (ok, bad) { try { var q = indexedDB.open('bojieDlog', 1); q.onupgradeneeded = function () { q.result.createObjectStore('d'); }; q.onsuccess = function () { ok(q.result); }; q.onerror = function () { bad(q.error); }; } catch (e) { bad(e); } }); }
+function dlIdbGet(k) { return dlIdb().then(function (db) { return new Promise(function (ok) { var q = db.transaction('d').objectStore('d').get(k); q.onsuccess = function () { ok(q.result || null); }; q.onerror = function () { ok(null); }; }); }).catch(function () { return null; }); }
+function dlIdbPut(k, v) { return dlIdb().then(function (db) { var tx = db.transaction('d', 'readwrite'); if (v == null) tx.objectStore('d').delete(k); else tx.objectStore('d').put(v, k); }).catch(function () { }); }
+
+// ---------- 合併（跟摺疊機 DayLog.stampEdits／withDevice 一樣） ----------
+function dlT(s) { return String(s || '').replace(/\D/g, '').slice(0, 14); }
+function dlLater(a, b) { return dlT(b) > dlT(a) ? (b || '') : (a || ''); }
+function dlNow() {
+  var d = new Date(), z = -d.getTimezoneOffset(), p = function (n, w) { return ('000' + n).slice(-(w || 2)); };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' + p(d.getMilliseconds(), 3) +
+    (z >= 0 ? '+' : '-') + p(Math.floor(Math.abs(z) / 60)) + ':' + p(Math.abs(z) % 60);
+}
+function dlCopy(o) { return JSON.parse(JSON.stringify(o)); }
+function dlQty(i) { var a = []; if (+i.people > 0) a.push(i.people + '*' + (i.hours || '1')); if (+i.people2 > 0) a.push(i.people2 + '*' + (i.hours2 || '1')); return a.join('+') || String(i.qtyText || ''); }
+function dlFilled(i) { return +i.people > 0 || +i.people2 > 0 || (i.lines || []).some(function (l) { return String(l.text || '').trim(); }) || !!String(i.qtyText || '').trim(); }
+function dlFull(l, k) { var t = String(l.text || '').trim(); if (!t) return ''; var w = l.workers || []; return (k + 1) + '.' + t + (w.length ? '(' + w.join('+') + ')' : ''); }
+/** 存回雲端的樣子（跟摺疊機 toJson 一樣：qty、每行的 full 算好；空的行不寫） */
+function dlItemOut(i) {
+  var o = { category: i.category, vendor: i.vendor || '柏捷', unit: i.unit || '工', people: +i.people || 0, hours: String(i.hours || '1'), qty: dlQty(i),
+    lines: (i.lines || []).map(function (l, k) { var f = dlFull(l, k); return f ? { text: String(l.text).trim(), workers: l.workers || [], full: f } : null; }).filter(Boolean) };
+  if (i.qtyText) o.qtyText = i.qtyText; if (i.src) o.src = i.src; if (i.at) o.at = i.at;
+  if (+i.people2 > 0) { o.people2 = +i.people2; o.hours2 = String(i.hours2 || '1'); }
+  if (i.wids && i.wids.length) o.wids = i.wids;
+  return o;
+}
+function dlItemKey(i) {
+  return JSON.stringify([i.category, i.vendor || '柏捷', i.unit || '工', +i.people || 0, String(i.hours || '1'), +i.people2 || 0, String(i.hours2 || '1'), String(i.qtyText || ''),
+    (i.lines || []).map(function (l) { return [String(l.text || '').trim(), l.workers || []]; }).filter(function (x) { return x[0]; })]);
+}
+function dlMats(a) { return (a || []).filter(function (m) { return String(m.vendor || '').trim() || String(m.qty || '').trim(); }).map(function (m) { return { vendor: String(m.vendor || '').trim(), qty: String(m.qty || '').trim(), unit: String(m.unit || '').trim() }; }); }
+function dlPhotoKey(p) { return JSON.stringify([p.file, p.category, p.line || '', p.taken || '', p.src || '', p.vendor || '', p.kind || '']); }
+/** 這台改的記時間：改到的大項、天氣、材料、討論、照片；清空的大項、刪掉的照片記在 gone */
+function dlStamp(before, after, now) {
+  var e = dlCopy(after), b = before || {}, bi = {}, bp = {};
+  (b.items || []).forEach(function (x) { bi[x.category] = x; });
+  e.items = (e.items || []).filter(dlFilled).map(function (i) { var o = bi[i.category]; if (o && dlItemKey(o) === dlItemKey(i)) return i; delete i.src; i.at = now; return i; });
+  e.gone = Object.assign({}, b.gone || {}, e.gone || {});
+  (b.items || []).forEach(function (o) { if (dlFilled(o) && !e.items.some(function (i) { return i.category === o.category; })) e.gone['item:' + o.category] = now; });
+  e.editAt = Object.assign({}, e.editAt || {});
+  if ((e.weather || '') !== (b.weather || '')) { e.editAt.weather = now; delete e.weatherSrc; }
+  e.materials = dlMats(e.materials);
+  if (JSON.stringify(e.materials) !== JSON.stringify(dlMats(b.materials))) { e.editAt.materials = now; delete e.materialsSrc; }
+  if ((e.discussion || '') !== (b.discussion || '')) { e.editAt.discussion = now; delete e.discussionSrc; }
+  (b.photos || []).forEach(function (p) { bp[p.file] = p; });
+  e.photos = (e.photos || []).map(function (p) { var o = bp[p.file]; if (o && dlPhotoKey(o) === dlPhotoKey(p)) return p; p.at = now; return p; });
+  (b.photos || []).forEach(function (o) { if (!e.photos.some(function (p) { return p.file === o.file; })) e.gone['photo:' + o.file] = now; });
+  if (!Object.keys(e.gone).length) delete e.gone;
+  if (!Object.keys(e.editAt).length) delete e.editAt;
+  return e;
+}
+/** 雲端那份（base）＋這台的（other）一塊一塊合併；電腦 Excel 傳來的那一塊用 pcAt 當時間（同一個大項以電腦為準，之後才改的留改的） */
+function dlMerge(base, other) {
+  base = base || {}; other = other || {};
+  var out = dlCopy(base), g = {}, ea = {};
+  Object.keys(Object.assign({}, base.gone || {}, other.gone || {})).forEach(function (k) { g[k] = dlLater((base.gone || {})[k], (other.gone || {})[k]); });
+  var del = function (k, at) { return g[k] != null && dlT(g[k]) >= dlT(at); };
+  var iat = function (i, of) { return i.src === '電腦' ? of.pcAt : i.at; };
+  out.items = uniq((base.items || []).map(function (i) { return i.category; }).concat((other.items || []).map(function (i) { return i.category; }))).map(function (c) {
+    var l = (base.items || []).filter(function (i) { return i.category === c; })[0], r = (other.items || []).filter(function (i) { return i.category === c; })[0];
+    var win = !l ? r : !r ? l : dlT(iat(r, other)) > dlT(iat(l, base)) ? r : l;
+    return del('item:' + c, win === r ? iat(r, other) : iat(l, base)) ? null : dlCopy(win);
+  }).filter(Boolean);
+  var bat = function (of, k, src) { return src === '電腦' ? of.pcAt : (of.editAt || {})[k]; };
+  [['weather', 'weatherSrc'], ['materials', 'materialsSrc'], ['discussion', 'discussionSrc']].forEach(function (x) {
+    if (dlT(bat(other, x[0], other[x[1]])) > dlT(bat(base, x[0], base[x[1]]))) {
+      out[x[0]] = dlCopy(other[x[0]] == null ? (x[0] === 'materials' ? [] : '') : other[x[0]]);
+      if (other[x[1]]) out[x[1]] = other[x[1]]; else delete out[x[1]];
+    }
+  });
+  if (dlT((other.editAt || {}).staffNotes) > dlT((base.editAt || {}).staffNotes)) out.staffNotes = dlCopy(other.staffNotes || []);
+  Object.keys(Object.assign({}, base.editAt || {}, other.editAt || {})).forEach(function (k) { ea[k] = dlLater((base.editAt || {})[k], (other.editAt || {})[k]); });
+  if (Object.keys(ea).length) out.editAt = ea; else delete out.editAt;
+  out.photos = uniq((base.photos || []).map(function (p) { return p.file; }).concat((other.photos || []).map(function (p) { return p.file; }))).map(function (f) {
+    var l = (base.photos || []).filter(function (p) { return p.file === f; })[0], r = (other.photos || []).filter(function (p) { return p.file === f; })[0];
+    var win = !l ? r : !r ? l : dlT(r.at) > dlT(l.at) ? r : l;
+    return win.src !== '電腦' && del('photo:' + f, win.at) ? null : dlCopy(win);
+  }).filter(Boolean);
+  if (dlT(other.pcAt) > dlT(base.pcAt)) { out.pcAt = other.pcAt; out.pcBook = other.pcBook; if (other.pcPhotoCats) out.pcPhotoCats = dlCopy(other.pcPhotoCats); }
+  if (Object.keys(g).length) out.gone = g; else delete out.gone;
+  out.savedAt = dlLater(base.savedAt, other.savedAt);
+  return out;
+}
+
+// ---------- 讀雲端 ----------
+function dlEmpty(site, date) { return { version: 1, site: site, date: date, weather: '', items: [], materials: [], discussion: '', photos: [], savedAt: '' }; }
+function dlRoot() { return dPath(['工地App'], false).then(function (r) { if (!r) throw { error: 'NOROOT', message: '這個 Google 帳號看不到「工地App」資料夾：請換成開發者的 Google 帳號再連一次' }; return r; }); }
+/** 這一天的日誌檔（沒有就是空的）：{ id, log } */
+function dlReadDay(site, date) {
+  return dlRoot().then(function () { return dPath(['工地App', '日誌', site], false); }).then(function (dir) {
+    if (!dir) return { id: '', log: dlEmpty(site, date) };
+    return dFind(dir, date + '.json', false).then(function (f) {
+      if (!f) return { id: '', log: dlEmpty(site, date) };
+      return dText(f.id).then(function (t) { var o = JSON.parse(t); o.site = site; o.date = date; return { id: f.id, log: o }; });
+    });
+  });
+}
+/** 清單（跟摺疊機一樣）：電腦的 工地設定.json ＋ 手機新增.json 的 added − hidden */
+function dlLists() {
+  var s = S.s || {}, base = { categories: (s.categories && s.categories.length ? s.categories : DEFAULT_CATS).map(canonCat), workers: ['王', '吉', '姊夫', '豪', '哲', '人力'],
+    units: s.units && s.units.length ? s.units : ['工', '台', '車', '噸', 'm³', '式', '支', '組'], vendors: s.vendors && s.vendors.length ? s.vendors : ['柏捷'],
+    hours: ['0.5', '0.75', '1'], weathers: s.weathers && s.weathers.length ? s.weathers : ['晴', '陰', '雨', '颱風'] };
+  var read = function (dir, name) { return dFind(dir, name, false).then(function (f) { return f ? dText(f.id).then(function (t) { try { return JSON.parse(t); } catch (e) { return null; } }) : null; }); };
+  return dPath(['工地App', '設定'], false).then(function (dir) {
+    if (!dir) return base;
+    return Promise.all([read(dir, '工地設定.json'), read(dir, '手機新增.json')]).then(function (r) {
+      var st = r[0] || {}, cu = r[1] || {}, added = cu.added || {}, hidden = cu.hidden || [];
+      var pick = function (k) { var b = (st[k] && st[k].length ? st[k] : base[k]).concat(added[k] || []); return uniq(b.filter(function (x) { return String(x).trim(); })).filter(function (x) { return hidden.indexOf(k + ':' + x) < 0; }); };
+      return { categories: uniq((st.categories && st.categories.length ? st.categories : base.categories).map(canonCat)), workers: pick('workers'), units: pick('units'), vendors: pick('vendors'), hours: pick('hours'), weathers: st.weathers && st.weathers.length ? st.weathers : base.weathers };
+    });
+  }).catch(function () { return base; });
+}
+
+// ---------- 畫面 ----------
+function dlKey(dl) { return 'dl|' + dl.site + '|' + dl.date; }
+function dlOpen(date) {
+  if (!isOwner()) return;
+  S.dl = { site: S.site, date: date || todayYmd(), e0: null, e: null, fileId: '', loaded: false, busy: '', err: '', msg: '', dirty: false,
+    open: '', cur: null, two: false, ph: '', add: { cat: '', line: '', vendor: '', kind: '' }, newPh: [], thumbs: {}, lists: null, from: S.route === 'logs' ? 'logs' : 'site' };
+  loadGis(function () { });
+  go('dlog');
+  if (dHasToken()) dlLoad();
+}
+function dlLoad() {
+  var dl = S.dl; if (!dl) return;
+  dl.busy = '讀取雲端的日誌…'; dl.err = ''; dl.loaded = false; render();
+  Promise.all([dl.lists ? Promise.resolve(dl.lists) : dlLists(), dlReadDay(dl.site, dl.date), dlIdbGet(dlKey(dl))]).then(function (r) {
+    if (S.dl !== dl) return;
+    dl.lists = r[0]; dl.fileId = r[1].id; dl.e0 = r[1].log; dl.e = dlCopy(r[1].log); dl.newPh = []; dl.dirty = false; dl.msg = '';
+    var draft = r[2];
+    if (draft && draft.e) {
+      dl.e = draft.e; dl.newPh = draft.newPh || []; dl.dirty = true;
+      dl.msg = '這台有上次還沒存到雲端的，已經放回來；按「存到雲端」' + ((draft.base || '') !== (dl.e0.savedAt || '') ? '（雲端在那之後有人改過，存的時候會一塊一塊合併）' : '');
+    }
+    dl.loaded = true; dl.busy = ''; render(); dlThumbs();
+  }).catch(function (e) { if (S.dl !== dl) return; dl.busy = ''; dl.err = dlErrText(e); render(); });
+}
+function dlErrText(e) { return e && e.error === 'DLOGIN' ? 'Google 雲端的權限過期了（一小時一次），按上面「連上 Google 雲端」再連一次' : (e && e.message) || errText(e); }
+/** 照片縮圖：雲端的照片用權限抓下來；新拍的直接用 */
+function dlThumbs() {
+  var dl = S.dl; if (!dl || !dl.e) return;
+  var need = (dl.e.photos || []).filter(function (p) { return !dl.thumbs[p.file] && !dl.newPh.some(function (n) { return n.file === p.file; }); });
+  if (!need.length) return;
+  dPath(['工地App', '照片', dl.site, dl.date], false).then(function (dir) { return dir ? dChildren(dir) : []; }).then(function (files) {
+    var idOf = {}; files.forEach(function (f) { idOf[f.name] = f.id; });
+    var q = need.filter(function (p) { return idOf[p.file]; }), run = function () {
+      var p = q.shift(); if (!p || S.dl !== dl) return Promise.resolve();
+      return dBlob(idOf[p.file]).then(function (b) {
+        dl.thumbs[p.file] = URL.createObjectURL(b);
+        document.querySelectorAll('img[data-dlf]').forEach(function (im) { if (im.getAttribute('data-dlf') === p.file) im.src = dl.thumbs[p.file]; });
+      }, function () { }).then(run);
+    };
+    return Promise.all([run(), run(), run()]);
+  }).catch(function () { });
+}
+function dlSrcOf(dl, p) { var n = dl.newPh.filter(function (x) { return x.file === p.file; })[0]; return n ? n.url : dl.thumbs[p.file] || ''; }
+function dlCats(dl) { return uniq(dl.lists.categories.concat((dl.e.items || []).map(function (i) { return i.category; }))); }
+function dlItemOf(dl, c) { return (dl.e.items || []).filter(function (i) { return i.category === c; })[0] || null; }
+function dlTouch() {
+  var dl = S.dl; if (!dl) return; dl.dirty = true; dl.msg = '';
+  clearTimeout(dl.tm); dl.tm = setTimeout(function () { if (S.dl === dl && dl.dirty) dlIdbPut(dlKey(dl), { e: dl.e, newPh: dl.newPh, base: (dl.e0 || {}).savedAt || '', at: dlNow() }); }, 600);
+  var st = $('dlstate'); if (st) { st.textContent = '● 還沒存到雲端'; st.className = 'dlstate dirty'; }
+}
+function renderDlog() {
+  var dl = S.dl;
+  var h = topBar('寫施工日誌・' + (dl ? dl.site : ''), dl ? dl.from : 'site') + '<div class="wrap">';
+  if (!dl) return h + '</div>';
+  if (!dHasToken()) {
+    return h + '<div class="card"><div class="ttl">先連上 Google 雲端</div><div style="font-size:15px;line-height:22px;margin:6px 0 10px">用<b>開發者的 Google 帳號</b>，讓這台直接寫進跟摺疊機同一個雲端資料夾（摺疊機、電腦 Excel 都看得到）。</div>' +
+      '<button class="big" data-act="dlauth">🔑 連上 Google 雲端</button>' + (dl.err ? '<div class="err">' + esc(dl.err) + '</div>' : '') +
+      '<div class="note" style="margin-top:8px">第一次會問「要不要讓 柏捷工地App 存取它自己建的檔案」，按「允許」。權限一小時要再連一次（按這顆就好）；大約每 7 天會再問一次同意。</div></div></div>';
+  }
+  if (!dl.loaded) return h + '<div class="card sub" style="font-size:15px">' + esc(dl.busy || '') + '</div>' + (dl.err ? '<div class="err">' + esc(dl.err) + '</div><button class="ghost" data-act="dlreload">再試一次</button>' : '') + '</div>';
+  var e = dl.e, L = dl.lists, t = todayYmd();
+  h += '<div class="stepper" style="background:#fff;border-radius:20px;margin:0 0 8px"><button data-act="dlday" data-v="' + addDays(dl.date, -1) + '">‹</button>' +
+    '<div class="mid" style="font-size:18px;font-weight:800;padding:8px 0;text-align:center">' + rocDate(dl.date) + '（' + weekday(dl.date) + '）</div>' +
+    '<button data-act="dlday" data-v="' + addDays(dl.date, 1) + '"' + (dl.date >= t ? ' disabled' : '') + '>›</button></div>';
+  h += '<div class="row" style="margin:0 4px 8px;gap:8px"><span class="sub" style="font-size:14px">其他日子</span><input type="date" data-df="date" value="' + esc(dl.date) + '" max="' + esc(t) + '" style="max-width:180px"></div>';
+  h += '<div id="dlstate" class="dlstate' + (dl.dirty ? ' dirty' : '') + '">' + esc(dl.dirty ? '● 還沒存到雲端' : dl.msg || (dl.fileId ? '雲端的這一天（' + (e.savedAt ? '最後存 ' + shortTime(e.savedAt) : '') + '）' : '這天雲端還沒有日誌')) + '</div>';
+  if (dl.dirty && dl.msg) h += '<div class="box" style="font-size:14.5px">' + esc(dl.msg) + '</div>';
+  if (dl.err) h += '<div class="err">' + esc(dl.err) + '</div>';
+  // 天氣
+  h += '<div class="card"><div class="label">天氣' + (e.weatherSrc === '電腦' ? PC_TAG : '') + '</div><div class="chips">' + L.weathers.map(function (w) { return chip('dlwx', w, w, e.weather === w); }).join('') + '</div></div>';
+  // 大項
+  h += '<div class="logcards">';
+  dlCats(dl).forEach(function (c) {
+    var it = dlItemOf(dl, c);
+    if (dl.open === c) { h += dlItemEditor(dl, c); return; }
+    h += '<button class="card dlsum" data-act="dlopen" data-v="' + esc(c) + '"><div class="ttl">' + esc(c) + (it && it.src === '電腦' ? PC_TAG : '') + '<span class="arrow" style="float:right">✎</span></div>';
+    if (it && dlFilled(it)) {
+      var head = [it.vendor, dlQty(it) ? dlQty(it) + (it.unit || '') : ''].filter(Boolean).join(' ・ ');
+      if (head) h += '<div class="sub" style="font-size:14px">' + esc(head) + '</div>';
+      (it.lines || []).forEach(function (l, k) { var f = dlFull(l, k); if (f) h += '<div style="font-size:15px;line-height:21px">' + esc(f) + '</div>'; });
+    } else h += '<div class="sub" style="font-size:14px">（沒寫）點一下填</div>';
+    h += '</button>';
+  });
+  h += '</div>';
+  // 材料／機具
+  var mats = e.materials || [];
+  h += '<div class="card"><div class="label">材料／機具（最多 9 筆）' + (e.materialsSrc === '電腦' ? PC_TAG : '') + '</div>';
+  mats.forEach(function (m, i) {
+    h += '<div class="mat"><input type="text" style="flex:1.5" data-df="mat.' + i + '.vendor" value="' + esc(m.vendor) + '" placeholder="廠商">' +
+      '<input type="text" style="flex:.8" inputmode="decimal" data-df="mat.' + i + '.qty" value="' + esc(m.qty) + '" placeholder="數量">' +
+      '<input type="text" style="flex:.7" data-df="mat.' + i + '.unit" value="' + esc(m.unit) + '" placeholder="單位"></div>' +
+      '<div class="chips" style="margin-bottom:4px">' + L.vendors.map(function (v) { return chip('dlmv', i + '|' + v, v, m.vendor === v, true); }).join('') + '</div>' +
+      '<div class="chips">' + L.units.map(function (u) { return chip('dlmu', i + '|' + u, u, m.unit === u, true); }).join('') + '</div>' +
+      '<button class="link red" data-act="dlmdel" data-v="' + i + '">刪掉這筆</button>';
+  });
+  if (mats.length < 9) h += '<button class="link" data-act="dlmadd">' + (mats.length ? '＋ 再加一筆' : '＋ 新增材料／機具') + '</button>';
+  h += '</div>';
+  // 與業主、建築師討論
+  h += '<div class="card"><div class="label">與業主、建築師討論' + (e.discussionSrc === '電腦' ? PC_TAG : '') + '</div><textarea data-df="disc" placeholder="沒有就空著">' + esc(e.discussion || '') + '</textarea></div>';
+  // 照片
+  h += dlPhotosCard(dl);
+  h += '<button class="big dlsave" data-act="dlsave"' + (dl.busy ? ' disabled' : '') + '>' + esc(dl.busy || '💾 存到雲端') + '</button>';
+  h += '<div class="note" style="text-align:center;margin-top:6px">存的時候會先抓雲端最新的，跟摺疊機改的一塊一塊合併：兩台改不同大項都留著，改到同一塊用最後改的。</div>';
+  return h + '</div>';
+}
+function dlItemEditor(dl, c) {
+  var it = dl.cur, L = dl.lists;
+  var h = '<div class="card dled"><div class="ttl">' + esc(c) + '</div>';
+  h += '<div class="label">廠商</div><input type="text" data-df="iv" value="' + esc(it.vendor) + '" maxlength="30"><div class="chips" style="margin-top:6px">' + L.vendors.map(function (v) { return chip('dliv', v, v, it.vendor === v, true); }).join('') + '</div>';
+  h += '<div class="label" style="margin-top:10px">單位</div><div class="chips">' + L.units.map(function (u) { return chip('dliu', u, u, it.unit === u, true); }).join('') + '</div>';
+  h += '<div class="label" style="margin-top:10px">人數 × 工時</div><div class="row" style="gap:6px;flex-wrap:wrap"><input type="number" inputmode="numeric" min="0" max="99" data-df="ip" value="' + (+it.people || '') + '" placeholder="人數" style="max-width:90px"><span>×</span>' +
+    L.hours.map(function (x) { return chip('dlih', x, x, String(it.hours) === x, true); }).join('') + '</div>';
+  if (dl.two || +it.people2 > 0) h += '<div class="label" style="margin-top:8px">第二組（有人沒一起到場）</div><div class="row" style="gap:6px;flex-wrap:wrap"><input type="number" inputmode="numeric" min="0" max="99" data-df="ip2" value="' + (+it.people2 || '') + '" placeholder="人數" style="max-width:90px"><span>×</span>' +
+    L.hours.map(function (x) { return chip('dlih2', x, x, String(it.hours2 || '1') === x, true); }).join('') + '</div>';
+  else h += '<button class="link" data-act="dltwo">＋ 加第二組人數×工時</button>';
+  if (it.qtyText && !(+it.people > 0)) h += '<div class="note">數量：' + esc(it.qtyText) + '（電腦傳來的；填人數就換掉）</div>';
+  h += '<div class="label" style="margin-top:10px">工作內容（最多 3 行；點名字＝誰做的）</div>';
+  it.lines.forEach(function (l, k) {
+    h += '<div style="margin:6px 0 10px"><input type="text" data-df="il.' + k + '" value="' + esc(l.text) + '" placeholder="' + (k + 1) + '. 例：地梁綁紮（A 區）" maxlength="80">' +
+      '<div class="chips" style="margin-top:4px">' + L.workers.map(function (w) { return chip('dliw', k + '|' + w, w, (l.workers || []).indexOf(w) >= 0, true); }).join('') + '</div></div>';
+  });
+  h += '<div class="row2"><button class="ghost" style="margin:0" data-act="dlclose">完成</button><button class="ghost red" style="margin:0" data-act="dlclear">清空這個大項</button></div></div>';
+  return h;
+}
+function dlPhotosCard(dl) {
+  var e = dl.e, ps = e.photos || [], L = dl.lists, a = dl.add;
+  var cats = dlCats(dl).concat([DL_RECEIPT, DL_UNCLS]);
+  var h = '<div class="card"><div class="label">📷 照片（' + ps.length + ' 張）</div>';
+  if (ps.length) h += '<div class="dlphs">' + ps.map(function (p) {
+    var n = dl.newPh.some(function (x) { return x.file === p.file; }), on = dl.ph === p.file;
+    return '<button class="dlph' + (on ? ' on' : '') + '" data-act="dlph" data-v="' + esc(p.file) + '"><img data-dlf="' + esc(p.file) + '" src="' + esc(dlSrcOf(dl, p)) + '" alt="">' +
+      (n ? '<span class="new">未上傳</span>' : '') + '<span class="cap"><b>' + esc(p.category === DL_RECEIPT ? (p.kind === 'site' ? '📍 材料現場' : '🧾 單據') + (p.vendor ? '・' + p.vendor : '') : p.category) + '</b>' + (p.line ? '<br>' + esc(p.line) : '') + '</span></button>';
+  }).join('') + '</div>';
+  // 點一張：改大項、內容、單據廠商／種類、刪掉
+  var cur = ps.filter(function (p) { return p.file === dl.ph; })[0];
+  if (cur) {
+    var it = dlItemOf(dl, cur.category), lines = it ? (it.lines || []).map(dlFull).filter(Boolean) : [];
+    h += '<div class="box" style="margin-top:8px"><div class="label">這張的大項</div><div class="chips">' + cats.map(function (c) { return chip('dlpc', c, c, cur.category === c, true); }).join('') + '</div>';
+    if (lines.length) h += '<div class="label" style="margin-top:8px">內容（連到那一行）</div><div class="chips">' + lines.map(function (l) { return chip('dlpl', l, l, cur.line === l, true); }).join('') + '</div>';
+    if (cur.category === DL_RECEIPT) {
+      var vs = uniq(dlMats(e.materials).map(function (m) { return m.vendor; }));
+      h += '<div class="label" style="margin-top:8px">哪一家（材料／機具裡的廠商）</div><div class="chips">' + (vs.length ? vs.map(function (v) { return chip('dlpv', v, v, cur.vendor === v, true); }).join('') : '<span class="sub">先在上面「材料／機具」填廠商</span>') + '</div>' +
+        '<div class="row" style="margin-top:8px;gap:6px"><button class="kindpick' + (cur.kind === 'site' ? '' : ' on') + '" data-act="dlpk" data-v="">🧾 單據</button><button class="kindpick site' + (cur.kind === 'site' ? ' on' : '') + '" data-act="dlpk" data-v="site">📍 材料現場</button></div>' +
+        '<div class="label" style="margin-top:8px">施作位置</div><input type="text" data-df="pline" value="' + esc(cur.line || '') + '" maxlength="60" placeholder="例：2F 樓板">';
+    }
+    h += '<div class="row2" style="margin-top:8px"><button class="ghost" style="margin:0" data-act="dlph" data-v="">完成</button><button class="ghost red" style="margin:0" data-act="dlpdel">刪掉這張</button></div></div>';
+  }
+  // 拍新的：先選大項（和內容）再拍
+  var al = a.cat ? (function () { var it = dlItemOf(dl, a.cat); return it ? (it.lines || []).map(dlFull).filter(Boolean) : []; })() : [];
+  h += '<div class="label" style="margin-top:10px">下一張的大項</div><div class="chips">' + cats.map(function (c) { return chip('dlac', c, c, a.cat === c, true); }).join('') + '</div>';
+  if (al.length) h += '<div class="label" style="margin-top:8px">內容</div><div class="chips">' + al.map(function (l) { return chip('dlal', l, l, a.line === l, true); }).join('') + '</div>';
+  if (a.cat === DL_RECEIPT) {
+    var vs2 = uniq(dlMats(e.materials).map(function (m) { return m.vendor; }));
+    if (vs2.length) h += '<div class="label" style="margin-top:8px">哪一家</div><div class="chips">' + vs2.map(function (v) { return chip('dlav', v, v, a.vendor === v, true); }).join('') + '</div>';
+    h += '<div class="row" style="margin-top:8px;gap:6px"><span class="sub" style="font-size:14px">下一張是：</span><button class="kindpick' + (a.kind === 'site' ? '' : ' on') + '" data-act="dlak" data-v="">🧾 單據</button><button class="kindpick site' + (a.kind === 'site' ? ' on' : '') + '" data-act="dlak" data-v="site">📍 材料現場</button></div>';
+  }
+  h += '<div class="row2" style="margin-top:10px"><button class="ghost" style="margin:0" data-act="dlcam">📷 拍照</button><button class="ghost" style="margin:0" data-act="dlpick">🖼 相簿</button></div>' +
+    '<div class="note" style="margin-top:6px">照片先縮小（長邊 1600），按「存到雲端」才傳上去。點照片可以改大項、刪掉。</div></div>';
+  return h;
+}
+function dlCloseItem(dl) {
+  var it = dl.cur; if (!it) return;
+  var rest = (dl.e.items || []).filter(function (i) { return i.category !== it.category; });
+  var clean = dlCopy(it); clean.lines = clean.lines.filter(function (l, k) { return String(l.text || '').trim() || k < 3; });
+  dl.e.items = dlFilled(clean) ? rest.concat([clean]) : rest;
+  dl.open = ''; dl.cur = null; dl.two = false;
+}
+ACT.dlauth = function () { dLogin(function () { dlLoad(); }); };
+ACT.dlreload = function () { dLogin(function () { dlLoad(); }); };
+ACT.dlday = function (v) { var dl = S.dl; if (!dl || !v || v > todayYmd() || dl.busy) return; dlCloseItem(dl); dl.date = v; dl.thumbs = {}; dl.ph = ''; dlLoad(); window.scrollTo(0, 0); };
+ACT.dlwx = function (v) { var dl = S.dl; if (!dl) return; dl.e.weather = dl.e.weather === v ? '' : v; dlTouch(); render(); };
+ACT.dlopen = function (c) {
+  var dl = S.dl; if (!dl) return; dlCloseItem(dl);
+  var it = dlItemOf(dl, c), L = dl.lists;
+  var cur = it ? dlCopy(it) : { category: c, vendor: '柏捷', unit: '工', people: 0, hours: L.hours.indexOf('1') >= 0 ? '1' : L.hours[0] || '1', lines: [] };
+  cur.lines = (cur.lines || []).map(function (l) { return { text: l.text || '', workers: (l.workers || []).slice() }; });
+  while (cur.lines.length < 3) cur.lines.push({ text: '', workers: [] });
+  dl.open = c; dl.cur = cur; dl.two = +cur.people2 > 0; render();
+};
+ACT.dlclose = function () { var dl = S.dl; if (!dl) return; dlCloseItem(dl); dlTouch(); render(); };
+ACT.dlclear = function () { var dl = S.dl; if (!dl || !dl.cur) return; if (!confirm('清空「' + dl.cur.category + '」？')) return; dl.e.items = (dl.e.items || []).filter(function (i) { return i.category !== dl.cur.category; }); dl.open = ''; dl.cur = null; dlTouch(); render(); };
+ACT.dltwo = function () { var dl = S.dl; if (!dl || !dl.cur) return; dl.two = true; if (!dl.cur.hours2) dl.cur.hours2 = '1'; render(); };
+ACT.dliv = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.vendor = v; dlTouch(); render(); };
+ACT.dliu = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.unit = v; dlTouch(); render(); };
+ACT.dlih = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.hours = v; dlTouch(); render(); };
+ACT.dlih2 = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.hours2 = v; dlTouch(); render(); };
+ACT.dliw = function (v) {
+  var dl = S.dl; if (!dl || !dl.cur) return; var p = v.split('|'), l = dl.cur.lines[+p[0]]; if (!l) return;
+  var i = l.workers.indexOf(p[1]); if (i >= 0) l.workers.splice(i, 1); else l.workers.push(p[1]); dlTouch(); render();
+};
+ACT.dlmadd = function () { var dl = S.dl; if (!dl) return; dl.e.materials = (dl.e.materials || []).concat([{ vendor: '', qty: '', unit: '' }]); dlTouch(); render(); };
+ACT.dlmdel = function (v) { var dl = S.dl; if (!dl) return; dl.e.materials.splice(+v, 1); dlTouch(); render(); };
+ACT.dlmv = function (v) { var dl = S.dl, p = v.split('|'); if (!dl) return; dl.e.materials[+p[0]].vendor = p[1]; dlTouch(); render(); };
+ACT.dlmu = function (v) { var dl = S.dl, p = v.split('|'); if (!dl) return; dl.e.materials[+p[0]].unit = p[1]; dlTouch(); render(); };
+ACT.dlph = function (v) { var dl = S.dl; if (!dl) return; dl.ph = dl.ph === v ? '' : v; render(); };
+function dlCurPhoto(dl) { return (dl.e.photos || []).filter(function (p) { return p.file === dl.ph; })[0]; }
+ACT.dlpc = function (v) { var dl = S.dl, p = dl && dlCurPhoto(dl); if (!p) return; if (p.category !== v) { p.category = v; p.line = ''; if (v !== DL_RECEIPT) { delete p.vendor; delete p.kind; } } dlTouch(); render(); };
+ACT.dlpl = function (v) { var dl = S.dl, p = dl && dlCurPhoto(dl); if (!p) return; p.line = p.line === v ? '' : v; dlTouch(); render(); };
+ACT.dlpv = function (v) { var dl = S.dl, p = dl && dlCurPhoto(dl); if (!p) return; p.vendor = p.vendor === v ? '' : v; if (!p.vendor) delete p.vendor; dlTouch(); render(); };
+ACT.dlpk = function (v) { var dl = S.dl, p = dl && dlCurPhoto(dl); if (!p) return; if (v) p.kind = v; else delete p.kind; dlTouch(); render(); };
+ACT.dlpdel = function () {
+  var dl = S.dl, p = dl && dlCurPhoto(dl); if (!p) return;
+  if (!confirm('刪掉這張照片？' + (dl.newPh.some(function (x) { return x.file === p.file; }) ? '' : '\n存到雲端時，雲端那張也會丟到垃圾桶。'))) return;
+  dl.e.photos = dl.e.photos.filter(function (x) { return x.file !== p.file; }); dl.newPh = dl.newPh.filter(function (x) { return x.file !== p.file; }); dl.ph = ''; dlTouch(); render();
+};
+ACT.dlac = function (v) { var dl = S.dl; if (!dl) return; dl.add.cat = dl.add.cat === v ? '' : v; dl.add.line = ''; render(); };
+ACT.dlal = function (v) { var dl = S.dl; if (!dl) return; dl.add.line = dl.add.line === v ? '' : v; render(); };
+ACT.dlav = function (v) { var dl = S.dl; if (!dl) return; dl.add.vendor = dl.add.vendor === v ? '' : v; render(); };
+ACT.dlak = function (v) { var dl = S.dl; if (!dl) return; dl.add.kind = v; render(); };
+ACT.dlcam = function () { S.pickFor = 'dlog'; $('cam').value = ''; $('cam').click(); };
+ACT.dlpick = function () { S.pickFor = 'dlog'; $('pick').value = ''; $('pick').click(); };
+/** 拍的、相簿選的 → 縮小、取名（跟摺疊機一樣「日期_時間_大項.jpg」）、放進這天的照片（還沒上傳） */
+function dlAddFiles(files) {
+  var dl = S.dl; if (!dl || !dl.e) return;
+  var list = Array.prototype.slice.call(files || []); if (!list.length) return;
+  var chain = Promise.resolve(), add = dlCopy(dl.add);   // 選照片那時候的大項、內容、廠商（縮小途中改了「下一張」也不會跑掉）
+  dl.busy = '加入照片…';
+  list.forEach(function (f, i) {
+    chain = chain.then(function () {
+      if (S.dl !== dl) return;
+      dl.busy = list.length > 1 ? '加入照片 ' + (i + 1) + '/' + list.length + '…' : '加入照片…'; var b = document.querySelector('[data-act="dlsave"]'); if (b) { b.textContent = dl.busy; b.disabled = true; }
+      return shrink(f, 1600, 0.8).then(function (p) {
+        var cat = add.cat || DL_UNCLS, d = new Date(), pd = function (n) { return ('0' + n).slice(-2); };
+        var stamp = d.getFullYear() + pd(d.getMonth() + 1) + pd(d.getDate()) + '_' + pd(d.getHours()) + pd(d.getMinutes()) + pd(d.getSeconds());
+        var safe = cat.replace(/[\\\/:*?"<>|\s]/g, '_'), name = stamp + '_' + safe + '.jpg', n = 2;
+        var used = function (x) { return (dl.e.photos || []).some(function (q) { return q.file === x; }); };
+        while (used(name)) name = stamp + '_' + safe + '_' + (n++) + '.jpg';
+        var rec = { file: name, category: cat, line: add.line || '', taken: f.lastModified && Math.abs(Date.now() - f.lastModified) > 60000 ? dlIso(new Date(f.lastModified)) : dlNow() };
+        if (cat === DL_RECEIPT) { if (add.vendor) rec.vendor = add.vendor; if (add.kind) rec.kind = add.kind; }
+        dl.e.photos = (dl.e.photos || []).concat([rec]);
+        dl.newPh.push({ file: name, url: p.url, data: p.data });
+      }, function () { });
+    });
+  });
+  chain.then(function () { if (S.dl !== dl) return; dl.busy = ''; dlTouch(); render(); });
+}
+function dlIso(d) { var p = function (n, w) { return ('000' + n).slice(-(w || 2)); }, z = -d.getTimezoneOffset(); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + (z >= 0 ? '+' : '-') + p(Math.floor(Math.abs(z) / 60)) + ':' + p(Math.abs(z) % 60); }
+/** 存到雲端：先傳新照片 → 抓雲端最新的那一天 → 一塊一塊合併 → 存回去 → 刪掉的照片丟垃圾桶 */
+ACT.dlsave = function () { var dl = S.dl; if (!dl || dl.busy) return; dlCloseItem(dl); dLogin(dlSave); };
+function dlSave() {
+  var dl = S.dl; if (!dl || dl.busy || !dl.e) return;
+  var site = dl.site, date = dl.date, now = dlNow(), before = dl.e0, mine = dl.e;
+  var out = dlCopy(mine); out.items = (out.items || []).filter(dlFilled).map(dlItemOut);
+  var stamped = dlStamp(before, out, now), upl = dl.newPh.slice(), photoDir = null;
+  var say = function (t) { dl.busy = t; var b = document.querySelector('[data-act="dlsave"]'); if (b) { b.textContent = t; b.disabled = true; } };
+  say('存到雲端…'); dl.err = '';
+  dlRoot().then(function () { return dPath(['工地App', '照片', site, date], upl.length > 0); }).then(function (dir) {
+    photoDir = dir; var i = 0;
+    var next = function () {
+      var p = upl[i++]; if (!p) return Promise.resolve();
+      say('上傳照片 ' + i + '/' + upl.length + '…');
+      return dCreate(dir, p.file, 'image/jpeg', b64Blob(p.data, 'image/jpeg')).then(function () { dl.newPh = dl.newPh.filter(function (x) { return x.file !== p.file; }); dl.thumbs[p.file] = p.url; }).then(next);
+    };
+    return next();
+  }).then(function () { say('合併雲端最新的…'); return dlReadDay(site, date); }).then(function (day) {
+    var merged = dlMerge(day.id ? day.log : null, stamped);
+    merged.version = merged.version || 1; merged.site = site; merged.date = date; merged.savedAt = now;
+    ['items', 'materials', 'photos'].forEach(function (k) { if (!merged[k]) merged[k] = []; });
+    var blob = new Blob([JSON.stringify(merged, null, 1)], { type: 'application/json' });
+    say('存日誌…');
+    return (day.id ? dUpdate(day.id, 'application/json', blob) : dPath(['工地App', '日誌', site], true).then(function (f) { return dCreate(f, date + '.json', 'application/json', blob); }))
+      .then(function (f) { return { merged: merged, id: f.id }; });
+  }).then(function (r) {
+    // 這台刪掉、合併後也沒留下來的雲端照片 → 丟垃圾桶（電腦傳來的不動）
+    var gone = (before.photos || []).filter(function (p) { return p.src !== '電腦' && !r.merged.photos.some(function (q) { return q.file === p.file; }); });
+    var trash = gone.length && photoDir ? dChildren(photoDir).then(function (fs) {
+      return Promise.all(gone.map(function (p) { var f = fs.filter(function (x) { return x.name === p.file; })[0]; return f ? dTrash(f.id).catch(function () { }) : null; }));
+    }).catch(function () { }) : Promise.resolve();
+    return trash.then(function () { return r; });
+  }).then(function (r) {
+    if (S.dl !== dl) return;
+    dl.e0 = r.merged; dl.e = dlCopy(r.merged); dl.fileId = r.id; dl.dirty = false; dl.busy = '';
+    var d = new Date(); dl.msg = '✅ 已存到雲端 ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + '（摺疊機同步後就看得到）';
+    dlIdbPut(dlKey(dl), null);
+    delete LOGCACHE[logKey(site, date)]; delete LOGCACHE[logKey(site, null)];
+    render(); dlThumbs();
+  }).catch(function (e) {
+    if (S.dl !== dl) return;
+    dl.busy = ''; dl.err = dlErrText(e) + '。這台還留著，有網路再按一次「存到雲端」。';
+    dlIdbPut(dlKey(dl), { e: dl.e, newPh: dl.newPh, base: (dl.e0 || {}).savedAt || '', at: dlNow() });
+    render();
+  });
+}
+ACT.dlopenday = function (v) { dlOpen(v || todayYmd()); };
+document.addEventListener('input', function (ev) {
+  var k = ev.target.getAttribute && ev.target.getAttribute('data-df'); if (!k) return;
+  var dl = S.dl; if (!dl || !dl.e) return; var v = ev.target.value;
+  if (k === 'date') return;
+  if (k === 'disc') dl.e.discussion = v;
+  else if (k === 'iv' && dl.cur) dl.cur.vendor = v;
+  else if (k === 'ip' && dl.cur) dl.cur.people = Math.max(0, Math.min(99, parseInt(v, 10) || 0));
+  else if (k === 'ip2' && dl.cur) dl.cur.people2 = Math.max(0, Math.min(99, parseInt(v, 10) || 0));
+  else if (k.indexOf('il.') === 0 && dl.cur) dl.cur.lines[+k.split('.')[1]].text = v;
+  else if (k.indexOf('mat.') === 0) { var p = k.split('.'); dl.e.materials[+p[1]][p[2]] = v; }
+  else if (k === 'pline') { var ph = dlCurPhoto(dl); if (ph) ph.line = v; }
+  dlTouch();
+});
+document.addEventListener('change', function (ev) {
+  if (!(ev.target.getAttribute && ev.target.getAttribute('data-df') === 'date')) return;
+  var v = ev.target.value; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) ACT.dlday(v);
+});
 
 // ---------- 往左滑才出現「刪除」（使用者 2026-11-13「能否做成往左滑才會出現刪除」）：手指往左滑；電腦滑鼠按住往左拖 ----------
 // 滑超過一半停在打開，不然彈回去；打開時點那一列＝收回去（不會順便打開）；點別的地方也會收回去
