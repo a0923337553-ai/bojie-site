@@ -521,7 +521,7 @@ function start() {
   const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(0.6, 1, 0.4); scene.add(sun);
   root = new THREE.Group(); scene.add(root);
   rebarGroup = new THREE.Group(); scene.add(rebarGroup);
-  document.getElementById('title').firstChild.textContent = (M.site || SITE || '') + '・3D 結構 ';
+  document.getElementById('title').firstChild.textContent = (M.site || SITE || '') + '・3D ';
   document.getElementById('made').textContent = M.made ? '（' + String(M.made).slice(0, 10) + ' 匯出）' : '';
   document.getElementById('hint').textContent = matchMedia('(pointer:fine)').matches ? '左鍵轉動・右鍵移動・滾輪縮放・點一下看構件' : '單指轉動・雙指縮放／移動・點一下看構件';
   document.getElementById('side').style.display = '';
@@ -1009,7 +1009,8 @@ function markSection() {
   const head = '<div style="font-weight:700;margin:2px 0 6px">📍 要改進的地方' + (marks.length ? '（待處理 ' + marks.filter(m => !m.done).length + '）' : '') + '</div>';
   if (!marks.length) return head + '<div class="muted" style="margin:0 0 10px">還沒有人圈。按畫面右上角「✏️ 圈起來」，用手指圈出要改進的地方。</div>';
   // 有 SketchUp 模型時：別的畫面圈的寫一下是哪個（點了會換過去）
-  const where = m => SK && markView(m) !== st.view ?' <span class="muted">（' + (markView(m) === 'sk' ? 'SketchUp 模型' : '3D 結構') + '）</span>' : '';
+  // 3D 結構藏起來時不寫「結構」（使用者 2026-11-13「不要顯示結構跟配筋」）
+  const where = m => SK && markView(m) !== st.view ? ' <span class="muted">（' + (markView(m) === 'sk' ? 'SketchUp 模型' : ST_ON ? '3D 結構' : '舊的 3D') + '）</span>' : '';
   return head + marks.slice().sort((a, b) => (a.done - b.done) || (b.at - a.at)).map(m =>
     '<div class="mk' + (m.done ? ' done' : '') + (st.markSel === m.id ? ' on' : '') + '" data-mk="' + esc(m.id) + '"><span class="no">' + markNo(m) + '</span>' + esc(m.text) + where(m)
     + '<span class="st ' + (m.done ? 'd">已改好' : 'o">待處理') + '</span><div class="who">' + esc(m.by) + '・' + when(m.at)
@@ -1644,7 +1645,7 @@ function renderSide() {
     h += '<div class="card"><div class="t" style="font-size:16px">' + esc(mk.text) + '</div>'
       + '<div class="muted" style="margin-top:4px">' + esc(mk.by) + '・' + when(mk.at) + (mk.member ? '・' + esc(mk.member) : '') + '</div>'
       + '<div style="margin-top:6px">' + (mk.done ? '<span class="st d">已改好</span> <span class="muted">' + esc(mk.doneBy || '') + ' ' + when(mk.doneAt) + '</span>' : '<span class="st o">待處理</span>') + '</div>'
-      + (away ? '<div class="tip" style="margin-top:8px">📌 這個是圈在「3D 結構」上的' + (awayFl ? '（圈的時候看 ' + esc(awayFl) + '）' : '') + '。3D 結構先藏起來了，SketchUp 模型上不會出現這個圈；照上面寫的字和位置處理就好。</div>' : '')
+      + (away ? '<div class="tip" style="margin-top:8px">📌 這個是在換成 SketchUp 模型以前圈的' + (awayFl ? '（圈的時候看 ' + esc(awayFl) + '）' : '') + '，SketchUp 模型上不會出現這個圈；照上面寫的字和位置處理就好。</div>' : '')
       + '<div class="row">' + (away ? '' : '<button class="btn" id="markGo">轉到這裡</button>')
       + (dev ? '<button class="btn solid" id="markDone">' + (mk.done ? '改回待處理' : '✅ 已改好') + '</button>' : '')
       + (dev || mine ? (away ? '' : '<button class="btn" id="markEdit">✏️ 修改</button>') + '<button class="btn ghost" id="markDel">刪除</button>' : '')
