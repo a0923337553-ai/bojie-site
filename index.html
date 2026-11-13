@@ -304,7 +304,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/13c';
+var WEB_VERSION = '11/13d';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1325,15 +1325,16 @@ function renderSheets() {
   var folders = uniq(((o.sheetDirs || {})[site] || []).concat(all.map(function (d) { return d.folder || ''; }))).filter(Boolean).sort(cmp);
   var list = all.filter(function (d) { return (d.folder || '') === fo; });
   if (S.sheetMsg) h += '<div class="box">' + esc(S.sheetMsg) + '</div>';
+  // 開發者刪掉傳錯的施工單、建錯的資料夾（第 14、30 版）：只有 Google 驗證過的開發者
+  var canDel = isOwner();
   if (!fo) folders.forEach(function (f) {
     var inside = all.filter(function (d) { return d.folder === f; });
-    h += '<button class="item" data-act="sheetfolder" data-v="' + esc(f) + '"><span style="font-size:30px;margin-right:10px">📁</span><span class="grow"><b style="font-size:17px;display:block">' + esc(f) + '</b>' +
+    var b = '<button class="item" data-act="sheetfolder" data-v="' + esc(f) + '"' + (canDel ? ' style="flex:1;min-width:0;margin:0"' : '') + '><span style="font-size:30px;margin-right:10px">📁</span><span class="grow"><b style="font-size:17px;display:block">' + esc(f) + '</b>' +
       '<span class="sub" style="display:block">' + (inside.length ? inside.length + ' 份' : '還沒有施工單') + '</span></span><span class="arrow">›</span></button>';
+    h += canDel ? '<div class="row" style="align-items:stretch;margin-bottom:10px">' + b + '<button class="tdel" style="align-self:center;margin:0 0 0 2px;padding:8px 12px" data-act="sheetdirdel" data-v="' + esc(f) + '">🗑 刪除</button></div>' : b;
   });
   if (fo && !list.length) h += '<div class="card sub" style="font-size:15px">這個資料夾還沒有施工單。BricsCAD 列印時「資料夾」選「' + esc(fo) + '」，就會放進來。</div>';
   else if (!fo && !list.length && !folders.length) h += '<div class="card sub" style="font-size:15px">這個工地還沒有施工單。要看別的工地，回首頁換工地。</div>';
-  // 開發者刪掉傳錯的施工單（第 14 版，使用者 2026-11-11「上傳錯不能刪」）：只有 Google 驗證過的開發者
-  var canDel = isOwner();
   list.forEach(function (d) {
     var b = '<button class="item" data-act="pdfopen" data-v="' + esc(d.id) + '"' + (canDel ? ' style="flex:1;min-width:0;margin:0"' : '') + '><span class="pdfph">PDF</span><span class="grow"><b style="font-size:16px;display:block">' + esc(docTitle(d)) + '</b>' +
       '<span class="sub" style="display:block">' + esc(shortTime(d.modified) || '─') + ' 列印</span></span><span class="arrow">›</span></button>';
@@ -3365,6 +3366,22 @@ ACT.sheetdel = function (id) {
   api('sheetdel', { id: id }).then(function () {
     S.busy = false; S.sheetMsg = '已刪除「' + docTitle(d) + '」';
     S.office.sheets = S.office.sheets.filter(function (x) { return x.id !== id; }); S.feedStale = true; render(); loadOffice();
+  }).catch(function (e) { S.busy = false; var m = failMsg(e); S.sheetMsg = m ? '刪不掉：' + m : ''; render(); });
+};
+
+// ---------- 第 30 版：開發者刪建錯的施工單資料夾（使用者 2026-11-13「有時候可能新增錯誤資料夾只有開發者可以刪除」） ----------
+ACT.sheetdirdel = function (f) {
+  var site = S.site, o = S.office || {};
+  if (!f || S.busy) return;
+  var n = (o.sheets || []).filter(function (x) { return x.site === site && x.folder === f; }).length;
+  if (!confirm('刪除資料夾「' + f + '」？\n' + (n ? '裡面的 ' + n + ' 份施工單也會一起刪掉。\n' : '這個資料夾是空的。\n') +
+    '雲端和每個人的手機、iPad 上都會拿掉（雲端放進垃圾桶，30 天內找得回來）。')) return;
+  S.busy = true; S.sheetMsg = '刪除中…'; render();
+  api('sheetdirdel', { site: site, folder: f }).then(function (r) {
+    S.busy = false; S.sheetMsg = '已刪除資料夾「' + f + '」' + (r && r.count ? '（連裡面 ' + r.count + ' 份施工單）' : '');
+    o.sheets = (o.sheets || []).filter(function (x) { return !(x.site === site && x.folder === f); });
+    if (o.sheetDirs && o.sheetDirs[site]) o.sheetDirs[site] = o.sheetDirs[site].filter(function (x) { return x !== f; });
+    S.feedStale = true; render(); loadOffice();
   }).catch(function (e) { S.busy = false; var m = failMsg(e); S.sheetMsg = m ? '刪不掉：' + m : ''; render(); });
 };
 
