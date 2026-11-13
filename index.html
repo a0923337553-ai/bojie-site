@@ -298,7 +298,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/12d';
+var WEB_VERSION = '11/13a';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1296,14 +1296,28 @@ function renderPours() {
   return h + '<div class="note" style="margin-top:4px">同一份重新上傳會自動換成新的，第一次上傳的時間也會留著。</div></div>';
 }
 
+/** 施工單在工地裡認的名字：「資料夾/檔名」（沒有資料夾就是檔名；施工單記號用，收件服務第 26 版） */
+function docKey(d) { return (d.folder ? d.folder + '/' : '') + d.name; }
+
 function renderSheets() {
   var site = S.site, o = S.office;
-  var h = topBar('鋼筋施工單', 'site', S.officeBusy ? '更新中…' : '⟳ 更新', 'officereload') + '<div class="wrap"><div class="label">' + esc(site) + ' ・ 依群組，一個群組一份（跟列印出來的一樣）</div>';
+  // 工地底下的資料夾（收件服務第 26 版，BricsCAD 列印「＋ 新資料夾」，使用者 2026-11-13）：先列資料夾，點進去才是 PDF
+  var fo = S.sheetFolderSite === site ? (S.sheetFolder || '') : '';
+  var h = topBar(fo || '鋼筋施工單', fo ? 'sheetsroot' : 'site', S.officeBusy ? '更新中…' : '⟳ 更新', 'officereload') + '<div class="wrap"><div class="label">' +
+    esc(site) + (fo ? ' ／ ' + esc(fo) : ' ・ 依群組，一個群組一份（跟列印出來的一樣）') + '</div>';
   if (S.officeErr) h += '<div class="err">' + esc(S.officeErr) + '</div>';
   if (!o) return h + '<div class="sub">讀取中…</div></div>';
-  var list = (o.sheets || []).filter(function (d) { return d.site === site; }).sort(function (a, b) { return cmp(docTitle(a), docTitle(b)); });
+  var all = (o.sheets || []).filter(function (d) { return d.site === site; }).sort(function (a, b) { return cmp(docTitle(a), docTitle(b)); });
+  var folders = uniq(((o.sheetDirs || {})[site] || []).concat(all.map(function (d) { return d.folder || ''; }))).filter(Boolean).sort(cmp);
+  var list = all.filter(function (d) { return (d.folder || '') === fo; });
   if (S.sheetMsg) h += '<div class="box">' + esc(S.sheetMsg) + '</div>';
-  if (!list.length) h += '<div class="card sub" style="font-size:15px">這個工地還沒有施工單。要看別的工地，回首頁換工地。</div>';
+  if (!fo) folders.forEach(function (f) {
+    var inside = all.filter(function (d) { return d.folder === f; });
+    h += '<button class="item" data-act="sheetfolder" data-v="' + esc(f) + '"><span style="font-size:30px;margin-right:10px">📁</span><span class="grow"><b style="font-size:17px;display:block">' + esc(f) + '</b>' +
+      '<span class="sub" style="display:block">' + (inside.length ? inside.length + ' 份' : '還沒有施工單') + '</span></span><span class="arrow">›</span></button>';
+  });
+  if (fo && !list.length) h += '<div class="card sub" style="font-size:15px">這個資料夾還沒有施工單。BricsCAD 列印時「資料夾」選「' + esc(fo) + '」，就會放進來。</div>';
+  else if (!fo && !list.length && !folders.length) h += '<div class="card sub" style="font-size:15px">這個工地還沒有施工單。要看別的工地，回首頁換工地。</div>';
   // 開發者刪掉傳錯的施工單（第 14 版，使用者 2026-11-11「上傳錯不能刪」）：只有 Google 驗證過的開發者
   var canDel = isOwner();
   list.forEach(function (d) {
@@ -2240,9 +2254,13 @@ var ACT = {
   },
   tologin: function () { S.route = 'login'; S.err = ''; render(); },
   nav: function (v) {
+    if (v === 'sheetsroot') { S.sheetFolder = ''; go('sheets'); return; }   // 從資料夾回施工單清單
+    if (v === 'site') S.sheetFolder = '';
     if (v === 'work' || v === 'site' || v === 'hub' || v === 'pours' || v === 'sheets') { if (S.busy) return; go(v); if (v === 'work') refresh(); }
     else go(v);
   },
+  // 施工單資料夾（收件服務第 26 版）
+  sheetfolder: function (v) { S.sheetFolder = v; S.sheetFolderSite = S.site; render(); window.scrollTo(0, 0); },
   // 首頁
   sync: function () { loadFeed(true); },
   here: function () { askGeo(function () { loadFeed(false); }); },
@@ -2717,7 +2735,7 @@ var SN_PEN = { r: '#E03131', b: '#1C6FD1', k: '#1F2933', y: 'rgba(255,212,59,0.4
 function loadSnotes(site) {
   return api('snote', { op: 'list', site: site }).then(function (r) { S.snotes[site] = r.items || []; if (r.me) S.snMe = r.me; return S.snotes[site]; });
 }
-function snotesOf(doc) { return (S.snotes[doc.site] || []).filter(function (n) { return n.file === doc.name; }); }
+function snotesOf(doc) { return (S.snotes[doc.site] || []).filter(function (n) { return n.file === docKey(doc); }); }
 /** 便條的字排好（字的大小跟頁寬成比例；中文一個字一個字換行） */
 function snLayout(ctx, t, W) {
   var fs = W * 0.026, maxW = W * 0.42, lines = [], cur = '', words = Array.from('📝 ' + t);
@@ -2771,7 +2789,8 @@ function openSheetNote(n) {
   setSite(n.site);
   if (!n.fileId) { alert('找不到這份施工單（可能重新列印換了名字）'); return; }
   var known = S.office && (S.office.sheets || []).filter(function (d) { return d.id === n.fileId; })[0];
-  var doc = known || { id: n.fileId, name: n.file, site: n.site, modified: 'n' + n.at, props: {} };
+  var nf = String(n.file || ''), cut = nf.lastIndexOf('/');
+  var doc = known || { id: n.fileId, name: cut >= 0 ? nf.slice(cut + 1) : nf, folder: cut >= 0 ? nf.slice(0, cut) : '', site: n.site, modified: 'n' + n.at, props: {} };
   openPdfDoc(doc, { notes: isLead(), worker: !isOffice(), start: n.page || 0, from: 'hub' });
 }
 ACT.snlist = function (v) { var my = S.pdf; if (!my) return; S.modal = { type: 'snlist', page: +v, ask: '', err: '' }; renderModal(); };
@@ -2871,7 +2890,7 @@ function openNoteEditor(pi) {
   function save() {
     if (E.busy === '存檔中…') return;
     E.busy = '存檔中…'; drawTools();
-    api('snote', { op: 'save', site: my.doc.site, file: my.doc.name, page: pi, data: E.data }).then(function () { return loadSnotes(my.doc.site); })
+    api('snote', { op: 'save', site: my.doc.site, file: docKey(my.doc), page: pi, data: E.data }).then(function () { return loadSnotes(my.doc.site); })
       .then(function () { close(); snDrawPage(my, pi); S.feedStale = true; })
       .catch(function (e) { E.busy = '沒有存到：' + (failMsg(e) || ''); drawTools(); });
   }
