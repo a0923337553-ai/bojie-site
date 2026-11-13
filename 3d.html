@@ -1555,7 +1555,7 @@ function renderSide() {
       + '<div class="row"><button class="btn ghost" id="skUnsel">取消</button></div></div>' + markSection();
   } else if (st.view === 'sk') {
     T.textContent = '🏠 SketchUp 模型';
-    h += (hasStruct() ? '<div class="tip">🚚 <b>灌漿區、切樓層</b>：按上面「🏗 3D 結構」</div>' : '')
+    h += (hasStruct() ? '<div class="tip">🚚 <b>' + (SKF.length ? '灌漿區' : '灌漿區、切樓層') + '</b>：按上面「🏗 3D 結構」</div>' : '')
       + markSection()
       + '<div class="muted" style="margin:4px 0 8px">' + (SKF.length ? '上面點一層只看那一層（照 BricsCAD 3D 結構的樓層高度切；有取名「1F」「2F」的元件就照名字）；'
         : skTags().length > 1 ? '上面的標籤可以一個一個關掉、打開（跟 SketchUp 的「標籤」一樣）；' : '') + '點模型看它是哪個群組、元件。</div>';
