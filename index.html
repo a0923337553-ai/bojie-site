@@ -236,6 +236,7 @@ img[data-cap] { cursor:zoom-in; }
   .tiles { display:grid; grid-template-columns:1fr 1fr; column-gap:18px; }
   .tile { padding:18px 20px; margin-bottom:18px; }
   .item { padding:14px 16px; margin-bottom:12px; }
+  .swp { margin-bottom:12px; }
   .pgrid { grid-template-columns:repeat(3, 1fr); gap:16px; }
   .thumbs { grid-template-columns:repeat(4, 1fr); }
   .logcards { column-count:2; column-gap:20px; }
@@ -295,6 +296,15 @@ img[data-cap] { cursor:zoom-in; }
 /* 待辦的刪除按鈕（使用者 2026-11-11「刪除目前是點紅色的字，不直覺」） */
 .tdel { flex:none; align-self:flex-start; margin:2px 0 0 6px; border:1.5px solid var(--red); background:#fff; color:var(--red); border-radius:10px; font-size:14px; font-weight:bold; padding:6px 10px; }
 .tdel.strong { background:var(--red); color:#fff; }
+/* 開發者往左滑才出現「刪除」（使用者 2026-11-13「能否做成往左滑才會出現刪除」）：底下藏紅色按鈕，上面那列滑開 */
+.swp { position:relative; overflow:hidden; border-radius:12px; margin-bottom:9px; box-shadow:0 1px 2px rgba(24,59,86,.10); }
+.swp > .item { position:relative; z-index:1; margin:0; border-radius:0; box-shadow:none; transition:transform .2s ease; touch-action:pan-y; }
+.swp.open > .item { transform:translateX(-84px); }
+.swp.drag > .item { transition:none; }
+.swp.drag { user-select:none; -webkit-user-select:none; }
+.swdel { position:absolute; top:0; right:0; bottom:0; width:84px; border:0; background:var(--red); color:#fff; font-size:16px; font-weight:bold; visibility:hidden; transition:visibility 0s .2s; }
+/* 沒滑的時候紅鈕整個藏起來（不然圓角、上下邊緣會透出一點紅）；收回去的動畫跑完才藏 */
+.swp.open .swdel, .swp.drag .swdel { visibility:visible; transition:none; }
 </style>
 </head>
 <body>
@@ -304,7 +314,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/13d';
+var WEB_VERSION = '11/13e';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1325,20 +1335,21 @@ function renderSheets() {
   var folders = uniq(((o.sheetDirs || {})[site] || []).concat(all.map(function (d) { return d.folder || ''; }))).filter(Boolean).sort(cmp);
   var list = all.filter(function (d) { return (d.folder || '') === fo; });
   if (S.sheetMsg) h += '<div class="box">' + esc(S.sheetMsg) + '</div>';
-  // 開發者刪掉傳錯的施工單、建錯的資料夾（第 14、30 版）：只有 Google 驗證過的開發者
+  // 開發者刪掉傳錯的施工單、建錯的資料夾（第 14、30 版）：只有 Google 驗證過的開發者；往左滑才出現「刪除」（使用者 2026-11-13）
   var canDel = isOwner();
+  function swp(b, act, v) { return canDel ? '<div class="swp"><button class="swdel" data-act="' + act + '" data-v="' + esc(v) + '">刪除</button>' + b + '</div>' : b; }
+  if (canDel && (fo ? list.length : folders.length || list.length))
+    h += '<div class="sub" style="font-size:13px;margin:-2px 0 8px 2px">' + (matchMedia('(hover:hover)').matches ? '開發者：滑鼠按住往左拖，可以刪除' : '開發者：往左滑可以刪除') + '</div>';
   if (!fo) folders.forEach(function (f) {
     var inside = all.filter(function (d) { return d.folder === f; });
-    var b = '<button class="item" data-act="sheetfolder" data-v="' + esc(f) + '"' + (canDel ? ' style="flex:1;min-width:0;margin:0"' : '') + '><span style="font-size:30px;margin-right:10px">📁</span><span class="grow"><b style="font-size:17px;display:block">' + esc(f) + '</b>' +
-      '<span class="sub" style="display:block">' + (inside.length ? inside.length + ' 份' : '還沒有施工單') + '</span></span><span class="arrow">›</span></button>';
-    h += canDel ? '<div class="row" style="align-items:stretch;margin-bottom:10px">' + b + '<button class="tdel" style="align-self:center;margin:0 0 0 2px;padding:8px 12px" data-act="sheetdirdel" data-v="' + esc(f) + '">🗑 刪除</button></div>' : b;
+    h += swp('<button class="item" data-act="sheetfolder" data-v="' + esc(f) + '"><span style="font-size:30px;margin-right:10px">📁</span><span class="grow"><b style="font-size:17px;display:block">' + esc(f) + '</b>' +
+      '<span class="sub" style="display:block">' + (inside.length ? inside.length + ' 份' : '還沒有施工單') + '</span></span><span class="arrow">›</span></button>', 'sheetdirdel', f);
   });
   if (fo && !list.length) h += '<div class="card sub" style="font-size:15px">這個資料夾還沒有施工單。BricsCAD 列印時「資料夾」選「' + esc(fo) + '」，就會放進來。</div>';
   else if (!fo && !list.length && !folders.length) h += '<div class="card sub" style="font-size:15px">這個工地還沒有施工單。要看別的工地，回首頁換工地。</div>';
   list.forEach(function (d) {
-    var b = '<button class="item" data-act="pdfopen" data-v="' + esc(d.id) + '"' + (canDel ? ' style="flex:1;min-width:0;margin:0"' : '') + '><span class="pdfph">PDF</span><span class="grow"><b style="font-size:16px;display:block">' + esc(docTitle(d)) + '</b>' +
-      '<span class="sub" style="display:block">' + esc(shortTime(d.modified) || '─') + ' 列印</span></span><span class="arrow">›</span></button>';
-    h += canDel ? '<div class="row" style="align-items:stretch;margin-bottom:10px">' + b + '<button class="tdel" style="align-self:center;margin:0 0 0 2px;padding:8px 12px" data-act="sheetdel" data-v="' + esc(d.id) + '">🗑 刪除</button></div>' : b;
+    h += swp('<button class="item" data-act="pdfopen" data-v="' + esc(d.id) + '"><span class="pdfph">PDF</span><span class="grow"><b style="font-size:16px;display:block">' + esc(docTitle(d)) + '</b>' +
+      '<span class="sub" style="display:block">' + esc(shortTime(d.modified) || '─') + ' 列印</span></span><span class="arrow">›</span></button>', 'sheetdel', d.id);
   });
   return h + '<div class="note" style="margin-top:4px">同一個群組重新列印，就會自動換成新的。</div></div>';
 }
@@ -3384,6 +3395,40 @@ ACT.sheetdirdel = function (f) {
     S.feedStale = true; render(); loadOffice();
   }).catch(function (e) { S.busy = false; var m = failMsg(e); S.sheetMsg = m ? '刪不掉：' + m : ''; render(); });
 };
+
+// ---------- 往左滑才出現「刪除」（使用者 2026-11-13「能否做成往左滑才會出現刪除」）：手指往左滑；電腦滑鼠按住往左拖 ----------
+// 滑超過一半停在打開，不然彈回去；打開時點那一列＝收回去（不會順便打開）；點別的地方也會收回去
+var SWW = 84, SW = { r: null, x0: 0, y0: 0, base: 0, dx: 0, drag: false, eat: 0 };
+function swShut(keep) { [].forEach.call(document.querySelectorAll('.swp.open'), function (r) { if (r !== keep) r.classList.remove('open'); }); }
+document.addEventListener('pointerdown', function (ev) {
+  if (ev.button) return;
+  var t = ev.target, r = t.closest ? t.closest('.swp') : null;
+  swShut(r);
+  if (!r || t.closest('.swdel')) { SW.r = null; return; }
+  SW.r = r; SW.x0 = ev.clientX; SW.y0 = ev.clientY; SW.base = r.classList.contains('open') ? -SWW : 0; SW.dx = SW.base; SW.drag = false;
+});
+document.addEventListener('pointermove', function (ev) {
+  var r = SW.r; if (!r) return;
+  var mx = ev.clientX - SW.x0, my = ev.clientY - SW.y0;
+  if (!SW.drag) {
+    if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+    if (Math.abs(my) >= Math.abs(mx)) { SW.r = null; return; }   // 上下捲，不是滑
+    SW.drag = true; r.classList.add('drag');
+  }
+  SW.dx = Math.max(-SWW, Math.min(0, SW.base + mx));
+  r.querySelector('.item').style.transform = 'translateX(' + SW.dx + 'px)';
+});
+function swEnd(cancel) {
+  var r = SW.r; SW.r = null; if (!r) return;
+  if (!SW.drag) { if (!cancel && r.classList.contains('open')) { r.classList.remove('open'); SW.eat = Date.now(); } return; }
+  r.classList.remove('drag'); r.querySelector('.item').style.transform = '';
+  r.classList.toggle('open', !cancel && SW.dx < -SWW / 2);
+  SW.eat = Date.now();
+}
+document.addEventListener('pointerup', function () { swEnd(false); });
+document.addEventListener('pointercancel', function () { swEnd(true); });
+// 滑完放開不要順便打開那一列
+document.addEventListener('click', function (ev) { if (Date.now() - SW.eat < 500) { SW.eat = 0; ev.preventDefault(); ev.stopPropagation(); } }, true);
 
 // ---------- 開始 ----------
 // 記住的代碼：顯示鎖住的 ●●●●●●，按「登入」才進去（使用者 2026-11-08）
