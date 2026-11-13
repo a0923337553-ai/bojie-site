@@ -291,7 +291,17 @@ async function loadSk() {
 }
 function skReady() { SK.updateMatrixWorld(true); skItems.forEach(it => { it.tag = skTagOf(it.mesh); it.name = skNameOf(it.mesh); }); }
 function hasStruct() { return !!(M && (M.m || []).length); }
-function skTags() { const s = new Set(skItems.map(it => it.tag || '未加標籤')); return [...s].sort((a, b) => a === '未加標籤' ? 1 : b === '未加標籤' ? -1 : a.localeCompare(b, 'zh-Hant', { numeric: true })); }
+/** 樓層排前面、照蓋的順序：基礎、地梁、B2F、B1F、1F、2F…RF、R1F、屋突；其他標籤照字排，未加標籤最後（使用者 2026-11-13 元件取名當樓層） */
+function floorRank(t) {
+  let m;
+  if (t === '基礎') return 0; if (t === '地梁') return 1;
+  if ((m = /^B(\d+)F$/.exec(t))) return 100 - +m[1];
+  if ((m = /^(\d+)F$/.exec(t))) return 100 + +m[1];
+  if (t === 'RF') return 500; if ((m = /^R(\d+)F$/.exec(t))) return 500 + +m[1];
+  if ((m = /^屋突(\d*)$/.exec(t))) return 600 + (+m[1] || 1);
+  return t === '未加標籤' ? 9999 : 1000;
+}
+function skTags() { const s = new Set(skItems.map(it => it.tag || '未加標籤')); return [...s].sort((a, b) => (floorRank(a) - floorRank(b)) || a.localeCompare(b, 'zh-Hant', { numeric: true })); }
 let SK_SEL_MAT = null;
 /** 換畫面：'sk'＝SketchUp 模型、'st'＝3D 結構（灌漿區、切樓層） */
 function setView(v) {
@@ -1146,7 +1156,9 @@ function renderChips() {
   F.innerHTML = ''; K.innerHTML = '';
   if (st.view === 'sk') {   // SketchUp 模型：標籤（樓層）一個一個開關，跟 SketchUp 的「標籤」一樣
     const tags = skTags();
-    if (tags.length > 1) tags.forEach(t => F.appendChild(chip(t, false, st.skHide.has(t) ? 'off' : '', () => {
+    // 有樓層的時候，沒分到樓層的（外面、屋頂、圍牆…）寫「其他」比「未加標籤」好懂
+    const label = t => t === '未加標籤' && tags.some(x => floorRank(x) < 1000) ? '其他' : t;
+    if (tags.length > 1) tags.forEach(t => F.appendChild(chip(label(t), false, st.skHide.has(t) ? 'off' : '', () => {
       st.skHide.has(t) ? st.skHide.delete(t) : st.skHide.add(t);
       if (st.skHide.size >= tags.length) st.skHide.clear();   // 全部關掉＝全部打開
       st.skSel = null; apply();
