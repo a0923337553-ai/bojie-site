@@ -320,14 +320,16 @@ function setView(v) {
 function applySk() {
   if (!SK_SEL_MAT) SK_SEL_MAT = new THREE.MeshLambertMaterial({ color: new THREE.Color('#F2C230'), emissive: new THREE.Color('#4a3a00'), side: THREE.DoubleSide, clippingPlanes: SK_PLANES });
   const F = skSlice();
-  // 切面：整棟＝不切；名字是樓層的另外看（不切）
-  if (SK_PLANES.length) { SK_PLANES[0].constant = F && !F.tagOnly ? -F.lo : 1e9; SK_PLANES[1].constant = F && !F.tagOnly ? F.hi : 1e9; }
+  // 切面：整棟、其他＝不切；名字是樓層的另外看（不切）
+  const cut = F && !F.tagOnly && !F.other;
+  if (SK_PLANES.length) { SK_PLANES[0].constant = cut ? -F.lo : 1e9; SK_PLANES[1].constant = cut ? F.hi : 1e9; }
   skItems.forEach(it => {
     let vis = !st.skHide.has(it.tag || '未加標籤');
     if (F && SKF.length) {
-      if (it.isFloor) vis = vis && it.tag === F.n;
-      else if (F.tagOnly) vis = false;
-      else if (it.box && (it.box.max.y < F.lo || it.box.min.y > F.hi)) vis = false;   // 整個在這一層外面（地坪、別層的東西）
+      if (F.other) vis = vis && !!it.outside;                // 其他：只看建物外面的
+      else if (it.isFloor) vis = vis && it.tag === F.n;
+      else if (F.tagOnly || it.outside) vis = false;         // 建物外面的不切進各層
+      else if (it.box && (it.box.max.y < F.lo || it.box.min.y > F.hi)) vis = false;   // 整個在這一層外面
     }
     it.mesh.visible = vis;
     it.mesh.userData.__floor = !!it.isFloor;
@@ -365,7 +367,32 @@ function skFloorsCalc() {
   }
   // 只有名字、樓層表沒有的樓層（例：屋突）：只看那個名字的
   skTags().filter(t => floorRank(t) < 1000 && !out.some(f => f.n === t)).forEach(t => out.push({ n: t, lo: -1e9, hi: 1e9, tagOnly: true }));
-  return out.sort((a, b) => floorRank(a.n) - floorRank(b.n));
+  out.sort((a, b) => floorRank(a.n) - floorRank(b.n));
+  // 建物外面的（地坪、樹、圍牆、停車位…）：不切進各層，放「其他」（使用者 2026-11-13 經外掛合併那邊轉達）
+  if (out.length > 1 && skMarkOutside(out)) out.push({ n: '其他', lo: -1e9, hi: 1e9, other: true });
+  return out;
+}
+/**
+ * 建物的平面範圍＝2F 以上的東西（上面的樓層一定是建物本身）；沒取樓層名字、大部分落在範圍外面的＝建物外面（it.outside）。
+ * 回傳有沒有這種東西。只有一層樓（2F 以上沒東西）就不分。
+ */
+function skMarkOutside(floors) {
+  const f2 = floors.filter(f => !f.tagOnly && f.n !== '基礎')[1];   // 第二層（通常是 2F）
+  if (!f2) return false;
+  const fp = new THREE.Box3();
+  skItems.forEach(it => { if (it.box && (it.isFloor ? floorRank(it.tag) >= floorRank(f2.n) : it.box.min.y >= f2.lo)) fp.union(it.box); });
+  if (fp.isEmpty()) return false;
+  const pad = 50;   // cm：外牆、雨遮外面一點點
+  let any = false;
+  skItems.forEach(it => {
+    it.outside = false;
+    if (it.isFloor || !it.box) return;
+    const b = it.box, w = Math.max(1, b.max.x - b.min.x), d = Math.max(1, b.max.z - b.min.z);
+    const ox = Math.max(0, Math.min(b.max.x, fp.max.x + pad) - Math.max(b.min.x, fp.min.x - pad));
+    const oz = Math.max(0, Math.min(b.max.z, fp.max.z + pad) - Math.max(b.min.z, fp.min.z - pad));
+    if (ox * oz / (w * d) < 0.5) { it.outside = true; any = true; }
+  });
+  return any;
 }
 /** 載入後：名字是樓層的（設計師的元件版）用不切的材質；其他用會切的材質 */
 function skClipSetup() {
@@ -386,12 +413,12 @@ function skClipSetup() {
 }
 function skSlice() { return st.skFloor ? SKF.find(f => f.n === st.skFloor) || null : null; }
 /** 點、圈的時候：切掉的部分不算（射線會打到切掉的面） */
-function skHit(hits) { const F = skSlice(); return hits.find(h => !F || F.tagOnly || h.object.userData.__floor || (h.point.y >= F.lo - 1 && h.point.y <= F.hi + 1)) || null; }
+function skHit(hits) { const F = skSlice(); return hits.find(h => !F || F.tagOnly || F.other || h.object.userData.__floor || (h.point.y >= F.lo - 1 && h.point.y <= F.hi + 1)) || null; }
 /** 這一層的範圍（鏡頭對準用：高的牆只算切到的那段） */
 function skSliceBox() {
   const b = new THREE.Box3(); skItems.filter(it => it.mesh.visible).forEach(it => b.union(it.box || new THREE.Box3().setFromObject(it.mesh)));
   const F = skSlice();
-  if (F && !F.tagOnly && !b.isEmpty()) { b.min.y = Math.max(b.min.y, F.lo); b.max.y = Math.min(b.max.y, F.hi); if (b.min.y > b.max.y) b.max.y = b.min.y + 1; }
+  if (F && !F.tagOnly && !F.other && !b.isEmpty()) { b.min.y = Math.max(b.min.y, F.lo); b.max.y = Math.min(b.max.y, F.hi); if (b.min.y > b.max.y) b.max.y = b.min.y + 1; }
   return b;
 }
 
