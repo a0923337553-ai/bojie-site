@@ -126,13 +126,19 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
   .card table{font-size:15px}
 }
 @media (min-width:1600px){ :root{--side:420px} body{font-size:17px} }
+#viewBtn{background:#FFF4E6;color:#C2410C}
+.bar h1{min-width:0}   /* 手機：標題太長就「…」，按鈕才不會被擠出畫面 */
+@media (max-width:480px){ .bar{gap:6px;padding:8px 8px} .bar .btn{padding:7px 9px} }
 </style>
+<!-- SketchUp 模型（.glb，使用者 2026-11-13）：GLTFLoader 裡的 import 'three' 指到同一份 three.js -->
+<script type="importmap">{"imports":{"three":"https://cdnjs.cloudflare.com/ajax/libs/three.js/0.170.0/three.module.min.js"}}</script>
 </head>
 <body>
 <div id="top">
   <div class="bar">
     <button class="btn ghost" id="back">‹ 返回</button>
     <h1 id="title">3D 結構 <span class="sub" id="made"></span></h1>
+    <button class="btn" id="viewBtn" style="display:none"></button>
     <button class="btn" id="reset">整棟</button>
   </div>
   <div class="chips" id="floors"></div>
@@ -160,11 +166,14 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
 var THREE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.170.0/three.module.min.js';
+var GLTF_URL = 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
 </script>
 <script type="module">
 const P = new URLSearchParams(location.search);
 const SITE = P.get('site') || '';
 const EMBED = P.get('embed') === '1';
+// 配筋、鋼筋先藏起來（使用者 2026-11-13「3d目前想把配筋根鋼筋拿掉」→「先藏起來」：程式和資料留著，網址加 &rebar=1 才看得到）
+const REBAR_ON = P.get('rebar') === '1';
 const msgEl = document.getElementById('msg');
 function say(html) { msgEl.innerHTML = html; msgEl.style.display = html ? '' : 'none'; }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -217,11 +226,96 @@ async function loadModel() {
   const r = await api('model3d', { site: SITE, have: have ? have.modified : '' });
   pours = (r.pours || []).map(p => { const pr = p.props || {}; return { id: p.id, date: pr.pourDate || '', part: pr.part || String(p.name || '').replace(/\.pdf$/i, ''), m3: pr.m3 || '', trucks: pr.trucks || '' }; });
   marks = r.marks || []; me = r.me || null;
+  SKMETA = r.sk || null;   // 收件服務第 27 版：這個工地有 SketchUp 模型
   if (r.same && have) return JSON.parse(have.text);
-  if (!r.model) throw { error: 'NONE' };
+  if (!r.model) { if (SKMETA) return null; throw { error: 'NONE' }; }
   ls('m3d.' + SITE, JSON.stringify({ modified: r.modified || '', text: r.model }));
   return JSON.parse(r.model);
 }
+
+// ---------- SketchUp 模型（使用者 2026-11-13「這個3d結構功能我想改成匯入sketchup的模型」，選 A：打開先看 SketchUp 模型） ----------
+// 電腦把 .skp 轉成 .glb（材質、群組名、標籤＝樓層）傳到 工地App/3D/<工地>/SketchUp模型.glb；收件服務 model3d {skPart} 一段一段給（App 也只能問 model3d）。
+// 下載好記在這台（IndexedDB），模型沒換就不重抓。本機測試：&glb=xxx.glb
+let SK = null, SKMETA = P.get('glb') ? { local: P.get('glb') } : null, skErr = '';
+const skItems = [];   // {mesh, tag, name, mat}
+function idb() {
+  return new Promise((ok, bad) => {
+    try { const q = indexedDB.open('bojie3d', 1); q.onupgradeneeded = () => q.result.createObjectStore('sk'); q.onsuccess = () => ok(q.result); q.onerror = () => bad(q.error); }
+    catch (e) { bad(e); }
+  });
+}
+async function idbGet(k) { try { const db = await idb(); return await new Promise(ok => { const q = db.transaction('sk').objectStore('sk').get(k); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); }); } catch (e) { return null; } }
+async function idbPut(k, v) { try { const db = await idb(); db.transaction('sk', 'readwrite').objectStore('sk').put(v, k); } catch (e) { } }
+function b64Bytes(s) { const bin = atob(s), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+async function skBytes() {
+  if (SKMETA.local) return fetch(SKMETA.local).then(r => { if (!r.ok) throw { error: '讀不到 ' + SKMETA.local }; return r.arrayBuffer(); });
+  const key = 'sk.' + SITE, hit = await idbGet(key);
+  if (hit && hit.modified === SKMETA.modified && hit.buf) return hit.buf;
+  const parts = [], mb = (SKMETA.size / 1048576).toFixed(1);
+  for (let i = 0; i < SKMETA.parts; i++) {
+    say('下載 SketchUp 模型 ' + (i + 1) + '／' + SKMETA.parts + '（共 ' + mb + ' MB；第一次比較久，之後記在這台）…');
+    const r = await api('model3d', { site: SITE, skPart: i });
+    if (r.modified !== SKMETA.modified) throw { error: '模型剛好重新上傳，按「再試一次」' };
+    parts.push(b64Bytes(r.data));
+  }
+  const all = new Uint8Array(parts.reduce((a, p) => a + p.length, 0)); let o = 0;
+  parts.forEach(p => { all.set(p, o); o += p.length; });
+  idbPut(key, { modified: SKMETA.modified, buf: all.buffer });
+  return all.buffer;
+}
+/** 標籤：自己或上面那層群組／元件的標籤（轉檔時放在 extras.tag）；沒有＝未加標籤 */
+function skTagOf(o) { for (let x = o; x; x = x.parent) { if (x.userData && x.userData.tag) return String(x.userData.tag); if (x === SK) break; } return ''; }
+/** 名稱：從外到內的群組、元件名稱（轉檔時用 SketchUp 的名稱） */
+function skNameOf(o) {
+  // GLTFLoader 把名字裡的空白、符號換成 _，原本的名字放在 userData.name
+  const a = [];
+  for (let x = o; x && x !== SK; x = x.parent) { const n = (x.userData && x.userData.name) || x.name; if (n && !/^(mesh|node|Mesh)?_?\d*$/.test(n)) a.unshift(n); }
+  return [...new Set(a)].join(' ／ ');
+}
+async function loadSk() {
+  const [buf, mod] = await Promise.all([skBytes(), import(GLTF_URL)]);
+  say('打開 SketchUp 模型…');
+  const gltf = await new Promise((ok, bad) => new mod.GLTFLoader().parse(buf, '', ok, e => bad({ error: 'SketchUp 模型打不開：' + (e && e.message || e) })));
+  const g = gltf.scene;
+  g.scale.setScalar(100);   // glTF 是公尺，這裡用公分（跟 3D 結構一樣）
+  let verts = 0;
+  g.traverse(o => { if (o.isMesh) verts += (o.geometry.attributes.position || { count: 0 }).count; });
+  g.traverse(o => {
+    if (!o.isMesh) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { m.side = THREE.DoubleSide; });   // SketchUp 的面有正反面
+    // 黑色邊線（像 SketchUp 畫面）：太大的模型不畫，手機轉不動
+    if (verts < 1500000) o.add(new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry, 30), new THREE.LineBasicMaterial({ color: 0x2B2F33, transparent: true, opacity: 0.55 })));
+    skItems.push({ mesh: o, tag: '', name: '', mat: o.material });
+  });
+  return g;
+}
+function skReady() { SK.updateMatrixWorld(true); skItems.forEach(it => { it.tag = skTagOf(it.mesh); it.name = skNameOf(it.mesh); }); }
+function hasStruct() { return !!(M && (M.m || []).length); }
+function skTags() { const s = new Set(skItems.map(it => it.tag || '未加標籤')); return [...s].sort((a, b) => a === '未加標籤' ? 1 : b === '未加標籤' ? -1 : a.localeCompare(b, 'zh-Hant', { numeric: true })); }
+let SK_SEL_MAT = null;
+/** 換畫面：'sk'＝SketchUp 模型、'st'＝3D 結構（灌漿區、切樓層） */
+function setView(v) {
+  if (v === 'sk' && !SK) v = 'st';
+  if (v === 'st' && !hasStruct() && SK) v = 'sk';
+  st.view = v;
+  root.visible = rebarGroup.visible = v === 'st';
+  if (SK) SK.visible = v === 'sk';
+  st.sel = null; st.skSel = null; st.pour = null; st.rebar = null; st.focus = null; st.bars = false;
+  const vb = document.getElementById('viewBtn');
+  vb.style.display = SK && hasStruct() ? '' : 'none';
+  vb.textContent = v === 'sk' ? '🏗 3D 結構' : '🏠 SketchUp 模型';
+  document.getElementById('title').firstChild.textContent = (M.site || SITE || '') + (v === 'sk' ? '・SketchUp 模型 ' : '・3D 結構 ');
+  document.getElementById('made').textContent = v === 'sk' ? (SKMETA && SKMETA.modified ? '（' + String(SKMETA.modified).slice(0, 10) + ' 上傳）' : '') : (M.made ? '（' + String(M.made).slice(0, 10) + ' 匯出）' : '');
+}
+function applySk() {
+  if (!SK_SEL_MAT) SK_SEL_MAT = new THREE.MeshLambertMaterial({ color: new THREE.Color('#F2C230'), emissive: new THREE.Color('#4a3a00'), side: THREE.DoubleSide });
+  skItems.forEach(it => {
+    it.mesh.visible = !st.skHide.has(it.tag || '未加標籤');
+    it.mesh.material = st.skSel === it ? SK_SEL_MAT : it.mat;
+  });
+  renderChips(); renderSide(); needs = true;
+}
+function skVisible() { return skItems.filter(it => it.mesh.visible).map(it => it.mesh); }
 
 // ---------- 顏色、號數 ----------
 const KIND_COLOR = { '基礎': '#A0785A', '地梁': '#C98B4E', '柱': '#3E8E86', '梁': '#4F7CAC', '版': '#B9C2C9', '牆': '#D8C9A8', '樓梯': '#8E6FB0' };
@@ -234,7 +328,8 @@ function num(s) { const v = parseFloat(String(s == null ? '' : s).split('+').red
 function stirParse(s) { const m = /(?:(\d+)\s*-\s*)?#\s*(\d+)\s*@\s*([\d.]+)/.exec(s || ''); return m ? { n: m[1] ? +m[1] : 0, d: (BAR_MM[+m[2]] || 12.7) / 10, s: +m[3] } : null; }
 function roc(ymd) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd || ''); if (!m) return ''; const d = new Date(+m[1], +m[2] - 1, +m[3]); return (m[1] - 1911) + '.' + m[2] + '.' + m[3] + '（' + '日一二三四五六'[d.getDay()] + '）'; }
 
-const st = { floor: '全部', kinds: new Set(KIND_ORDER), sel: null, pour: null, rebar: null, bars: false, sideMin: false, rels: new Set() };
+const st = { floor: '全部', kinds: new Set(KIND_ORDER), sel: null, pour: null, rebar: null, bars: false, sideMin: false, rels: new Set(),
+  view: 'st', skHide: new Set(), skSel: null };   // view：'sk' SketchUp 模型、'st' 3D 結構
 const WIDE = () => innerWidth >= 900;
 
 let THREE, renderer, scene, camera, root, rebarGroup, el;
@@ -264,8 +359,15 @@ function start() {
     st.rels = new Set([L.some(r => r.n === want) ? want : L[L.length - 1].n]); HOT = relHot();
     if (want) { st.bars = true; st.floor = '全部'; }
   }
-  build(); bindInput(); bindMarking(); apply(); layout(); fitTo(visibleObjs(), false);
-  say('');
+  build();
+  if (SK) { scene.add(SK); skReady(); }
+  bindInput(); bindMarking();
+  // 打開先看 SketchUp 模型（使用者選 A）；要看灌漿區、切樓層按「🏗 3D 結構」
+  setView(SK ? 'sk' : 'st');
+  document.getElementById('viewBtn').onclick = () => { setView(st.view === 'sk' ? 'st' : 'sk'); apply(); fitTo(visibleObjs(), false); };
+  apply(); layout(); fitTo(visibleObjs(), false);
+  say(skErr && !SK ? '<div class="muted">SketchUp 模型打不開，先看 3D 結構：' + esc(skErr) + '</div>' : '');
+  if (skErr && !SK) setTimeout(() => say(''), 6000);
   setTimeout(hideHint, 7000);
   shots();
   requestAnimationFrame(frame);
@@ -348,6 +450,7 @@ function setPours(ids) {
   st.pour = { ids, groups: [...groups] };
 }
 function apply() {
+  if (st.view === 'sk') { applySk(); return; }
   const pourOn = !!st.pour;
   items.forEach(it => {
     const m = it.m;
@@ -396,7 +499,7 @@ function fitTo(objs, keepAngle) {
   cam.dist = Math.max(dist * 1.08, 30);
   placeCamera();
 }
-function visibleObjs() { return items.filter(it => it.mesh.visible && it.mesh.material.opacity !== 0.08).map(it => it.mesh); }
+function visibleObjs() { if (st.view === 'sk') return skVisible(); return items.filter(it => it.mesh.visible && it.mesh.material.opacity !== 0.08).map(it => it.mesh); }
 
 const ptrs = new Map(); let downAt = null;
 function bindInput() {
@@ -467,6 +570,12 @@ function pick(x, y) {
   if (!ray.r) ray.r = new THREE.Raycaster();
   const r = el.getBoundingClientRect();
   ray.r.setFromCamera(new THREE.Vector2((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1), camera);
+  if (st.view === 'sk') {   // SketchUp 模型：點到的群組、元件名稱和標籤
+    const h = ray.r.intersectObjects(skVisible(), false)[0];
+    st.skSel = h ? skItems.find(it => it.mesh === h.object) || null : null;
+    if (st.skSel) st.sideMin = false;
+    apply(); return;
+  }
   const hits = ray.r.intersectObjects(items.filter(it => it.mesh.visible && it.mesh.material.opacity !== 0.08).map(it => it.mesh), false);
   st.sel = hits.length ? hits[0].object.userData.m : null;
   if (st.sel) st.sideMin = false;
@@ -599,7 +708,7 @@ function finishCircle(pts) {
   const rpx = Math.max(20, Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 2);
   const r = el.getBoundingClientRect();
   if (!ray.r) ray.r = new THREE.Raycaster();
-  const meshes = items.filter(it => it.mesh.visible && it.mesh.material.opacity !== 0.08).map(it => it.mesh);
+  const meshes = visibleObjs();   // SketchUp 模型或 3D 結構（看現在是哪一個）
   const samples = [[0, 0]];
   [0.45, 0.85].forEach(f => { for (let i = 0; i < 8; i++) samples.push([Math.cos(i * Math.PI / 4) * f * rpx, Math.sin(i * Math.PI / 4) * f * rpx]); });
   let best = null;
@@ -613,9 +722,10 @@ function finishCircle(pts) {
   const depth = best ? best.distance : camera.position.distanceTo(cam.target);
   const p = ray.r.ray.at(depth, new THREE.Vector3());
   const wr = rpx * 2 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / r.height;
-  const hm = best ? best.object.userData.m : null, c = T2CAD(p);
+  const hm = best && st.view !== 'sk' ? best.object.userData.m : null, c = T2CAD(p);
+  const hs = best && st.view === 'sk' ? skItems.find(it => it.mesh === best.object) : null;
   st.draft = { pos: [c[0], c[1], c[2], Math.round(wr)], cam: { t: T2CAD(cam.target).map(v => Math.round(v)), d: Math.round(cam.dist), th: +cam.theta.toFixed(3), ph: +cam.phi.toFixed(3), v: viewState() },
-    member: hm ? (hm.f + ' ' + hm.k + ' ' + (hm.c || hm.n || '')).trim() : '' };
+    member: hm ? (hm.f + ' ' + hm.k + ' ' + (hm.c || hm.n || '')).trim() : hs ? ('SketchUp ' + (hs.name || hs.tag || '')).trim().slice(0, 40) : st.view === 'sk' ? 'SketchUp' : '' };
   setMarking(false); st.markSel = null; showDraft(true); renderSide(); layout();
 }
 /** 上面那個寫字的框：圈好了打開（清空），送出或取消就關掉 */
@@ -640,7 +750,8 @@ function cancelDraft() {
 function updatePins() {
   const box = document.getElementById('pins'); if (!box || !camera) return;
   const r = el.getBoundingClientRect(), tanh = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  let list = markOrder().map((m, i) => ({ m, no: i + 1 }));
+  // SketchUp 模型和 3D 結構的座標不一樣：只畫圈在現在這個畫面的
+  let list = markOrder().map((m, i) => ({ m, no: i + 1 })).filter(({ m }) => markView(m) === st.view);
   // 看配筋的時候：只留圈在這一支（這一台、這一座）上的圈（使用者 2026-11-10「紅圈不是那個位置的就不要再顯示」）
   if (st.rebar) {
     const ids = st.focus || new Set([st.rebar.i]);
@@ -666,12 +777,17 @@ function updatePins() {
  * 圈的時候的畫面（使用者 2026-11-10「圈起來的地方他會自動跳到目前設定的圖層及位置」）：哪一層、開了哪些種類、整層鋼筋、看哪一支的配筋。
  * 存在圈的鏡頭（cam.v）裡；看配筋的那一支記種類、樓層、中心點（重新上傳 3D 編號會變）。
  */
+/** 這個圈是圈在哪個畫面：'sk' SketchUp 模型、'st' 3D 結構（以前的圈都是 3D 結構） */
+function markView(m) { return m && m.cam && m.cam.v && m.cam.v.sk ? 'sk' : 'st'; }
 function viewState() {
+  if (st.view === 'sk') return { sk: 1, hide: [...st.skHide].slice(0, 12) };
   const r = st.rebar, b = r && r.b;
   return { f: st.floor, k: [...st.kinds], b: st.bars ? 1 : 0, rb: b ? [r.k, r.f, Math.round((b[0] + b[3]) / 2), Math.round((b[1] + b[4]) / 2), Math.round((b[2] + b[5]) / 2)] : 0 };
 }
 function applyView(v) {
   if (!v || typeof v !== 'object') return;
+  if (v.sk) { if (st.view !== 'sk') setView('sk'); st.skHide = new Set(Array.isArray(v.hide) ? v.hide : []); st.skSel = null; apply(); return; }
+  if (st.view !== 'st') setView('st');
   if (v.f === '全部' || floorsList().includes(v.f)) st.floor = v.f;
   if (Array.isArray(v.k) && v.k.length) {
     const ks = v.k.filter(k => KIND_ORDER.includes(k));
@@ -690,6 +806,8 @@ function selectMark(id, jump) {
   st.markSel = id; st.sel = null; st.draft = null; st.sideMin = false;
   // 跳回圈的時候的樓層、種類、鋼筋，再轉到那個位置（點圈、點清單、按「轉到這裡」都會）
   if (m.cam && m.cam.v) applyView(m.cam.v);
+  else if (st.view !== 'st' && hasStruct()) { setView('st'); apply(); }   // 以前的圈（沒記畫面）都是 3D 結構
+  st.markSel = id;
   if ((jump || (m.cam && m.cam.v)) && m.cam && m.cam.t) { cam.target = CAD2T(m.cam.t); cam.dist = m.cam.d || cam.dist; cam.theta = m.cam.th; cam.phi = m.cam.ph; placeCamera(); }
   renderSide(); layout(); needs = true;
 }
@@ -704,8 +822,10 @@ async function reloadMarks() {
 function markSection() {
   const head = '<div style="font-weight:700;margin:2px 0 6px">📍 要改進的地方' + (marks.length ? '（待處理 ' + marks.filter(m => !m.done).length + '）' : '') + '</div>';
   if (!marks.length) return head + '<div class="muted" style="margin:0 0 10px">還沒有人圈。按畫面右上角「✏️ 圈起來」，用手指圈出要改進的地方。</div>';
+  // 有 SketchUp 模型時：別的畫面圈的寫一下是哪個（點了會換過去）
+  const where = m => SK && hasStruct() && markView(m) !== st.view ? ' <span class="muted">（' + (markView(m) === 'sk' ? 'SketchUp 模型' : '3D 結構') + '）</span>' : '';
   return head + marks.slice().sort((a, b) => (a.done - b.done) || (b.at - a.at)).map(m =>
-    '<div class="mk' + (m.done ? ' done' : '') + (st.markSel === m.id ? ' on' : '') + '" data-mk="' + esc(m.id) + '"><span class="no">' + markNo(m) + '</span>' + esc(m.text)
+    '<div class="mk' + (m.done ? ' done' : '') + (st.markSel === m.id ? ' on' : '') + '" data-mk="' + esc(m.id) + '"><span class="no">' + markNo(m) + '</span>' + esc(m.text) + where(m)
     + '<span class="st ' + (m.done ? 'd">已改好' : 'o">待處理') + '</span><div class="who">' + esc(m.by) + '・' + when(m.at)
     + (m.done && m.doneBy ? ' → ' + esc(m.doneBy) + ' ' + when(m.doneAt) + ' 改好了' : '') + '</div></div>').join('') + '<div style="height:6px"></div>';
 }
@@ -725,7 +845,7 @@ function bar(kind, a, b, r) { segs[TONE === 'old' ? 'old' : kind].push([a, b, r]
 // 外掛在 3D 裡寫 rel（發布紀錄 [{n, at, groups}]）和每支鋼筋屬於哪個料單群組（rj 的 g、bars／lp 的 g、cpg）。
 // 沒有發布紀錄＝照以前全部畫；有了＝只畫發布過的群組，選的那幾批照原本的顏色、其他發布過的淡灰色，還沒發布的不畫（只有混凝土）。
 function relList() { return M && Array.isArray(M.rel) ? M.rel.filter(r => r && r.n) : []; }
-function relMode() { return relList().length > 0; }
+function relMode() { return REBAR_ON && relList().length > 0; }
 let REL_ALL = null, HOT = new Set();
 function relAllGroups() { if (!REL_ALL) { REL_ALL = new Set(); relList().forEach(r => (r.groups || []).forEach(g => REL_ALL.add(g))); } return REL_ALL; }
 function relHot() { const s = new Set(); relList().filter(r => st.rels.has(r.n)).forEach(r => (r.groups || []).forEach(g => s.add(g))); return s; }
@@ -769,7 +889,7 @@ function jobsOf(m) {
   return m ? JOBS_OF[m.i] || [] : [];
 }
 // 有分批發布：配筋表（rb）畫的示意不算（沒有料單群組，不知道發布了沒）
-function hasBars(m) { return jobsOf(m).length > 0 || (!relMode() && !!rebarOf(m)); }
+function hasBars(m) { return REBAR_ON && (jobsOf(m).length > 0 || (!relMode() && !!rebarOf(m))); }
 /** 線段只留 za～zb 之間（柱只看這一層的時候） */
 function clipZ(a, b, zr) {
   if (!zr) return [a, b];
@@ -1024,10 +1144,19 @@ function chip(text, on, cls, fn, color) {
 function renderChips() {
   const F = document.getElementById('floors'), K = document.getElementById('kinds');
   F.innerHTML = ''; K.innerHTML = '';
+  if (st.view === 'sk') {   // SketchUp 模型：標籤（樓層）一個一個開關，跟 SketchUp 的「標籤」一樣
+    const tags = skTags();
+    if (tags.length > 1) tags.forEach(t => F.appendChild(chip(t, false, st.skHide.has(t) ? 'off' : '', () => {
+      st.skHide.has(t) ? st.skHide.delete(t) : st.skHide.add(t);
+      if (st.skHide.size >= tags.length) st.skHide.clear();   // 全部關掉＝全部打開
+      st.skSel = null; apply();
+    })));
+    layout(); return;
+  }
   ['全部', ...floorsList()].forEach(f => F.appendChild(chip(f === '全部' ? '整棟' : f, st.floor === f && !st.pour, '', () => { st.floor = f; st.sel = null; st.pour = null; st.rebar = null; apply(); fitTo(visibleObjs(), true); })));
   const present = KIND_ORDER.filter(k => (M.m || []).some(m => m.k === k));
   // 整層鋼筋（使用者 2026-11-10「加整層鋼筋」）：整棟時先跳到第一個有配筋的樓層，比較轉得動
-  if ((M.rb && Object.keys(M.rb).length) || (M.rj || []).length) {
+  if (REBAR_ON && ((M.rb && Object.keys(M.rb).length) || (M.rj || []).length)) {
     const b = chip('🔩 鋼筋', st.bars, '', () => {
       // 有分批發布：打開就看整棟發布過的（選的那幾批原本的顏色）
       if (!st.bars && relMode()) { showReleases(st.rels.size ? st.rels : new Set([relList()[relList().length - 1].n])); return; }
@@ -1321,6 +1450,17 @@ function renderSide() {
       + (dev || mine ? '<button class="btn" id="markEdit">✏️ 修改</button><button class="btn ghost" id="markDel">刪除</button>' : '')
       + '<button class="btn ghost" id="markClose">關閉</button><span class="muted" id="markErr2"></span></div></div>';
     h += markSection();
+  } else if (st.view === 'sk' && st.skSel) {
+    const it = st.skSel;
+    T.textContent = 'SketchUp 模型';
+    h += '<div class="card"><div class="t">' + esc(it.name || '（沒有名稱的面）') + '</div>'
+      + table([['標籤', it.tag || '未加標籤']])
+      + '<div class="row"><button class="btn ghost" id="skUnsel">取消</button></div></div>' + markSection();
+  } else if (st.view === 'sk') {
+    T.textContent = '🏠 SketchUp 模型';
+    h += (hasStruct() ? '<div class="tip">🚚 <b>灌漿區、切樓層</b>：按上面「🏗 3D 結構」</div>' : '')
+      + markSection()
+      + '<div class="muted" style="margin:4px 0 8px">上面的標籤可以一個一個關掉、打開（跟 SketchUp 的「標籤」一樣）；點模型看它是哪個群組、元件。</div>';
   } else if (st.rebar) {
     const m = st.rebar;
     const job = jobsOf(m).find(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
@@ -1340,11 +1480,12 @@ function renderSide() {
     T.textContent = '構件';
     // 點了就出現外掛「專案 → 配筋圖」那一頁裡這個構件的配筋（使用者 2026-11-12「我要像圖二抓裡面對應的配筋」「柱樑牆板基礎都是」）：
     // 柱＝柱配筋表各樓層＋斷面、梁＝梁配筋圖（讀到的格子）、牆／版＝配筋表用的那一列、基礎＝配筋資料＋配筋圖
-    const pg = pageHtml(m), rows = pg && m.k === '柱' ? [] : rebarRows(m);
+    // 配筋先藏起來（REBAR_ON＝false）：只留樓層、灌漿區、混凝土
+    const pg = REBAR_ON ? pageHtml(m) : '', rows = !REBAR_ON || (pg && m.k === '柱') ? [] : rebarRows(m);
     h += '<div class="card"><div class="t"><span class="k" style="background:' + (KIND_COLOR[m.k] || '#999') + '">' + esc(m.k) + '</span>' + esc(m.n || m.c || '') + '</div>'
       + pg
       + table([['樓層', m.f], ['灌漿區', m.gp]].concat(m.v ? [['混凝土', m.v.toFixed(2) + ' m³']] : []).concat(rows))
-      + '<div class="row">' + (canRebar ? '<button class="btn solid" id="showRebar">🔩 看配筋</button>' : (m.k === '柱' || m.k === '梁' || m.k === '地梁') && !m.dc ? '<span class="muted">這支在配筋表找不到</span>' : '')
+      + '<div class="row">' + (canRebar ? '<button class="btn solid" id="showRebar">🔩 看配筋</button>' : REBAR_ON && (m.k === '柱' || m.k === '梁' || m.k === '地梁') && !m.dc ? '<span class="muted">這支在配筋表找不到</span>' : '')
       + '<button class="btn ghost" id="unsel">取消</button></div></div>';
     h += pourList();
   } else if (st.bars) {
@@ -1401,6 +1542,7 @@ function renderSide() {
   B.querySelectorAll('[data-open]').forEach(el => { const fn = OPENERS[+el.dataset.open]; if (!fn) return; if (el.tagName !== 'BUTTON') el.style.cursor = 'zoom-in'; el.onclick = fn; });
   on('showRebar', () => { st.rebar = st.sel; st.focus = focusOf(st.rebar); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); });
   on('unsel', () => { st.sel = null; apply(); });
+  on('skUnsel', () => { st.skSel = null; apply(); });
   on('barsOff', () => { st.bars = false; apply(); });
   // 灌漿區可以點好幾區一起亮（使用者 2026-11-11「我可以點選多個群組讓他們亮起來，剛剛看是只能點一個」）：再點一次取消那一區
   B.querySelectorAll('.pour:not(.relc)').forEach(p => p.onclick = () => {
@@ -1436,7 +1578,7 @@ function zoneList() {
   }).filter(z => z.n > 0);
 }
 function pourList(tip) {
-  let h = tip ? '<div class="tip">🔩 <b>看鋼筋</b>：按上面「🔩 鋼筋」看整層；或點一支柱或梁，再按「看配筋」</div>' : '';
+  let h = tip && REBAR_ON ? '<div class="tip">🔩 <b>看鋼筋</b>：按上面「🔩 鋼筋」看整層；或點一支柱或梁，再按「看配筋」</div>' : '';
   // 加標題（使用者 2026-11-12「你有做好幾區的功能嗎？還是我誤會你了」：接在構件卡片下面沒有標題，看起來像在講那支梁）
   h += '<div style="font-weight:700;margin:12px 0 2px">🚚 灌漿區</div>'
     + '<div class="muted" style="margin:2px 0 8px">點下面一區，3D 會把那一區亮起來（橘色）；<b>可以點好幾區一起亮</b>，再點一次取消。分區跟 BricsCAD 灌漿數量一樣</div>';
@@ -1455,6 +1597,7 @@ function pourList(tip) {
 document.getElementById('tog').onclick = () => { st.sideMin = !st.sideMin; renderSide(); layout(); };
 document.getElementById('reset').onclick = () => {
   if (!M) return;
+  if (st.view === 'sk') { st.skHide.clear(); st.skSel = null; apply(); fitTo(visibleObjs(), false); return; }
   st.floor = '全部'; st.sel = null; st.pour = null; st.rebar = null; st.bars = false; KIND_ORDER.forEach(k => st.kinds.add(k)); apply(); fitTo(visibleObjs(), false);
 };
 
@@ -1493,6 +1636,16 @@ function frame() { if (needs) { needs = false; renderer.render(scene, camera); u
 function shots() {
   const s = P.get('shot'); if (!s) return;
   hideHint(); document.getElementById('hint').style.display = 'none';
+  // 截圖用（SketchUp 模型）：&skhide=RF,2F 關掉標籤、&sksel=坡道 點一個、&skmark=1 兩個圈（一個在 SketchUp、一個在 3D 結構）、&view=st 換到 3D 結構
+  if (SK && P.get('skmark')) {
+    marks.push({ id: 'k1', at: Date.now() - 1800e3, by: '測試主任', text: '坡道扶手高度再確認', pos: [1800, 260, 60, 220], cam: { v: { sk: 1, hide: [] } }, member: 'SketchUp 無障礙坡道', done: false });
+    marks.push({ id: 'k2', at: Date.now() - 86400e3, by: '測試老闆', text: '2F 這支梁再確認', pos: [650, 300, 700, 90], member: '2F 梁 G1', done: false });
+    if (P.get('skmark') === 'sel') st.markSel = 'k1';
+  }
+  if (SK && st.view === 'sk' && P.get('skhide')) { st.skHide = new Set(P.get('skhide').split(',')); fitTo(skItems.filter(it => !st.skHide.has(it.tag || '未加標籤')).map(it => it.mesh), true); }
+  if (SK && st.view === 'sk' && P.get('sksel')) st.skSel = skItems.find(it => it.name.includes(P.get('sksel'))) || null;
+  if (P.get('view') === 'st') { setView('st'); apply(); fitTo(visibleObjs(), false); }
+  apply();
   if (P.get('marks') === 'demo') {   // 截圖用：兩個標記（一個待處理、一個已改好）
     const pick2 = k => (M.m || []).filter(m => m.k === k && m.b)[3] || (M.m || []).find(m => m.k === k && m.b);
     const at = m => [(m.b[0] + m.b[3]) / 2, (m.b[1] + m.b[4]) / 2, (m.b[2] + m.b[5]) / 2, 90];
@@ -1504,7 +1657,7 @@ function shots() {
     if (P.get('marking') || P.get('draft') === '1') { if (!WIDE()) st.sideMin = true; if (P.get('marking')) setMarking(P.get('marking')); renderSide(); }
     apply();
   }
-  const find = (k, f) => (M.m || []).find(m => m.k === k && (!f || m.f === f) && hasBars(m));
+  const find = (k, f) => (M.m || []).find(m => m.k === k && (!f || m.f === f) && (!REBAR_ON || hasBars(m)));
   if (s === 'pour') {   // zone=基礎,2F：一次亮好幾區
     const want = (P.get('zone') || '').split(',').filter(Boolean);
     const zs = want.length ? zoneList().filter(x => want.includes(x.g)) : [zoneList()[Math.min(2, zoneList().length - 1)]].filter(Boolean);
@@ -1556,10 +1709,14 @@ function demoModel() {
 try {
   say('載入中…');
   const [three, model] = await Promise.all([import(THREE_URL), loadModel()]);
-  THREE = three; M = model;
+  THREE = three; M = model || { m: [], floors: [], groups: [], site: SITE };   // 只有 SketchUp 模型、還沒有 3D 結構
+  if (SKMETA) {
+    try { SK = await loadSk(); }
+    catch (e) { skErr = errText(e); console.error(e); if (!hasStruct()) throw e; }   // 有 3D 結構就先看 3D 結構
+  }
   start();
 } catch (e) {
-  const t = e && e.error === 'NONE' ? '這個工地還沒有 3D。<br><span class="muted">要在 BricsCAD「混凝土」按「全部樓層」，再按「上傳 3D 到工地App」。</span>' : esc(errText(e));
+  const t = e && e.error === 'NONE' ? '這個工地還沒有 3D。<br><span class="muted">SketchUp 模型：電腦上把 .skp 拖到「SketchUp 傳到工地App」；3D 結構：BricsCAD「混凝土」按「全部樓層」，再按「上傳 3D 到工地App」。</span>' : esc(errText(e));
   say('<div>' + t + '</div><button class="btn ghost" onclick="location.reload()">再試一次</button>');
   console.error(e);
 }
