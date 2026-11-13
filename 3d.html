@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
-<title>柏捷工地 3D 結構</title>
+<title>柏捷工地 3D</title>
 <!--
   3D 結構閱覽（使用者 2026-11-10：「先做結構體」、「點一個柱或梁，看它的配筋」就夠了；App、iPhone 網頁、電腦版都要，施工人員看不到）
   資料：BricsCAD「混凝土 → 上傳 3D 到工地App」傳到雲端 工地App/3D/<工地>/結構3D.json，收件服務 model3d 給老闆、主任、公司、開發者。
@@ -137,7 +137,7 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
 <div id="top">
   <div class="bar">
     <button class="btn ghost" id="back">‹ 返回</button>
-    <h1 id="title">3D 結構 <span class="sub" id="made"></span></h1>
+    <h1 id="title">3D <span class="sub" id="made"></span></h1>
     <button class="btn" id="viewBtn" style="display:none"></button>
     <button class="btn" id="reset">整棟</button>
   </div>
@@ -174,6 +174,17 @@ const SITE = P.get('site') || '';
 const EMBED = P.get('embed') === '1';
 // 配筋、鋼筋先藏起來（使用者 2026-11-13「3d目前想把配筋根鋼筋拿掉」→「先藏起來」：程式和資料留著，網址加 &rebar=1 才看得到）
 const REBAR_ON = P.get('rebar') === '1';
+// 3D 結構先藏起來（使用者 2026-11-13 用手機看了 SketchUp 3D：「3d結構功能先隱藏」）：程式和資料留著，網址加 &struct=1 才看得到。
+// 樓層表（M.floors）照常讀：SketchUp 照樓層高度切要用。沒有 SketchUp 模型的工地也不顯示 3D 結構（顯示「還沒有 SketchUp 模型」）。
+const ST_ON = P.get('struct') === '1';
+// 手機會留最多 10 分鐘的舊版（GitHub Pages max-age=600，使用者 11/13 看到舊的樓層按鈕）：打開時問網站上的是不是比較新，是就換新的（只換一次）
+(async () => {
+  try {
+    const r = await fetch(location.pathname + '?t=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
+    const lm = Date.parse(r.headers.get('Last-Modified') || ''), mine = Date.parse(document.lastModified);
+    if (r.ok && lm && mine && lm - mine > 1000 && P.get('v') !== String(lm)) { const u = new URL(location.href); u.searchParams.set('v', lm); location.replace(u.href); }
+  } catch (e) { }
+})();
 const msgEl = document.getElementById('msg');
 function say(html) { msgEl.innerHTML = html; msgEl.style.display = html ? '' : 'none'; }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -272,8 +283,20 @@ function skNameOf(o) {
   for (let x = o; x && x !== SK; x = x.parent) { const n = (x.userData && x.userData.name) || x.name; if (n && !/^(mesh|node|Mesh)?_?\d*$/.test(n)) a.unshift(n); }
   return [...new Set(a)].join(' ／ ');
 }
+/** 上傳時壓縮過（gzip，1f 8b 開頭；11/13 陳佩君 18.8 MB → 3.4 MB）就解開；沒壓縮的（巫紹安）照舊 */
+async function gunzipIf(buf) {
+  const u = new Uint8Array(buf);
+  if (u.length < 2 || u[0] !== 0x1f || u[1] !== 0x8b) return buf;
+  say('解開 SketchUp 模型…');
+  try {
+    if (typeof DecompressionStream === 'function') return await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+    const { gunzipSync } = await import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js');   // 舊 iPhone（iOS 16.4 以前）沒有 DecompressionStream
+    return gunzipSync(u).buffer;
+  } catch (e) { throw { error: 'SketchUp 模型解不開：' + (e && e.message || e) }; }
+}
 async function loadSk() {
-  const [buf, mod] = await Promise.all([skBytes(), import(GLTF_URL)]);
+  const [raw, mod] = await Promise.all([skBytes(), import(GLTF_URL)]);
+  const buf = await gunzipIf(raw);
   say('打開 SketchUp 模型…');
   const gltf = await new Promise((ok, bad) => new mod.GLTFLoader().parse(buf, '', ok, e => bad({ error: 'SketchUp 模型打不開：' + (e && e.message || e) })));
   const g = gltf.scene;
@@ -283,8 +306,9 @@ async function loadSk() {
   g.traverse(o => {
     if (!o.isMesh) return;
     (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { m.side = THREE.DoubleSide; });   // SketchUp 的面有正反面
-    // 黑色邊線（像 SketchUp 畫面）：太大的模型不畫，手機轉不動
-    if (verts < 1500000) o.add(new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry, 30), new THREE.LineBasicMaterial({ color: 0x2B2F33, transparent: true, opacity: 0.55 })));
+    // 黑色邊線（像 SketchUp 畫面）：太大的模型不畫，手機轉不動；花磚牆、格柵這種一塊幾萬個面的也不畫（洞的邊線密密麻麻、算很久）
+    const tris = (o.geometry.index ? o.geometry.index.count : (o.geometry.attributes.position || { count: 0 }).count) / 3;
+    if (verts < 1500000 && tris <= 30000) o.add(new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry, 30), new THREE.LineBasicMaterial({ color: 0x2B2F33, transparent: true, opacity: 0.55 })));
     skItems.push({ mesh: o, tag: '', name: '', mat: o.material });
   });
   return g;
@@ -306,13 +330,13 @@ let SK_SEL_MAT = null;
 /** 換畫面：'sk'＝SketchUp 模型、'st'＝3D 結構（灌漿區、切樓層） */
 function setView(v) {
   if (v === 'sk' && !SK) v = 'st';
-  if (v === 'st' && !hasStruct() && SK) v = 'sk';
+  if (v === 'st' && SK && (!hasStruct() || !ST_ON)) v = 'sk';   // 3D 結構先藏起來
   st.view = v;
   root.visible = rebarGroup.visible = v === 'st';
   if (SK) SK.visible = v === 'sk';
   st.sel = null; st.skSel = null; st.pour = null; st.rebar = null; st.focus = null; st.bars = false;
   const vb = document.getElementById('viewBtn');
-  vb.style.display = SK && hasStruct() ? '' : 'none';
+  vb.style.display = SK && hasStruct() && ST_ON ? '' : 'none';
   vb.textContent = v === 'sk' ? '🏗 3D 結構' : '🏠 SketchUp 模型';
   document.getElementById('title').firstChild.textContent = (M.site || SITE || '') + (v === 'sk' ? '・SketchUp 模型 ' : '・3D 結構 ');
   document.getElementById('made').textContent = v === 'sk' ? (SKMETA && SKMETA.modified ? '（' + String(SKMETA.modified).slice(0, 10) + ' 上傳）' : '') : (M.made ? '（' + String(M.made).slice(0, 10) + ' 匯出）' : '');
@@ -354,16 +378,48 @@ function columnFloors() {
   if (fl.length && fl[0].z < 0 && /^1F$/i.test(fl[0].n)) fl[0].z = 0;   // 1F 的柱從基礎長上來：1F FL 當 0
   return fl;
 }
+/**
+ * 高度原點：SketchUp 跟 3D 結構不一定一樣（巫紹安兩邊都是 1F FL＝0；陳佩君 SketchUp 是基礎底＝0、結構是 1F FL＝0，差 175）。
+ * 兩邊都有基礎（SketchUp 標籤／名字是「基礎」）就用基礎底對齊；沒有就當一樣。回傳 SketchUp 高度 − 結構高度（cm）。
+ */
+function skDz() {
+  const fb = (M.m || []).filter(m => m.k === '基礎' && m.b).map(m => m.b[2]);
+  const sb = skItems.filter(it => it.tag === '基礎' && it.box).map(it => it.box.min.y);
+  if (!fb.length || !sb.length) return 0;
+  const d = Math.min(...sb) - Math.min(...fb);
+  return Math.abs(d) < 1000 ? Math.round(d) : 0;
+}
+let SK_DZ = 0;
 function skFloorsCalc() {
   const isNum = v => v !== null && v !== '' && isFinite(+v);
-  let fl = (M.floors || []).filter(f => f && f.n && isNum(f.z)).map(f => ({ n: String(f.n), z: +f.z }));
+  let fl = (M.floors || []).filter(f => f && f.n && isNum(f.z)).map(f => ({ n: String(f.n), z: +f.z, h: isNum(f.h) ? +f.h : 0 }));
   if (!fl.length) fl = columnFloors();
-  fl.sort((a, b) => a.z - b.z);
-  const out = fl.map((f, i) => ({ n: f.n, lo: f.z - SK_CUT_BELOW, hi: i + 1 < fl.length ? fl[i + 1].z - SK_CUT_BELOW : 1e9 }));
-  if (out.length && SK) {   // 基礎：第一層下面還有沒取樓層名字的東西（取名 1F 的群組裡的基礎跟著 1F）
+  SK_DZ = skDz();
+  fl = fl.map(f => ({ n: f.n, z: f.z + SK_DZ, h: f.h || 0 })).sort((a, b) => a.z - b.z);
+  const lv = fl.map(f => ({ n: f.n, lo: f.z - SK_CUT_BELOW }));
+  // 樓層表沒有、設計師有標樓層名字的（陳佩君 3D 結構只建到 1F，SketchUp 標了 2F～RF）：
+  // 緊接在樓層表最上面那層的用「那層 FL＋層高」；再上去用那個名字的東西最低的地方（通常是梁底），
+  // 或下面那層標籤最高的地方（＝這層 FL）往下 40，取低的（陳佩君 RF 標籤只有屋頂上的東西：1820，4F 標籤到 1515）
+  const tagLo = {}, tagHi = {};
+  skItems.forEach(it => {
+    if (!it.isFloor || !it.box || it.tag === '基礎') return;
+    tagLo[it.tag] = Math.min(it.tag in tagLo ? tagLo[it.tag] : 1e9, it.box.min.y);
+    tagHi[it.tag] = Math.max(it.tag in tagHi ? tagHi[it.tag] : -1e9, it.box.max.y);
+  });
+  const top = fl[fl.length - 1];
+  let prev = lv.length ? lv[lv.length - 1].lo : -1e9, prevTag = top ? top.n : '', first = true;
+  Object.keys(tagLo).filter(t => !lv.some(f => f.n === t) && (!top || floorRank(t) > floorRank(top.n))).sort((a, b) => floorRank(a) - floorRank(b)).forEach(t => {
+    const byH = first && top && top.h > 0;
+    let lo = byH ? top.z + top.h - SK_CUT_BELOW : tagLo[t];
+    if (!byH && prevTag in tagHi) lo = Math.min(lo, tagHi[prevTag] - SK_CUT_BELOW);
+    first = false;
+    if (lo > prev + 150) { lv.push({ n: t, lo }); prev = lo; prevTag = t; }
+  });
+  const out = lv.map((f, i) => ({ n: f.n, lo: f.lo, hi: i + 1 < lv.length ? lv[i + 1].lo : 1e9 }));
+  if (out.length && SK) {   // 基礎：有標「基礎」的，或第一層下面還有沒取樓層名字的東西（取名 1F 的群組裡的基礎跟著 1F）
     const b = new THREE.Box3();
     skItems.filter(it => floorRank(it.tag) >= 1000).forEach(it => b.expandByObject(it.mesh));
-    if (!b.isEmpty() && b.min.y < out[0].lo - 5) out.unshift({ n: '基礎', lo: -1e9, hi: out[0].lo });
+    if (skItems.some(it => it.tag === '基礎') || (!b.isEmpty() && b.min.y < out[0].lo - 5)) out.unshift({ n: '基礎', lo: -1e9, hi: out[0].lo });
   }
   // 只有名字、樓層表沒有的樓層（例：屋突）：只看那個名字的
   skTags().filter(t => floorRank(t) < 1000 && !out.some(f => f.n === t)).forEach(t => out.push({ n: t, lo: -1e9, hi: 1e9, tagOnly: true }));
@@ -380,9 +436,12 @@ function skMarkOutside(floors) {
   const f2 = floors.filter(f => !f.tagOnly && f.n !== '基礎')[1];   // 第二層（通常是 2F）
   if (!f2) return false;
   const fp = new THREE.Box3();
-  skItems.forEach(it => { if (it.box && (it.isFloor ? floorRank(it.tag) >= floorRank(f2.n) : it.box.min.y >= f2.lo)) fp.union(it.box); });
+  // 沒取樓層名字的只算比 2F 樓板高 1 m 以上的：剛好在 2F 樓板高度的（陳佩君車庫的格柵屋頂）不算，範圍才不會把車庫、院子一起框進來
+  skItems.forEach(it => { if (it.box && (it.isFloor ? floorRank(it.tag) >= floorRank(f2.n) : it.box.min.y >= f2.lo + SK_CUT_BELOW + 100)) fp.union(it.box); });
   if (fp.isEmpty()) return false;
   const pad = 50;   // cm：外牆、雨遮外面一點點
+  const inFp = (x, z) => x >= fp.min.x - pad && x <= fp.max.x + pad && z >= fp.min.z - pad && z <= fp.max.z + pad;
+  const v = new THREE.Vector3();
   let any = false;
   skItems.forEach(it => {
     it.outside = false;
@@ -390,7 +449,15 @@ function skMarkOutside(floors) {
     const b = it.box, w = Math.max(1, b.max.x - b.min.x), d = Math.max(1, b.max.z - b.min.z);
     const ox = Math.max(0, Math.min(b.max.x, fp.max.x + pad) - Math.max(b.min.x, fp.min.x - pad));
     const oz = Math.max(0, Math.min(b.max.z, fp.max.z + pad) - Math.max(b.min.z, fp.min.z - pad));
-    if (ox * oz / (w * d) < 0.5) { it.outside = true; any = true; }
+    let ratio = ox * oz / (w * d);
+    // 點很多的（花磚牆、格柵屋頂）：外框會把建物、車庫一起框進來，改看點有幾成在建物範圍裡
+    const p = it.mesh.geometry && it.mesh.geometry.attributes.position;
+    if (ratio >= 0.5 && ratio < 0.999 && p && p.count >= 1000) {
+      const step = Math.max(1, Math.floor(p.count / 3000)); let n = 0, inn = 0;
+      for (let i = 0; i < p.count; i += step) { v.fromBufferAttribute(p, i).applyMatrix4(it.mesh.matrixWorld); n++; if (inFp(v.x, v.z)) inn++; }
+      if (n) ratio = inn / n;
+    }
+    if (ratio < 0.5) { it.outside = true; any = true; }
   });
   return any;
 }
@@ -466,12 +533,15 @@ function start() {
   }
   build();
   if (SK) { scene.add(SK); skReady(); skClipSetup(); }
+  // 測試用：看分樓層的結果（主控台打 __skDebug()）
+  window.__skDebug = () => ({ dz: SK_DZ, floors: SKF.map(f => [f.n, Math.round(f.lo), Math.round(f.hi), f.tagOnly ? 'tag' : f.other ? 'other' : '']),
+    outside: skItems.filter(it => it.outside).map(it => [it.name || '(無名)', (it.mesh.geometry.index ? it.mesh.geometry.index.count : 0) / 3]) });
   bindInput(); bindMarking();
   // 打開先看 SketchUp 模型（使用者選 A）；要看灌漿區、切樓層按「🏗 3D 結構」
   setView(SK ? 'sk' : 'st');
   document.getElementById('viewBtn').onclick = () => { setView(st.view === 'sk' ? 'st' : 'sk'); apply(); fitTo(visibleObjs(), false); };
   apply(); layout(); fitTo(visibleObjs(), false);
-  say(skErr && !SK ? '<div class="muted">SketchUp 模型打不開，先看 3D 結構：' + esc(skErr) + '</div>' : '');
+  say(skErr && !SK && ST_ON ? '<div class="muted">SketchUp 模型打不開，先看 3D 結構：' + esc(skErr) + '</div>' : '');
   if (skErr && !SK) setTimeout(() => say(''), 6000);
   setTimeout(hideHint, 7000);
   shots();
@@ -913,14 +983,18 @@ function applyView(v) {
   }
   apply();
 }
+/** 圈在 3D 結構上、3D 結構先藏起來了（ST_ON＝false）：SketchUp 的座標跟結構不一樣，只看字、不換畫面、不轉鏡頭 */
+function markAway(m) { return !!(m && SK && !ST_ON && markView(m) === 'st'); }
 function selectMark(id, jump) {
   const m = marks.find(x => x.id === id); if (!m) return;
   st.markSel = id; st.sel = null; st.draft = null; st.sideMin = false;
+  const away = markAway(m);
   // 跳回圈的時候的樓層、種類、鋼筋，再轉到那個位置（點圈、點清單、按「轉到這裡」都會）
-  if (m.cam && m.cam.v) applyView(m.cam.v);
+  if (away) { }
+  else if (m.cam && m.cam.v) applyView(m.cam.v);
   else if (st.view !== 'st' && hasStruct()) { setView('st'); apply(); }   // 以前的圈（沒記畫面）都是 3D 結構
   st.markSel = id;
-  if ((jump || (m.cam && m.cam.v)) && m.cam && m.cam.t) { cam.target = CAD2T(m.cam.t); cam.dist = m.cam.d || cam.dist; cam.theta = m.cam.th; cam.phi = m.cam.ph; placeCamera(); }
+  if (!away && (jump || (m.cam && m.cam.v)) && m.cam && m.cam.t) { cam.target = CAD2T(m.cam.t); cam.dist = m.cam.d || cam.dist; cam.theta = m.cam.th; cam.phi = m.cam.ph; placeCamera(); }
   renderSide(); layout(); needs = true;
 }
 async function markApi(body) {
@@ -935,7 +1009,7 @@ function markSection() {
   const head = '<div style="font-weight:700;margin:2px 0 6px">📍 要改進的地方' + (marks.length ? '（待處理 ' + marks.filter(m => !m.done).length + '）' : '') + '</div>';
   if (!marks.length) return head + '<div class="muted" style="margin:0 0 10px">還沒有人圈。按畫面右上角「✏️ 圈起來」，用手指圈出要改進的地方。</div>';
   // 有 SketchUp 模型時：別的畫面圈的寫一下是哪個（點了會換過去）
-  const where = m => SK && hasStruct() && markView(m) !== st.view ? ' <span class="muted">（' + (markView(m) === 'sk' ? 'SketchUp 模型' : '3D 結構') + '）</span>' : '';
+  const where = m => SK && markView(m) !== st.view ?' <span class="muted">（' + (markView(m) === 'sk' ? 'SketchUp 模型' : '3D 結構') + '）</span>' : '';
   return head + marks.slice().sort((a, b) => (a.done - b.done) || (b.at - a.at)).map(m =>
     '<div class="mk' + (m.done ? ' done' : '') + (st.markSel === m.id ? ' on' : '') + '" data-mk="' + esc(m.id) + '"><span class="no">' + markNo(m) + '</span>' + esc(m.text) + where(m)
     + '<span class="st ' + (m.done ? 'd">已改好' : 'o">待處理') + '</span><div class="who">' + esc(m.by) + '・' + when(m.at)
@@ -1564,14 +1638,16 @@ function renderSide() {
         : '<div>在畫面<b>最上面的框</b>寫要改進什麼，按「送出」；不要了按「取消圈」。可以先轉動看清楚，圈會黏在模型上。</div>')
       + '<div class="muted" style="margin-top:6px">送出後老闆、主任、公司、開發者都看得到；開發者、老闆、主任會收到通知，開發者改好會按「已改好」。</div></div>';
   } else if (mk) {
-    const dev = me && me.role === '管理者', mine = me && me.name === mk.by;
+    const dev = me && me.role === '管理者', mine = me && me.name === mk.by, away = markAway(mk);
+    const awayFl = away && mk.cam && mk.cam.v && mk.cam.v.f && mk.cam.v.f !== '全部' ? mk.cam.v.f : '';
     T.textContent = '📍 要改進的地方 ' + markNo(mk);
     h += '<div class="card"><div class="t" style="font-size:16px">' + esc(mk.text) + '</div>'
       + '<div class="muted" style="margin-top:4px">' + esc(mk.by) + '・' + when(mk.at) + (mk.member ? '・' + esc(mk.member) : '') + '</div>'
       + '<div style="margin-top:6px">' + (mk.done ? '<span class="st d">已改好</span> <span class="muted">' + esc(mk.doneBy || '') + ' ' + when(mk.doneAt) + '</span>' : '<span class="st o">待處理</span>') + '</div>'
-      + '<div class="row"><button class="btn" id="markGo">轉到這裡</button>'
+      + (away ? '<div class="tip" style="margin-top:8px">📌 這個是圈在「3D 結構」上的' + (awayFl ? '（圈的時候看 ' + esc(awayFl) + '）' : '') + '。3D 結構先藏起來了，SketchUp 模型上不會出現這個圈；照上面寫的字和位置處理就好。</div>' : '')
+      + '<div class="row">' + (away ? '' : '<button class="btn" id="markGo">轉到這裡</button>')
       + (dev ? '<button class="btn solid" id="markDone">' + (mk.done ? '改回待處理' : '✅ 已改好') + '</button>' : '')
-      + (dev || mine ? '<button class="btn" id="markEdit">✏️ 修改</button><button class="btn ghost" id="markDel">刪除</button>' : '')
+      + (dev || mine ? (away ? '' : '<button class="btn" id="markEdit">✏️ 修改</button>') + '<button class="btn ghost" id="markDel">刪除</button>' : '')
       + '<button class="btn ghost" id="markClose">關閉</button><span class="muted" id="markErr2"></span></div></div>';
     h += markSection();
   } else if (st.view === 'sk' && st.skSel) {
@@ -1582,9 +1658,9 @@ function renderSide() {
       + '<div class="row"><button class="btn ghost" id="skUnsel">取消</button></div></div>' + markSection();
   } else if (st.view === 'sk') {
     T.textContent = '🏠 SketchUp 模型';
-    h += (hasStruct() ? '<div class="tip">🚚 <b>' + (SKF.length ? '灌漿區' : '灌漿區、切樓層') + '</b>：按上面「🏗 3D 結構」</div>' : '')
+    h += (hasStruct() && ST_ON ? '<div class="tip">🚚 <b>' + (SKF.length ? '灌漿區' : '灌漿區、切樓層') + '</b>：按上面「🏗 3D 結構」</div>' : '')
       + markSection()
-      + '<div class="muted" style="margin:4px 0 8px">' + (SKF.length ? '上面點一層只看那一層（照 BricsCAD 3D 結構的樓層高度切；有取名「1F」「2F」的元件就照名字）；'
+      + '<div class="muted" style="margin:4px 0 8px">' + (SKF.length ? '上面點一層只看那一層（照樓層高度切；有標「1F」「2F」的群組、元件、標籤就照名字）' + (SKF.some(f => f.other) ? '；建物外面的（圍牆、院子、樹…）在「其他」' : '') + '；'
         : skTags().length > 1 ? '上面的標籤可以一個一個關掉、打開（跟 SketchUp 的「標籤」一樣）；' : '') + '點模型看它是哪個群組、元件。</div>';
   } else if (st.rebar) {
     const m = st.rebar;
@@ -1766,6 +1842,7 @@ function shots() {
     marks.push({ id: 'k1', at: Date.now() - 1800e3, by: '測試主任', text: '坡道扶手高度再確認', pos: [1800, 260, 60, 220], cam: { v: { sk: 1, hide: [] } }, member: 'SketchUp 無障礙坡道', done: false });
     marks.push({ id: 'k2', at: Date.now() - 86400e3, by: '測試老闆', text: '2F 這支梁再確認', pos: [650, 300, 700, 90], member: '2F 梁 G1', done: false });
     if (P.get('skmark') === 'sel') st.markSel = 'k1';
+    if (P.get('skmark') === 'st') selectMark('k2', true);   // 圈在 3D 結構上的（3D 結構藏起來時只看字）
   }
   if (SK && st.view === 'sk' && P.get('skhide')) { st.skHide = new Set(P.get('skhide').split(',')); fitTo(skItems.filter(it => !st.skHide.has(it.tag || '未加標籤')).map(it => it.mesh), true); }
   if (SK && st.view === 'sk' && P.get('sksel')) st.skSel = skItems.find(it => it.name.includes(P.get('sksel'))) || null;
@@ -1838,11 +1915,13 @@ try {
   THREE = three; M = model || { m: [], floors: [], groups: [], site: SITE };   // 只有 SketchUp 模型、還沒有 3D 結構
   if (SKMETA) {
     try { SK = await loadSk(); }
-    catch (e) { skErr = errText(e); console.error(e); if (!hasStruct()) throw e; }   // 有 3D 結構就先看 3D 結構
+    catch (e) { skErr = errText(e); console.error(e); if (!hasStruct() || !ST_ON) throw e; }   // 有 3D 結構（而且沒藏起來）就先看 3D 結構
   }
+  if (!SK && !ST_ON) throw { error: 'NONE' };   // 3D 結構先藏起來：只有 3D 結構的工地也當作還沒有
   start();
 } catch (e) {
-  const t = e && e.error === 'NONE' ? '這個工地還沒有 3D。<br><span class="muted">SketchUp 模型：電腦上把 .skp 拖到「SketchUp 傳到工地App」；3D 結構：BricsCAD「混凝土」按「全部樓層」，再按「上傳 3D 到工地App」。</span>' : esc(errText(e));
+  const t = e && e.error === 'NONE' ? '這個工地還沒有 SketchUp 模型。<br><span class="muted">電腦上把 .skp 拖到「SketchUp 傳到工地App」就有了'
+    + (ST_ON ? '；3D 結構：BricsCAD「混凝土」按「全部樓層」，再按「上傳 3D 到工地App」。' : '。') + '</span>' : esc(errText(e));
   say('<div>' + t + '</div><button class="btn ghost" onclick="location.reload()">再試一次</button>');
   console.error(e);
 }
