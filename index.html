@@ -129,6 +129,12 @@ textarea { min-height:76px; resize:vertical; }
 .loctag { display:block; width:100%; margin-top:4px; padding:3px 6px; border:1.5px solid var(--navy); border-radius:7px; background:#fff; color:var(--navy);
   font:inherit; font-size:13px; font-weight:bold; text-align:left; line-height:1.25; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
 .loctag.on { border-color:#E0662B; background:#FFF3E6; color:#B5440F; }
+/* 單據／材料現場（第 29 版，2026-11-13） */
+.kindtag { display:block; width:100%; margin-top:4px; padding:3px 6px; border:1.5px solid #E9B56B; border-radius:7px; background:#FDE7C7; color:#8A4B00; font-size:13px; font-weight:bold; text-align:left; }
+.kindtag.site { border-color:#8CC4A6; background:#DFF0E6; color:#1F5E44; }
+.kindpick { border:1px solid var(--line); background:#fff; color:#5D7486; border-radius:16px; padding:6px 12px; font-size:14px; }
+.kindpick.on { border:2px solid #8A4B00; background:#FDE7C7; color:#8A4B00; font-weight:bold; }
+.kindpick.site.on { border-color:#1F5E44; background:#DFF0E6; color:#1F5E44; }
 .locline { margin:-4px 0 10px; padding:6px 10px; background:#FFF3E6; color:#B5440F; font-weight:bold; border-radius:0 0 10px 10px; }
 .thumb img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 .thumb .x { position:absolute; top:3px; right:3px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:10px; padding:1px 8px; font-weight:bold; }
@@ -298,7 +304,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/13b';
+var WEB_VERSION = '11/13c';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1167,6 +1173,8 @@ function renderEdit() {
     '<div class="label" style="margin-top:10px">工數</div><div class="chips">' +
     s.hours.map(function (x) { var l = hoursLabel(x); return chip('hours', x, /工$/.test(l) ? x : l + ' ' + x, d.hours === x); }).join('') + '</div>' +
     (hasHours() ? hoursInputs(d) : '') + '</div>';
+  // 做了什麼放在工數、加班下面、照片上面（使用者 2026-11-13 紅線：先寫做什麼，再拍照）
+  h += '<div class="card"><div class="label">做了什麼（位置、內容）</div><textarea data-f="text" placeholder="例：地梁綁紮（A 區）">' + esc(d.text) + '</textarea></div>';
   // 照片放在工數正下方（使用者 2026-11-12「紅色要拉上來」）
   var n = d.remote.length + d.local.length;
   h += '<div class="card"><div class="label">照片（' + n + ' 張）</div><div class="thumbs">';
@@ -1188,17 +1196,22 @@ function renderEdit() {
   h += '</div>';
   // 單據照片（材料單、重機具單；只有開發者、老闆、主任和自己看得到；App 0.9.20 起有）
   var rn = d.remoteR.length + d.localR.length;
-  h += '<div class="card" style="background:#FFFBF0"><div class="label">🧾 單據照片（材料單、重機具單；' + rn + ' 張）</div>' + (rn ? '<div class="thumbs">' : '');
+  h += '<div class="card" style="background:#FFFBF0"><div class="label">🧾 單據照片（材料單、重機具單、材料現場；' + rn + ' 張）</div>' + (rn ? '<div class="thumbs">' : '');
   // 每張單據下面一個施作位置（使用者 2026-11-11）：填了＝橘色「📍 2F 樓板」，沒填＝有框的「＋ 施作位置」，點了改
   var locTag = function (loc, key) { return '<button class="loctag' + (loc ? ' on' : '') + '" data-act="rloc" data-v="' + esc(key) + '">' + (loc ? '📍 ' + esc(loc) : '＋ 施作位置') + '</button>'; };
-  d.remoteR.forEach(function (id) { h += '<div><div class="thumb"><img data-pid="' + esc(id) + '" alt=""><button class="x" data-act="rmremoter" data-v="' + esc(id) + '">✕</button></div>' + locTag(d.rLocs[id] || '', 'r:' + id) + '</div>'; });
-  d.localR.forEach(function (p, i) { h += '<div><div class="thumb"><img src="' + p.url + '" alt=""><button class="x" data-act="rmlocalr" data-v="' + i + '">✕</button><span class="new">未上傳</span></div>' + locTag(p.loc || '', 'l:' + i) + '</div>'; });
+  // 單據／材料現場（第 29 版，使用者 2026-11-13）：點一下換
+  var kindTag = function (kind, key) { return '<button class="kindtag' + (kind === 'site' ? ' site' : '') + '" data-act="rkind" data-v="' + esc(key) + '">' + (kind === 'site' ? '📍 現場 ⇄' : '🧾 單據 ⇄') + '</button>'; };
+  d.remoteR.forEach(function (id) { h += '<div><div class="thumb"><img data-pid="' + esc(id) + '" alt=""><button class="x" data-act="rmremoter" data-v="' + esc(id) + '">✕</button></div>' + kindTag(d.rKinds[id] || '', 'r:' + id) + locTag(d.rLocs[id] || '', 'r:' + id) + '</div>'; });
+  d.localR.forEach(function (p, i) { h += '<div><div class="thumb"><img src="' + p.url + '" alt=""><button class="x" data-act="rmlocalr" data-v="' + i + '">✕</button><span class="new">未上傳</span></div>' + kindTag(p.kind || '', 'l:' + i) + locTag(p.loc || '', 'l:' + i) + '</div>'; });
   var locs = locChoices(d);
-  h += (rn ? '</div>' : '') + '<div class="label" style="margin-top:4px">下一張單據的施作位置</div><input type="text" data-f="nextLoc" maxlength="60" value="' + esc(d.nextLoc) + '" placeholder="例：2F 樓板（可以不填，之後再補）">' +
+  h += (rn ? '</div>' : '') + '<div class="label" style="margin-top:4px">下一張的施作位置</div><input type="text" data-f="nextLoc" maxlength="60" value="' + esc(d.nextLoc) + '" placeholder="例：2F 樓板（可以不填，之後再補）">' +
     (locs.length ? '<div class="chips" style="margin-top:6px">' + locs.map(function (c) { return chip('nextloc', c, c, d.nextLoc.trim() === c, true); }).join('') + '</div>' : '') +
-    '<div class="row2" style="margin-top:8px"><button class="ghost" style="margin:0" data-act="camr">📷 拍單據</button><button class="ghost" style="margin:0" data-act="pickr">🖼 從相簿選</button></div>' +
-    '<div class="note" style="margin-top:6px">單據只有開發者、老闆、主任和你自己看得到。施作位置可以先填再拍，或拍完點單據下面補。</div></div>';
-  h += '<div class="card"><div class="label">做了什麼（位置、內容）</div><textarea data-f="text" placeholder="例：地梁綁紮（A 區）">' + esc(d.text) + '</textarea></div>';
+    // 先點下一張是單據還是材料現場，再拍照或選相簿（使用者 2026-11-13「直接做成拍照跟相簿兩個按鈕，然後你有分單據跟現場」）
+    '<div class="row" style="margin-top:8px;gap:6px"><span class="sub" style="font-size:14px">下一張是：</span>' +
+    '<button class="kindpick' + (d.nextSite ? '' : ' on') + '" data-act="nextsite" data-v="0">🧾 單據</button>' +
+    '<button class="kindpick site' + (d.nextSite ? ' on' : '') + '" data-act="nextsite" data-v="1">📍 材料現場</button></div>' +
+    '<div class="row2" style="margin-top:8px"><button class="ghost" style="margin:0" data-act="camr">📷 拍照</button><button class="ghost" style="margin:0" data-act="pickr">🖼 相簿</button></div>' +
+    '<div class="note" style="margin-top:6px">單據、材料現場照片只有開發者、老闆、主任和你自己看得到。分錯了點照片下面的「⇄」換；施作位置可以先填再拍，或拍完點照片下面補。</div></div>';
   if (S.err) h += '<div class="err">' + esc(S.err) + '</div>';
   h += '<button class="big" data-act="save"' + (editOk() ? '' : ' disabled') + '>' + (S.busy ? esc(S.progress || '上傳中…') : proxy ? '送出（等管理者同意）' : d.forName === '?' ? '先選是誰的' : !d.id && d.forName ? '上傳（幫 ' + esc(d.forName) + ' 補）' : '上傳') + '</button>';
   if (d.id && !proxy) h += '<button class="ghost red" data-act="del">刪除這一筆</button>';
@@ -1220,8 +1233,8 @@ function renderView() {
   h += '<div class="full">' + (e.photos || []).map(function (id) { return '<img data-pid="' + esc(id) + '" data-cap="' + esc(cap) + '" alt="">'; }).join('') + '</div>';
   if (!(e.photos || []).length) h += '<div class="card note">沒有照片</div>';
   if ((e.receipts || []).length) h += '<div class="card"><div class="ttl">🧾 單據照片（' + e.receipts.length + ' 張）</div></div><div class="full">' + e.receipts.map(function (id) {
-    var loc = (e.receiptLocs || {})[id];
-    return '<img data-pid="' + esc(id) + '" data-cap="' + esc('🧾 單據照片\n' + (loc ? '📍 施作位置：' + loc : '')) + '" alt="">' + (loc ? '<div class="locline">📍 施作位置：' + esc(loc) + '</div>' : '');
+    var loc = (e.receiptLocs || {})[id], t = (e.receiptKinds || {})[id] === 'site' ? '📍 材料現場' : '🧾 單據照片';
+    return '<img data-pid="' + esc(id) + '" data-cap="' + esc(t + '\n' + (loc ? '📍 施作位置：' + loc : '')) + '" alt="">' + (loc ? '<div class="locline">📍 施作位置：' + esc(loc) + '</div>' : '');
   }).join('') + '</div>';
   return h + '</div>';
 }
@@ -1432,7 +1445,8 @@ function dayPhotos(log, ws, cats, date) {
   });
   ws.forEach(function (e) { (e.receipts || []).forEach(function (id) {
     var loc = (e.receiptLocs || {})[id];   // 單據的施作位置（收件服務第 18 版）
-    out.push({ id: id, w: 1, cat: '材料單據', line: '👷 ' + e.name + '（' + e.category + '）' + (loc ? '\n📍 ' + loc : ''), date: roc });
+    var site = (e.receiptKinds || {})[id] === 'site' ? '材料現場・' : '';   // 第 29 版
+    out.push({ id: id, w: 1, cat: '材料單據', line: '👷 ' + site + e.name + '（' + e.category + '）' + (loc ? '\n📍 ' + loc : ''), date: roc });
   }); });
   return out;
 }
@@ -1996,6 +2010,8 @@ function openEdit(e) {
     remoteR: e ? (e.receipts || []).slice() : [], removedR: [], localR: [],
     // 單據的施作位置（收件服務第 18 版，使用者 2026-11-11）：雲端編號 → 位置；rLocs0＝打開時雲端上的；nextLoc＝下一張的
     rLocs: Object.assign({}, e && e.receiptLocs || {}), rLocs0: Object.assign({}, e && e.receiptLocs || {}), nextLoc: '',
+    // 單據／材料現場（收件服務第 29 版，使用者 2026-11-13）：雲端編號 → 'site'；nextSite＝下一張是材料現場
+    rKinds: Object.assign({}, e && e.receiptKinds || {}), rKinds0: Object.assign({}, e && e.receiptKinds || {}), nextSite: false,
     touchedWx: false, lastAuto: '', proxy: !!(e && e.proxy), pending: pending, reqStatus: e ? (e.reqStatus || '') : '', orig: e
   };
   S.wx = {};
@@ -2042,7 +2058,7 @@ function addFiles(files, receipt) {
       if (S.d !== d) return;
       if (list.length > 1) show('加入照片 ' + (i + 1) + '/' + list.length + '…');
       return shrink(f).then(function (p) {
-        if (receipt) { p.loc = String(d.nextLoc || '').trim().slice(0, 60); d.localR.push(p); } else d.local.push(p);   // 單據帶「下一張的施作位置」
+        if (receipt) { p.loc = String(d.nextLoc || '').trim().slice(0, 60); p.kind = d.nextSite ? 'site' : ''; d.localR.push(p); } else d.local.push(p);   // 單據帶「下一張的施作位置」「單據／現場」
       }, function () { bad++; });
     });
   });
@@ -2346,6 +2362,15 @@ var ACT = {
     if (remote) { if (nv) d.rLocs[key] = nv; else delete d.rLocs[key]; } else p.loc = nv;
     render();
   },
+  // 單據／材料現場（第 29 版）：rkind＝換某一張（r:雲端編號、l:還沒傳的第幾張）；nextsite＝下一張是哪一種
+  rkind: function (v) {
+    var d = S.d; if (!d || S.busy) return;
+    var remote = v.indexOf('r:') === 0, key = v.slice(2), p = remote ? null : d.localR[+key];
+    if (!remote && !p) return;
+    if (remote) { if (d.rKinds[key] === 'site') delete d.rKinds[key]; else d.rKinds[key] = 'site'; } else p.kind = p.kind === 'site' ? '' : 'site';
+    render();
+  },
+  nextsite: function (v) { S.d.nextSite = v === '1'; render(); },
   rmremoter: function (v) { var d = S.d; d.remoteR = d.remoteR.filter(function (x) { return x !== v; }); d.removedR.push(v); render(); },
   rmlocalr: function (v) { S.d.localR.splice(+v, 1); render(); },
   cam: function () { pickPhoto('photo', true); },
@@ -2377,7 +2402,7 @@ var ACT = {
     batches.forEach(function (b) {
       chain = chain.then(function () {
         S.progress = todo.length === 1 ? '上傳照片…' : '上傳照片 ' + (done + 1) + '–' + (done + b.length) + '/' + todo.length + '…'; render();
-        return api('photos', { id: d.id, items: b.map(function (x) { return { name: (x.r ? '單據_' : '') + x.p.name, mime: 'image/jpeg', data: x.p.data, receipt: x.r, loc: x.r ? (x.p.loc || '') : '' }; }) });
+        return api('photos', { id: d.id, items: b.map(function (x) { return { name: (x.r ? '單據_' : '') + x.p.name, mime: 'image/jpeg', data: x.p.data, receipt: x.r, loc: x.r ? (x.p.loc || '') : '', kind: x.r ? (x.p.kind || '') : '' }; }) });
       }).then(function (r) {
         b.forEach(function (x, k) {
           var res = (r.results || [])[k] || {};
@@ -2386,6 +2411,7 @@ var ACT = {
           if (x.r) {
             d.remoteR.push(res.fileId); d.localR = d.localR.filter(function (y) { return y !== x.p; });
             if (x.p.loc) { d.rLocs[res.fileId] = x.p.loc; d.rLocs0[res.fileId] = x.p.loc; }   // 位置跟著傳上去了
+            if (x.p.kind) { d.rKinds[res.fileId] = x.p.kind; d.rKinds0[res.fileId] = x.p.kind; }   // 單據／現場也是
           }
           else { d.remote.push(res.fileId); d.local = d.local.filter(function (y) { return y !== x.p; }); }
         });
@@ -2400,6 +2426,14 @@ var ACT = {
           S.progress = '存施作位置 ' + (i + 1) + '/' + changed.length + '…'; render();
           return api('rcptloc', { id: d.id, fileId: id, loc: d.rLocs[id] || '' });
         }).then(function () { d.rLocs0[id] = d.rLocs[id] || ''; });
+      });
+      // 單據⇄現場有換的（第 29 版）
+      var kc = d.remoteR.filter(function (id) { return (d.rKinds[id] || '') !== (d.rKinds0[id] || ''); });
+      kc.forEach(function (id, i) {
+        c2 = c2.then(function () {
+          S.progress = '存單據／現場 ' + (i + 1) + '/' + kc.length + '…'; render();
+          return api('rcptkind', { id: d.id, fileId: id, kind: d.rKinds[id] || '' });
+        }).then(function () { d.rKinds0[id] = d.rKinds[id] || ''; });
       });
       return c2;
     });
