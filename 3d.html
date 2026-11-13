@@ -1460,7 +1460,7 @@ function renderSide() {
     T.textContent = '🏠 SketchUp 模型';
     h += (hasStruct() ? '<div class="tip">🚚 <b>灌漿區、切樓層</b>：按上面「🏗 3D 結構」</div>' : '')
       + markSection()
-      + '<div class="muted" style="margin:4px 0 8px">上面的標籤可以一個一個關掉、打開（跟 SketchUp 的「標籤」一樣）；點模型看它是哪個群組、元件。</div>';
+      + '<div class="muted" style="margin:4px 0 8px">' + (skTags().length > 1 ? '上面的標籤可以一個一個關掉、打開（跟 SketchUp 的「標籤」一樣）；' : '') + '點模型看它是哪個群組、元件。</div>';
   } else if (st.rebar) {
     const m = st.rebar;
     const job = jobsOf(m).find(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
