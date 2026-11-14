@@ -12,10 +12,13 @@
 //   大＝📅 這個月的月曆＋這週行程＋待辦（跟 Android 的「行事曆」小工具一樣）
 //   特大（只有 iPad）＝左邊月曆、右邊今日提醒＋這週行程＋待辦
 //   鎖定畫面也可以放（今日提醒）；Mac（macOS 14 以上）可以把 iPhone 的這個小工具放到 Mac 桌面
-// 「Parameter」打字可以換內容：消息＝📣 最新消息、提醒＝⏰ 今日提醒、行事曆＝📅 這週行程
+// 開發者（管理者）放最完整的（使用者 2026-11-14「開發人員的不管在手機還是蘋果，她的小工具都能支援到最完整的功能」「有日誌跟提醒功能」）：
+//   特大＝跟摺疊機一樣三欄：月曆＋今日提醒｜這週＋待辦｜今天的日誌＋最新消息
+//   大＝月曆＋今日提醒＋今天的日誌＋這週＋待辦＋最新消息（每樣少幾行）；中＝今日提醒＋日誌＋待辦
+// 「Parameter」打字可以換內容：消息＝📣 最新消息、提醒＝⏰ 今日提醒、行事曆＝📅 這週行程、日誌＝📋 今天的日誌
 // 點小工具：打開 Scriptable，顯示完整的清單（待辦可以打勾）
 
-const VER = '11/10b';
+const VER = '11/14a';
 const API = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
 const WEB = 'https://a0923337553-ai.github.io/bojie-site/';
 const SELF = WEB + 'bojie-widget.js';
@@ -117,10 +120,11 @@ const R = (t, k) => ({ t: t, k: k || 0 });
 /** 收件服務的「今天」不是今天（昨天拿的）：不能把昨天的「今天…」當成今天 */
 const stale = f => !!(f && f.today && f.today !== ymd(new Date()));
 
-function remRows(f) {
+/** noLog：旁邊已經有「📋 今天的日誌」（開發者）→「📋 A、B 今天還沒填施工日誌」那行不用重複 */
+function remRows(f, noLog) {
   if (!f) return [];
   if (stale(f)) return [R('還沒有今天的提醒，點一下更新', 3)];
-  const list = (f.reminders || []).map(r => R(r.text, r.hot ? 1 : 0));
+  const list = (f.reminders || []).filter(r => !(noLog && /今天還沒填施工日誌$/.test(String(r.text || '')))).map(r => R(r.text, r.hot ? 1 : 0));
   return list.length ? list : [R('今天沒有要特別注意的事 👍', 3)];
 }
 
@@ -180,6 +184,35 @@ function todoList(f) {
   return open.concat(done);
 }
 const todoLabel = t => (t.done ? '☑ （' + t.site + '）' + t.text + '　— ' + (t.by || '有人') + ' 完成' : '☐ （' + t.site + '）' + t.text);
+
+/** 開發者（管理者）：小工具放最完整的 */
+const isDev = f => !!(f && f.role === '管理者');
+/**
+ * 今天的日誌（開發者）：進行中的工地（跟收件服務一樣：開工了、還沒完工、不算測試）裡，
+ * 今日提醒那行「📋 A、B 今天還沒填施工日誌」寫到的＝還沒填，其他＝已填。收件服務的「今天」不是今天＝null
+ */
+function logToday(f) {
+  if (!f || !f.today || stale(f)) return null;
+  const today = f.today, empty = {};
+  (f.reminders || []).forEach(r => {
+    const m = /^📋 (.+) 今天還沒填施工日誌$/.exec(String(r.text || ''));
+    if (m) m[1].split('、').forEach(n => { empty[n.trim()] = 1; });
+  });
+  return (f.sites || []).filter(s => !/測試/.test(s.name || '') && (!s.start || s.start <= today) && (!s.end || s.end >= today))
+    .map(s => ({ site: s.name, done: !empty[s.name] }));
+}
+function logRows(f) {
+  const l = logToday(f);
+  if (!l) return [R('還沒有今天的資料，點一下更新', 3)];
+  if (!l.length) return [R('今天沒有進行中的工地', 3)];
+  return l.map(x => R((x.done ? '✓ ' : '✗ ') + x.site + (x.done ? ' 已填' : ' 還沒填'), x.done ? 4 : 1));
+}
+/** 擠成一行：📋 日誌　✓巫紹安　✗陳佩君（全部填了＝綠字，有還沒填的＝紅字） */
+function logLine(f) {
+  const l = logToday(f);
+  if (!l || !l.length) return null;
+  return { t: '📋 日誌　' + l.map(x => (x.done ? '✓' : '✗') + x.site).join('　'), ok: l.every(x => x.done) };
+}
 
 /** 最新消息前面的標籤（跟 App 一樣） */
 function newsLabel(kind, tag) {
@@ -347,7 +380,7 @@ function buildWidget(d, fam, p) {
   p = String(p || '').trim();
   const w = new ListWidget();
   w.refreshAfterDate = new Date(Date.now() + 15 * 60000);
-  const kind = /消息|news/i.test(p) ? 'news' : /行事曆|月曆|行程|cal/i.test(p) ? 'cal' : /提醒|rem/i.test(p) ? 'rem' : '';
+  const kind = /消息|news/i.test(p) ? 'news' : /行事曆|月曆|行程|cal/i.test(p) ? 'cal' : /提醒|rem/i.test(p) ? 'rem' : /日誌|log/i.test(p) ? 'log' : '';
   w.url = 'scriptable:///run/' + encodeURIComponent(Script.name()) + (kind ? '?show=' + kind : '');
   const f = d.f;
 
@@ -377,8 +410,59 @@ function buildWidget(d, fam, p) {
   const big = fam === 'large' || fam === 'extraLarge';
   const todos = todoList(f);
   const show = kind || (big ? 'cal' : 'rem');
+  const dev = isDev(f);
+  const Y = new Date().getFullYear(), M = new Date().getMonth() + 1;
 
-  if (fam === 'extraLarge' && show !== 'news') {
+  if (fam === 'extraLarge' && dev && (show === 'cal' || show === 'rem')) {
+    // 開發者 iPad 特大：跟摺疊機「全部資料」一樣三欄（多了今天的日誌）
+    header(w, '📅 ' + Y + ' 年 ' + M + ' 月　柏捷工地', d, 13.5);
+    const row = w.addStack(); row.layoutHorizontally(); row.topAlignContent();
+    const c1 = row.addStack(); c1.layoutVertically(); c1.size = new Size(262, 0);
+    const weeks = monthGrid(c1, f);
+    c1.addSpacer(6);
+    txt(c1, '⏰ 今日提醒', 12, COL.head, { bold: true });
+    rows(c1, remRows(f, true), weeks >= 6 ? 4 : 5, 11.5);
+    c1.addSpacer();
+    row.addSpacer(14);
+    const c2 = row.addStack(); c2.layoutVertically(); c2.size = new Size(215, 0);
+    txt(c2, weekTitle(f), 12, COL.head, { bold: true });
+    weekBlock(c2, f, todos ? 9 : 15, 11.5);
+    if (todos) {
+      divider(c2);
+      txt(c2, '✅ 待辦 ' + todos.filter(t => !t.done).length, 12, COL.green, { bold: true });
+      rows(c2, todoRows(todos, 4), 9, 11.5);
+    }
+    c2.addSpacer();
+    row.addSpacer(14);
+    const c3 = row.addStack(); c3.layoutVertically();
+    txt(c3, '📋 今天的日誌', 12, COL.head, { bold: true });
+    rows(c3, logRows(f), 4, 11.5);
+    divider(c3);
+    txt(c3, '📣 最新消息', 12, COL.head, { bold: true });
+    newsRows(c3, f, 4, 11.5, true);
+    c3.addSpacer();
+  } else if (fam === 'large' && dev && show === 'cal') {
+    // 開發者 iPhone 大：月曆＋今日提醒＋今天的日誌＋這週＋待辦＋最新消息，每樣少幾行（點一下看全部）
+    header(w, '📅 ' + Y + ' 年 ' + M + ' 月', d, 13);
+    const weeks = monthGrid(w, f);
+    w.addSpacer(4);
+    const ll = logLine(f);
+    txt(w, '⏰ 今日提醒', 11.5, COL.head, { bold: true });
+    rows(w, remRows(f, !!ll), weeks >= 6 ? 2 : 3, 11);
+    if (ll) txt(w, ll.t, 11, ll.ok ? COL.green : COL.hot, { semi: true });
+    w.addSpacer(2);
+    txt(w, weekTitle(f), 11.5, COL.head, { bold: true });
+    weekBlock(w, f, 2, 11);
+    if (todos) {
+      const open = todos.filter(t => !t.done);
+      txt(w, '✅ 待辦 ' + open.length + (open.length ? '：' + open.slice(0, 3).map(t => t.text).join('、') : '　都做完了'), 11, COL.green, { semi: true });
+    }
+    const n = newsItems(f)[0];
+    if (n) txt(w, '📣 ' + n.label + '　' + n.text, 11, COL.text);
+  } else if (show === 'log') {
+    header(w, '📋 今天的日誌', d, fam === 'small' ? 12 : 13);
+    rows(w, logRows(f), fam === 'small' ? 4 : big ? 12 : 5, fam === 'small' ? 11.5 : 12.5);
+  } else if (fam === 'extraLarge' && show !== 'news') {
     // iPad 特大（使用者 2026-11-10「ipad也要適配」）：左邊這個月的月曆，右邊今日提醒＋這週行程＋待辦
     header(w, '📅 ' + new Date().getFullYear() + ' 年 ' + (new Date().getMonth() + 1) + ' 月　柏捷工地', d, 13.5);
     const row = w.addStack(); row.layoutHorizontally(); row.topAlignContent();
@@ -435,6 +519,13 @@ function buildWidget(d, fam, p) {
         txt(w, '✅ 待辦 ' + todos.filter(t => !t.done).length, 12, COL.green, { bold: true });
         rows(w, todoRows(todos, 3), 9, 12);
       }
+    } else if (dev && fam === 'medium') {
+      // 開發者中：今日提醒＋今天的日誌＋待辦
+      const open = todos ? todos.filter(t => !t.done) : null, ll = logLine(f);
+      rows(w, ll ? remRows(f, true) : list, 4, 12.5);
+      w.addSpacer(2);
+      if (ll) txt(w, ll.t, 12, ll.ok ? COL.green : COL.hot, { semi: true });
+      if (open && open.length) txt(w, '✅ 待辦 ' + open.length + '：' + open.slice(0, 3).map(t => t.text).join('、'), 12, COL.green, { semi: true });
     } else {
       const open = todos ? todos.filter(t => !t.done) : null;
       rows(w, list, open && open.length ? 5 : 6, 12.5);
@@ -490,7 +581,7 @@ async function selfUpdate() {
 }
 
 const HOWTO = '放到桌面：\n① 回到桌面，長按空白的地方\n② 左上角「編輯」→「加入小工具」\n③ 搜尋「Scriptable」，選大小 →「加入小工具」\n④ 點一下剛放好的小工具，「Script」選「柏捷工地」\n\n' +
-  '小、中＝今日提醒；大＝月曆＋這週行程＋待辦；特大（iPad）＝左邊月曆、右邊今日提醒＋這週＋待辦。\n「Parameter」打「消息」＝最新消息。\n鎖定畫面也可以放。\n\nMac：macOS 14 以上可以把這支 iPhone 的小工具放到 Mac 桌面（桌面按右鍵 →「編輯小工具」→ iPhone 的 Scriptable）。';
+  '小、中＝今日提醒；大＝月曆＋這週行程＋待辦；特大（iPad）＝左邊月曆、右邊今日提醒＋這週＋待辦。\n開發者：大、特大是最完整的（多了今天的日誌、最新消息）。\n「Parameter」打「消息」＝最新消息、「日誌」＝今天的日誌。\n鎖定畫面也可以放。\n\nMac：macOS 14 以上可以把這支 iPhone 的小工具放到 Mac 桌面（桌面按右鍵 →「編輯小工具」→ iPhone 的 Scriptable）。';
 
 async function appMain(show) {
   const upd = await selfUpdate();
@@ -529,7 +620,7 @@ async function appMain(show) {
     else {
       const f = d.f, todos = todoList(f);
       const sec = {
-        rem: () => { head('⏰ 今日提醒'); remRows(f).forEach(r => line(r.t, r.k === 1 ? COL.hot : r.k === 3 ? COL.muted : COL.text)); },
+        rem: () => { head('⏰ 今日提醒'); remRows(f, isDev(f) && !!logToday(f)).forEach(r => line(r.t, r.k === 1 ? COL.hot : r.k === 3 ? COL.muted : COL.text)); },
         cal: () => { head(weekTitle(f)); weekRows(f).forEach(r => line(r.t, r.k === 1 ? COL.hot : r.k === 2 ? COL.head : r.k === 3 ? COL.muted : COL.text, '', null, r.k === 2)); },
         todo: () => {
           if (!todos) return;
@@ -544,8 +635,15 @@ async function appMain(show) {
           }));
         },
         news: () => { head('📣 最新消息'); const l = newsItems(f); if (!l.length) line('最近沒有新消息', COL.muted); l.slice(0, 40).forEach(n => line('【' + n.label + '】' + n.text, COL.text, n.sub)); },
+        // 開發者：今天每個工地的日誌填了沒（點一下打開網頁版去寫）
+        log: () => {
+          if (!isDev(f)) return;
+          head('📋 今天的日誌', '點一下打開網頁版');
+          logRows(f).forEach(r => line(r.t, r.k === 1 ? COL.hot : r.k === 4 ? COL.green : COL.muted, '', () => Safari.open(WEB)));
+        },
       };
-      const order = show === 'news' ? ['news', 'rem', 'cal', 'todo'] : show === 'cal' ? ['cal', 'todo', 'rem', 'news'] : ['rem', 'cal', 'todo', 'news'];
+      const order = show === 'news' ? ['news', 'rem', 'log', 'cal', 'todo'] : show === 'cal' ? ['cal', 'todo', 'rem', 'log', 'news']
+        : show === 'log' ? ['log', 'rem', 'cal', 'todo', 'news'] : ['rem', 'log', 'cal', 'todo', 'news'];
       order.forEach(k => sec[k]());
     }
     head('其他');
@@ -554,6 +652,7 @@ async function appMain(show) {
     line('👁 看小工具的樣子（小）', COL.teal, '', async () => { await buildWidget(d, 'small', '').presentSmall(); });
     line('👁 看小工具的樣子（中）', COL.teal, '', async () => { await buildWidget(d, 'medium', '').presentMedium(); });
     line('👁 看小工具的樣子（大）', COL.teal, '', async () => { await buildWidget(d, 'large', '').presentLarge(); });
+    if (Device.isPad()) line('👁 看小工具的樣子（特大）', COL.teal, '', async () => { await buildWidget(d, 'extraLarge', '').presentExtraLarge(); });
     line('📖 怎麼放到桌面', COL.teal, '', async () => { await say('怎麼放到桌面', HOWTO); });
     line('🔑 換代碼', COL.muted, '', async () => { if (await askCode('')) { d = await getData(true); fill(); t.reload(); } });
     line('小工具版本 ' + VER, COL.muted);
