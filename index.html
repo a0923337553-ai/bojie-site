@@ -377,7 +377,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/14h';
+var WEB_VERSION = '11/14i';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -3314,7 +3314,7 @@ function gsEnter(fast) {
   if (sess && sess.today && sess.owner) {
     S.s = sess; S.site = LS.get('site'); pickSite(sess);
     loadSeen(); S.feed = LS.getJSON('feed'); S.here = LS.getJSON('here'); S.fc = LS.getJSON('fc');
-    go('hub'); loadFeed(false);
+    go('hub'); loadFeed(false); dPrefetch();   // 先跟收件服務拿雲端鑰匙（點施工日誌就不用跳 Google 小視窗）
     api('login').then(function (s) { if (S.asCode || !S.gMode) return; S.s = s; LS.setJSON('gsess', s); pickSite(s); renderSoft(); }).catch(function (e) { failMsg(e); });
     return;
   }
@@ -3322,7 +3322,7 @@ function gsEnter(fast) {
   api('login').then(function (s) {
     S.busy = false; S.s = s; LS.setJSON('gsess', s); S.site = LS.get('site'); pickSite(s);
     loadSeen(); S.feed = LS.getJSON('feed'); S.here = LS.getJSON('here'); S.fc = LS.getJSON('fc');
-    go('hub'); loadFeed(true);
+    go('hub'); loadFeed(true); dPrefetch();
   }).catch(function (e) { S.busy = false; var m = failMsg(e); if (m) { S.err = m; S.gMode = false; S.route = 'login'; render(); } });
 }
 /** Google 通行證不能用了（過期、被登出）：回登入畫面（這台記的代碼不動） */
@@ -3642,6 +3642,29 @@ var DTOK = { token: '', exp: 0, client: null, pending: null };
 (function () { try { var t = JSON.parse(localStorage.getItem('bojie.dtok') || sessionStorage.getItem('bojie.dtok') || 'null'); if (t && t.exp > Date.now() + 60000) { DTOK.token = t.token; DTOK.exp = t.exp; } } catch (e) { } })();
 function dHasToken() { return DRIVE_TEST || (!!DTOK.token && Date.now() < DTOK.exp - 60000); }
 /** 跟 Google 要寫雲端的權限：要在按鈕的 click 裡直接叫（iPad 才跳得出視窗）；拿到就跑 then */
+/**
+ * 跟收件服務拿雲端鑰匙（收件服務第 31 版，使用者 2026-11-14「不是已經登入了嗎」「A 改成只要登入」）：
+ * 開發者的摺疊機每次同步（大約 15 分鐘）會把它的鑰匙交給收件服務；開發者網頁先去拿，拿到就不用跳 Google 小視窗。
+ * 一進首頁就拿、每 5 分鐘看一次、網頁從背景回來也看；手上那把剩不到 10 分鐘才去換。拿不到（摺疊機一小時都沒同步）就照舊用小視窗。
+ */
+var DTOKSRV = { at: 0, busy: false, cbs: [] };
+function dPrefetch(cb, force) {
+  if (cb) DTOKSRV.cbs.push(cb);
+  if (DTOKSRV.busy) return;   // 正在問：問完一起回
+  var done = function () { var l = DTOKSRV.cbs; DTOKSRV.cbs = []; l.forEach(function (f) { try { f(); } catch (e) { } }); };
+  var fresh = DTOK.token && DTOK.exp - Date.now() > 10 * 60000;
+  if (fresh || DRIVE_TEST || !S.gMode || !isOwner() || (!force && Date.now() - DTOKSRV.at < 60000)) { done(); return; }
+  DTOKSRV.busy = true;
+  api('dtok').then(function (r) {
+    DTOKSRV.empty = !(r && r.token);
+    if (r && r.token && r.exp > Date.now() + 120000 && !(DTOK.token && DTOK.exp >= r.exp)) {
+      DTOK.token = r.token; DTOK.exp = r.exp;
+      try { localStorage.setItem('bojie.dtok', JSON.stringify({ token: DTOK.token, exp: DTOK.exp })); } catch (e) { }
+    }
+  }).catch(function () { DTOKSRV.empty = true; }).then(function () { DTOKSRV.busy = false; DTOKSRV.at = Date.now(); done(); });
+}
+setInterval(function () { dPrefetch(); }, 5 * 60000);
+document.addEventListener('visibilitychange', function () { if (!document.hidden) dPrefetch(); });
 /** fail(訊息)：沒連成（發包那些跳出的視窗用；寫日誌照舊寫在 S.dl.err） */
 function dFail(msg) { var g = DTOK.fail; DTOK.fail = null; if (g) g(msg); }
 function dLogin(then, fail) {
@@ -3841,13 +3864,21 @@ function dlOpen(date) {
   loadGis(function () { });
   go('dlog');
   if (dHasToken()) { dlLoad(); return; }
-  // 點「施工日誌」的這一下就去連 Google 雲端（以前要再按一次「連上 Google 雲端」；使用者 2026-11-14「施工日誌也是都會跑出這個」）：
-  // 按過「允許」的只會閃一下 Google 的小視窗；連不上才停在「先連上 Google 雲端」那張卡片
+  // 先跟收件服務拿摺疊機交來的雲端鑰匙（收件服務第 31 版；使用者 2026-11-14「A 改成只要登入」）；
+  // 拿不到（摺疊機一小時都沒同步）才停在「先連上 Google 雲端」，按那顆會閃一下 Google 的小視窗
   var dl = S.dl;
-  if (window.google && google.accounts && google.accounts.oauth2) {
+  // 剛剛（5 分鐘內）問過收件服務、沒有鑰匙（摺疊機沒同步、或收件服務還沒更新）：就在按的這一下閃 Google 小視窗（等問完就不能跳了）
+  if (DTOKSRV.empty && Date.now() - DTOKSRV.at < 5 * 60000 && window.google && google.accounts && google.accounts.oauth2) {
     dl.busy = '連上 Google 雲端…'; render();
     dLogin(function () { if (S.dl === dl) dlLoad(); }, function (msg) { if (S.dl !== dl) return; dl.busy = ''; dl.err = msg; render(); });
+    return;
   }
+  dl.busy = '連上雲端…'; render();
+  dPrefetch(function () {
+    if (S.dl !== dl) return;
+    if (dHasToken()) { dlLoad(); return; }
+    dl.busy = ''; render();
+  }, true);
 }
 function dlLoad() {
   var dl = S.dl; if (!dl) return;
@@ -3925,7 +3956,7 @@ function renderDlog() {
     return h + '<div class="card" style="background:#FFF6EC"><div class="ttl">先連上 Google 雲端</div><div style="font-size:15px;line-height:22px;margin:6px 0 10px">' + esc(dl.site) + ' 的日誌跟摺疊機放在同一個雲端資料夾。用<b>開發者的 Google 帳號</b>連上，這台就可以寫、改（摺疊機、電腦 Excel 都看得到）。</div>' +
       '<button class="big" data-act="dlauth">🔑 連上 Google 雲端</button>' + (dl.err ? '<div class="err">' + esc(dl.err) + '</div>' : '') +
       '<button class="ghost" style="margin:4px 0 8px" data-act="dlreadonly">只看這天（不用連）</button>' +
-      '<div class="note">第一次會問「要不要讓 柏捷工地App 存取它自己建的檔案」，按「允許」。權限一小時要再連一次（按上面那顆就好）；大約每 7 天會再問一次同意。</div></div></div>';
+      '<div class="note">平常不用按：摺疊機開著、有網路（每 15 分鐘同步一次）就會自動連好。摺疊機超過一小時沒同步才會停在這裡；按上面那顆，第一次會問「要不要讓 柏捷工地App 存取它自己建的檔案」，按「允許」。</div></div></div>';
   }
   if (!dl.loaded) return h + '<div class="card sub" style="font-size:15px">' + esc(dl.busy || '') + '</div>' + (dl.err ? '<div class="err">' + esc(dl.err) + '</div><button class="ghost" data-act="dlreload">再試一次</button>' : '') + '</div>';
   var e = dl.e, cats = dlCats(dl), ps = e.photos || [], cnt = {};
