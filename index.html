@@ -376,7 +376,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/14d';
+var WEB_VERSION = '11/14e';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -821,13 +821,16 @@ function widgetModal(m) {
     step('①', '到 App Store 裝「Scriptable」（免費）',
       '<a class="pill" style="margin:0;display:inline-block;text-decoration:none" href="https://apps.apple.com/app/id1405459188" target="_blank" rel="noopener">打開 App Store</a>') +
     step('②', '按這個按鈕，複製安裝程式',
-      '<button class="pill" style="margin:0" data-act="widgetcopy">' + (m.copied ? '已複製 ✓' : '複製安裝程式') + '</button>' +
+      '<button class="pill" style="margin:0" data-act="widgetcopy"' + (m.needOwn && !m.ownCode ? ' disabled' : '') + '>' +
+        (m.copied ? '已複製 ✓' : m.needOwn && !m.ownCode ? (m.err ? '複製安裝程式' : '準備中…') : '複製安裝程式') + '</button>' +
       (m.err ? '<div style="color:var(--red);font-size:14px;margin-top:4px">' + esc(m.err) + '</div>' : '')) +
     step('③', '打開 Scriptable → 右上角「＋」→ 點一下中間空白 →「貼上」→ 按右下角「▶」。看到「✅ 裝好了」就好') +
     step('④', '回到主畫面：長按空白處 → 左上角「編輯」→「加入小工具」→ 搜尋「Scriptable」→ 選大小 →「加入小工具」') +
     step('⑤', '點一下剛放好的小工具 →「Script」選「柏捷工地」') +
-    '<div class="note" style="font-size:14px;margin-top:6px">小、中＝今日提醒；大＝月曆＋這週行程＋待辦' + (IPAD ? '；<b>特大</b>（iPad 才有）＝左邊月曆、右邊今日提醒＋這週行程＋待辦' : '') +
-    '。「Parameter」打「消息」＝最新消息。點小工具會打開完整清單（待辦可以打勾）。鎖定畫面也可以放。</div>' +
+    (isOwner() ? '<div class="note" style="font-size:14px;margin-top:6px"><b>開發者是最完整的</b>：' + (IPAD ? '<b>特大</b>（iPad）＝跟摺疊機一樣三欄：月曆＋今日提醒｜這週＋待辦｜今天的日誌＋最新消息；' : '') +
+      '<b>大</b>＝月曆＋今日提醒＋今天的日誌＋這週＋待辦＋最新消息；中＝今日提醒＋日誌＋待辦。「Parameter」打「日誌」＝每個工地今天的日誌填了沒。點小工具會打開完整清單。</div>'
+      : '<div class="note" style="font-size:14px;margin-top:6px">小、中＝今日提醒；大＝月曆＋這週行程＋待辦' + (IPAD ? '；<b>特大</b>（iPad 才有）＝左邊月曆、右邊今日提醒＋這週行程＋待辦' : '') +
+      '。「Parameter」打「消息」＝最新消息。點小工具會打開完整清單（待辦可以打勾）。鎖定畫面也可以放。</div>') +
     // 使用者 2026-11-10「施工人員那也能帶他們安裝」「但你說會有一個我的密碼」：裡面是這支手機登入的人自己的代碼，不是管理者的
     '<div class="note" style="font-size:14px;color:var(--red)">安裝程式裡是<b>這支手機登入的代碼</b>（' + esc(S.s && S.s.name ? S.s.name : '你') + ' 自己的，看不出來）。每個人用自己的手機、自己的代碼登入後再按；不要把安裝程式傳給別人。</div>' +
     '<div class="btns"><button data-act="mclose">關閉</button></div>';
@@ -1006,7 +1009,8 @@ function renderHub() {
   h += '<div class="sub" style="padding-left:4px">' + esc(s.name + (s.full ? '（' + s.full + '）' : '') + '・' + s.role) + '　' + (PCAPP ? '電腦版' : '網頁版') + ' ' + WEB_VERSION + '</div>';
   // iPhone 桌面小工具（使用者 2026-11-10 選「甲」：用免費的 Scriptable）
   // iPad 一樣；Mac 借 iPhone 的小工具（macOS 14 以上可以把 iPhone 的小工具放到 Mac 桌面）
-  if ((IOS || MAC) && (S.code || S.saved)) h += '<button class="ghost" style="margin-top:8px" data-act="widgethelp">' + (MAC ? '🖥️ 放到 Mac 桌面的小工具（教學）' : '📱 放到 ' + DEV + ' 桌面的小工具（教學）') + '</button>' +
+  // 開發者用 Google 登入（沒有代碼）也要有（使用者 2026-11-14「開發人員的不管在手機還是蘋果，她的小工具都能支援到最完整的功能」）
+  if ((IOS || MAC) && (S.code || S.saved || (S.gMode && isOwner()))) h += '<button class="ghost" style="margin-top:8px" data-act="widgethelp">' + (MAC ? '🖥️ 放到 Mac 桌面的小工具（教學）' : '📱 放到 ' + DEV + ' 桌面的小工具（教學）') + '</button>' +
     '<div class="note" style="padding:0 4px">網頁版關著時不會跳通知；打開就會更新。</div></div>';
   else if (ANDROID && !PCAPP) h += '<button class="ghost" style="margin-top:8px" data-act="apkhelp">📲 下載 Android App（安裝檔）</button>' +
     '<div class="note" style="padding:0 4px">App 有桌面小工具，關著也會跳通知；網頁版要打開才會更新。</div></div>';
@@ -2583,11 +2587,28 @@ var ACT = {
   caladd: function () { openCalEdit(null); },
   // 跳出的視窗
   mclose: function () { if (S.modal && S.modal.busy) return; closeModal(); render(); },
-  widgethelp: function () { S.modal = { type: 'widget' }; renderModal(); },
+  widgethelp: function () {
+    var m = { type: 'widget' }; S.modal = m; renderModal();
+    // 開發者用 Google 登入、這台沒有代碼：一打開就先拿自己的代碼（iPhone 要在按的那一下複製，不能按了才去拿）
+    if (!S.code && !S.saved && S.gMode && isOwner()) {
+      m.needOwn = true;
+      api('people').then(function (r) {
+        var p = ((r && r.people) || []).filter(function (x) { return x.owner && x.code; })[0];
+        if (p) m.ownCode = p.code; else m.err = '人員名單找不到你的代碼';
+        if (S.modal === m) renderModal();
+      }).catch(function (e) { m.err = '拿不到你的代碼：' + (failMsg(e) || '請檢查網路') + '（關掉再打開一次）'; if (S.modal === m) renderModal(); });
+    }
+  },
   widgetcopy: function () {
-    var m = S.modal, wc = S.code || S.saved; if (!m || !wc) return;
-    copyText(widgetInstaller(wc)).then(function () { m.copied = true; m.err = ''; renderModal(); },
-      function () { m.err = '複製不了：請再按一次；還是不行就找管理者'; renderModal(); });
+    var m = S.modal, wc = S.code || S.saved; if (!m) return;
+    var copy = function (c) {
+      copyText(widgetInstaller(c)).then(function () { m.copied = true; m.err = ''; renderModal(); },
+        function () { m.err = '複製不了：請再按一次；還是不行就找管理者'; renderModal(); });
+    };
+    if (wc) { copy(wc); return; }
+    // 開發者用 Google 登入、這台沒有代碼：從人員名單拿開發者自己的代碼（只有 Google 驗證過的開發者看得到代碼）
+    // iPhone 的 Safari 要在按的那一下就複製：先拿好代碼存著，再按一次才複製
+    if (m.ownCode) copy(m.ownCode);   // 打開時已經拿好了（widgethelp）
   },
   apkhelp: function () {
     var m = { type: 'apk' }; S.modal = m; renderModal();
