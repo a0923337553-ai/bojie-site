@@ -390,7 +390,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/14l';
+var WEB_VERSION = '11/14m';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1024,11 +1024,13 @@ function renderHub() {
   // iPhone 桌面小工具（使用者 2026-11-10 選「甲」：用免費的 Scriptable）
   // iPad 一樣；Mac 借 iPhone 的小工具（macOS 14 以上可以把 iPhone 的小工具放到 Mac 桌面）
   // 開發者用 Google 登入（沒有代碼）也要有（使用者 2026-11-14「開發人員的不管在手機還是蘋果，她的小工具都能支援到最完整的功能」）
+  // 🔔 開啟通知（第 33 版網頁推播；iPhone／iPad 要從主畫面圖示打開）
+  h += wpCard();
   if ((IOS || MAC) && (S.code || S.saved || (S.gMode && isOwner()))) h += '<button class="ghost" style="margin-top:8px" data-act="widgethelp">' + (MAC ? '🖥️ 放到 Mac 桌面的小工具（教學）' : '📱 放到 ' + DEV + ' 桌面的小工具（教學）') + '</button>' +
-    '<div class="note" style="padding:0 4px">網頁版關著時不會跳通知；打開就會更新。</div></div>';
+    '<div class="note" style="padding:0 4px">' + (wpOn() ? '開了通知，網頁關著也會跳；打開就會更新。' : '還沒開通知：網頁關著時不會跳；打開就會更新。') + '</div></div>';
   else if (ANDROID && !PCAPP) h += '<button class="ghost" style="margin-top:8px" data-act="apkhelp">📲 下載 Android App（安裝檔）</button>' +
     '<div class="note" style="padding:0 4px">App 有桌面小工具，關著也會跳通知；網頁版要打開才會更新。</div></div>';
-  else h += '<div class="note" style="padding:4px 4px 0">網頁版沒有桌面小工具，關著時也不會跳通知；打開就會更新。</div></div>';
+  else h += '<div class="note" style="padding:4px 4px 0">' + (wpOn() ? '開了通知，網頁關著也會跳（瀏覽器要開著或在背景）；打開就會更新。' : '網頁版沒有桌面小工具；開了通知才會在關著時跳。') + '</div></div>';
   return h + '</div>';
 }
 
@@ -1495,8 +1497,74 @@ function renderContracts() {
 // 跟摺疊機同一份：雲端 工地App/發包/<工地>.json。存的時候先抓雲端最新的，同一個工項留改得比較晚的（跟摺疊機 ContractBook.merge 一樣），
 // 刪掉的留 deleted 記號（摺疊機才不會加回來）。用寫日誌那個 Google 雲端權限（dLogin）。
 function cSafe(n) { return String(n).replace(/[\\\/:*?"<>|]/g, '_'); }
-/** 網頁直接改了雲端（發包、日誌）→ 告訴收件服務，叫醒手機馬上檢查（第 32 版即時推播；舊的收件服務不認得就算了） */
-function webPing() { try { api('ping').catch(function () { }); } catch (e) { } }
+/**
+ * 網頁直接改了雲端（發包、日誌）→ 告訴收件服務，叫醒手機馬上檢查（第 32 版即時推播；舊的收件服務不認得就算了）。
+ * what／site／text（第 33 版）：iPhone／iPad 網頁的通知寫什麼（contract＝發包；log＝日誌只更新、不跳）
+ */
+function webPing(what, site, text) { try { api('ping', { what: what || '', site: site || '', text: text || '' }).catch(function () { }); } catch (e) { } }
+
+// ---------- 網頁推播（收件服務第 33 版，使用者 2026-11-14「如果是蘋果的手機跟平板呢」→ A） ----------
+// iPhone／iPad 從主畫面圖示打開、電腦的瀏覽器：按「🔔 開啟通知」→ 用免費的 Firebase（專案 bojie-push，沒有帳單）拿通知碼交給收件服務，
+// 有新消息收件服務照角色寫好內容發過來（firebase-messaging-sw.js 顯示）。Android 用 App（App 自己有推播）。
+var FB_WEB = { apiKey: 'AIzaSyCe1TsA_qTuLobsLr4XMZ0hM5rLi8_pTos', authDomain: 'bojie-push.firebaseapp.com', projectId: 'bojie-push',
+  storageBucket: 'bojie-push.firebasestorage.app', messagingSenderId: '977736584791', appId: '1:977736584791:web:1c0c7086beeb3ca0d65d12' };
+var FB_VAPID = 'BPi1x2oKX5XLEEyBjkmmg6GJReYSQ7QlnXpPsSHvBRZ2UcKoyk_rutrffcRYDbDFZ3xzD7I1U0a_KbC-3VAwXEU';
+var FB_JS = 'https://www.gstatic.com/firebasejs/10.14.1/';
+var WP = { busy: false, msg: '' }, WPLIB = null;
+function wpStandalone() { return !!(navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches)); }
+function wpSupported() { return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+function wpOn() { try { return Notification.permission === 'granted' && !!localStorage.getItem('bojie.wp'); } catch (e) { return false; } }
+/** 首頁最下面：開通知的按鈕／已經開了／要先加到主畫面 */
+function wpCard() {
+  if (ANDROID && !PCAPP) return '';   // Android 用 App
+  if (IOS && !wpStandalone()) return '<div class="note" style="padding:6px 4px 0">🔔 要讓這台跳通知：在 Safari 按「分享」→「加入主畫面」，以後從主畫面的柏捷工地圖示打開，再按「開啟通知」。</div>';
+  if (!wpSupported()) return '';
+  var p = Notification.permission, msg = WP.msg ? '<div class="sub" style="font-size:13.5px;margin-top:4px">' + esc(WP.msg) + '</div>' : '';
+  if (p === 'denied') return '<div class="note" style="padding:6px 4px 0">🔕 這台把柏捷工地的通知關掉了：到「設定 → 通知 → 柏捷工地」打開，再回來按一次。</div>';
+  if (wpOn()) return '<div class="row" style="margin-top:8px;font-size:14.5px"><span class="grow">🔔 通知已開：新消息會馬上跳出來</span><button class="link" style="font-size:14px" data-act="wpon">' + (WP.busy ? '設定中…' : '重新登記') + '</button></div>' + msg;
+  return '<button class="big" style="margin-top:8px;background:var(--teal)" data-act="wpon"' + (WP.busy ? ' disabled' : '') + '>' + (WP.busy ? '設定中…' : '🔔 開啟通知（新消息馬上跳出來）') + '</button>' + msg;
+}
+function wpScript(src) { return new Promise(function (ok, bad) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { bad({ message: '通知工具載入失敗（網路有問題）' }); }; document.head.appendChild(s); }); }
+function wpLib() {
+  if (!WPLIB) {
+    WPLIB = wpScript(FB_JS + 'firebase-app-compat.js').then(function () { return wpScript(FB_JS + 'firebase-messaging-compat.js'); })
+      .then(function () { if (!firebase.apps.length) firebase.initializeApp(FB_WEB); return firebase.messaging(); });
+    WPLIB.catch(function () { WPLIB = null; });
+  }
+  return WPLIB;
+}
+/** 拿通知碼交給收件服務；quiet＝背景補交（一樣的碼、一樣的人、3 天內交過就不交，也不發「開好了」） */
+function wpRegister(quiet) {
+  return Promise.all([wpLib(), navigator.serviceWorker.register('firebase-messaging-sw.js', { scope: './' })]).then(function (a) {
+    return a[0].getToken({ vapidKey: FB_VAPID, serviceWorkerRegistration: a[1] });
+  }).then(function (tok) {
+    if (!tok) throw { message: '拿不到通知碼' };
+    var last = null; try { last = JSON.parse(localStorage.getItem('bojie.wp') || 'null'); } catch (e) { }
+    var who = S.gMode ? 'g' : (S.code || '');
+    if (quiet && last && last.t === tok && last.who === who && Date.now() - last.at < 3 * 86400000) return;
+    return api('push', { op: 'set', ptoken: tok, pdev: 'w' + deviceId(), pkind: 'web', quiet: quiet ? 1 : 0 }).then(function () {
+      try { localStorage.setItem('bojie.wp', JSON.stringify({ t: tok, who: who, at: Date.now() })); } catch (e) { }
+    });
+  });
+}
+function wpActs() {
+  ACT.wpon = function () {
+    if (WP.busy) return;
+    // iPhone 規定：問通知要在按的當下問
+    var ask;
+    try { ask = Notification.permission === 'granted' ? 'granted' : Notification.requestPermission(); } catch (e) { ask = 'default'; }
+    WP.busy = true; WP.msg = ''; render();
+    Promise.resolve(ask).then(function (p) {
+      if (p !== 'granted') throw { message: p === 'denied' ? '沒有允許通知。要打開：到「設定 → 通知 → 柏捷工地」' : '沒有按「允許」，再按一次' };
+      return wpRegister(false);
+    }).then(function () { WP.busy = false; WP.msg = '✅ 開好了，等一下會收到一則「🔔 通知開好了」'; render(); })
+      .catch(function (e) { WP.busy = false; WP.msg = '沒有開成功：' + ((e && (e.message || e.error)) || e); render(); });
+  };
+  // 已經開過通知的這台：打開網頁 10 秒後背景補交一次（通知碼換了、換人登入）
+  setTimeout(function () {
+    if (wpSupported() && !(ANDROID && !PCAPP) && Notification.permission === 'granted' && S.s && localStorage.getItem('bojie.wp')) wpRegister(true).catch(function () { });
+  }, 10000);
+}
 function cNewId() { return 'c' + Date.now().toString(36) + (1000 + Math.floor(Math.random() * 9000)); }
 function cMerge(a, b) {
   var m = {};
@@ -1587,7 +1655,8 @@ function cCommit(item, okMsg, after) {
     cSave(site, item).then(function (items) {
       if (S.office && S.office.books) S.office.books[site] = items;
       if (after) after();
-      webPing();   // 叫醒手機馬上抓（收件服務第 32 版推播）
+      // 叫醒手機馬上抓（收件服務第 32 版推播）；iPhone／iPad 網頁的通知寫這一行（第 33 版）
+      webPing('contract', site, item.deleted ? '刪掉了「' + item.name + '」' : item.name + (item.done ? ' 已發包' + (item.vendor ? '（' + item.vendor + '）' : '') : ' 未發包'));
       S.contractMsg = okMsg; if (S.modal === m) closeModal(); render();
     }).catch(function (e) { fail(dlErrText(e) + '。再按一次「確定」。'); });
   }, fail);
@@ -4602,7 +4671,7 @@ function dlSave() {
     var d = new Date(); dl.msg = '✅ 已存到雲端 ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + '（摺疊機同步後就看得到）';
     dlIdbPut(dlKey(dl), null);
     delete LOGCACHE[logKey(site, date)]; delete LOGCACHE[logKey(site, null)];
-    webPing();   // 叫醒摺疊機、老闆主任的手機馬上抓（收件服務第 32 版推播）
+    webPing('log', site);   // 叫醒摺疊機、老闆主任的手機馬上抓（收件服務第 32 版推播；日誌只更新、不跳）
     render(); dlThumbs();
   }).catch(function (e) {
     if (S.dl !== dl) return;
@@ -4707,6 +4776,7 @@ setTimeout(webCheck, 20000);   // 打開 20 秒後先看一次（剛打開可能
 
 // ---------- 開始 ----------
 contractActs();   // 發包的按鈕（開發者改發包，2026-11-14）
+wpActs();   // 🔔 開啟通知（網頁推播，第 33 版）
 // 記住的代碼：顯示鎖住的 ●●●●●●，按「登入」才進去（使用者 2026-11-08）
 S.saved = LS.get('code');
 S.gs = LS.get('gs');   // 這台用 Google 登入過（開發者）
