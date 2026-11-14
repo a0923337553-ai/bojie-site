@@ -147,6 +147,16 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
 }
 @media (min-width:1600px){ :root{--side:420px} body{font-size:17px} }
 #viewBtn{background:#FFF4E6;color:#C2410C}
+/* 3D 版本（收件服務第 34 版，使用者 2026-11-14「上傳3d、修改上傳的3d」）：開發者、老闆 */
+#verBtn{background:#EEF3FF;color:#1C5D99}
+#verPanel{position:fixed;inset:0;z-index:40;background:rgba(15,23,32,.45);display:none;align-items:flex-start;justify-content:center;padding:calc(env(safe-area-inset-top) + 40px) 10px 10px}
+#verPanel .vp{background:#fff;border-radius:16px;width:100%;max-width:560px;max-height:calc(100vh - 60px);overflow-y:auto;padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+#verPanel .vh{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:700;margin-bottom:8px}
+#verPanel .vh span{flex:1}
+#verPanel .vrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+#verPanel .vrow .g{flex:1;min-width:0}
+#verPanel .bar2{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:6px;display:none}
+#verPanel .bar2 i{display:block;height:100%;width:0;background:var(--teal);transition:width .2s}
 .bar h1{min-width:0}   /* 手機：標題太長就「…」，按鈕才不會被擠出畫面 */
 @media (max-width:480px){ .bar{gap:6px;padding:8px 8px} .bar .btn{padding:7px 9px} }
 </style>
@@ -159,6 +169,7 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
     <button class="btn ghost" id="back">‹ 返回</button>
     <h1 id="title">3D <span class="sub" id="made"></span></h1>
     <button class="btn" id="viewBtn" style="display:none"></button>
+    <button class="btn" id="verBtn" style="display:none">🗂 版本</button>
     <button class="btn" id="reset">整棟</button>
   </div>
   <div class="chips" id="floors"></div>
@@ -183,6 +194,8 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
   <div class="row"><button class="btn solid" id="markSend">送出</button><button class="btn" id="markRedo">⭕ 重圈</button><button class="btn ghost" id="markCancel">取消圈</button><span class="muted" id="markErr"></span></div>
 </div>
 <div id="dwgView"><div class="bar"><span class="t" id="dwgTitle">配筋圖</span><button id="dwgOut">－</button><button id="dwgIn">＋</button><button id="dwgClose">✕ 關閉</button></div><div class="sc" id="dwgBody"></div></div>
+<div id="verPanel"><div class="vp"><div class="vh"><span>🗂 3D 模型版本</span><button class="btn ghost" id="verClose">✕ 關閉</button></div><div id="verBody"></div></div></div>
+<input type="file" id="verFile" style="display:none">
 <div id="side" style="display:none">
   <div class="hd"><span id="sideTitle">🚚 灌漿區</span><button class="btn ghost tog" id="tog">收起</button></div>
   <div class="bd" id="sideBody"></div>
@@ -265,6 +278,7 @@ async function loadModel() {
   pours = (r.pours || []).map(p => { const pr = p.props || {}; return { id: p.id, date: pr.pourDate || '', part: pr.part || String(p.name || '').replace(/\.pdf$/i, ''), m3: pr.m3 || '', trucks: pr.trucks || '' }; });
   marks = r.marks || []; me = r.me || null;
   SKMETA = r.sk || null;   // 收件服務第 27 版：這個工地有 SketchUp 模型
+  verInit(!!r.canUp, r.skPending || []);   // 第 34 版：開發者、老闆可以上傳、換版本
   if (r.same && have) return JSON.parse(have.text);
   if (!r.model) { if (SKMETA) return null; throw { error: 'NONE' }; }
   ls('m3d.' + SITE, JSON.stringify({ modified: r.modified || '', text: r.model }));
@@ -2127,6 +2141,104 @@ function demoModel() {
       '梁|1F|FG1': { t: '梁', size: '60x150', kind: '地梁', topSize: '#8', botSize: '#8', top: ['5', '5', '5'], bot: ['5', '5', '5'], topLen: ['', ''], botLen: ['', ''], stir: ['', '#4@15', ''], side: '4-#4' } } };
 }
 
+// ---------- 3D 版本：上傳新的、切回舊的（收件服務第 34 版，使用者 2026-11-14「我也想要可以在電腦上上傳3d的功能,及修改上傳的3d功能(有時候會有變更」「手機也可以上傳及修改3d」→ 都a、老闆也可） ----------
+// 開發者、老闆看得到「🗂 版本」。.glb 傳完馬上換；.skp 要等電腦（有 SketchUp 轉檔工具的那台）轉好，大約 5 分鐘。舊的放「舊版」，最多留 10 個，可以切回來。
+// 一段 2 MB 傳給收件服務（App 裡也一樣經過 App 代傳），收件服務直接接到雲端硬碟。
+const VP = document.getElementById('verPanel'), VB = document.getElementById('verBody'), VF = document.getElementById('verFile');
+let CANUP = false, VPEND = [], vBusy = false;
+function verInit(can, pend) {
+  CANUP = can; VPEND = pend;
+  const b = document.getElementById('verBtn');
+  b.style.display = can ? '' : 'none';
+  b.textContent = '🗂 版本' + (pend.some(p => !p.err) ? ' ⏳' : '');
+}
+function vTime(ms) { const d = new Date(ms); const p = n => String(n).padStart(2, '0'); return (d.getFullYear() - 1911) + '.' + p(d.getMonth() + 1) + '.' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+function vMB(n) { return n < 104858 ? Math.max(1, Math.round(n / 1024)) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
+function vMsg(t, pct) {
+  const m = document.getElementById('vpMsg'), b = document.getElementById('vpBar');
+  if (m) m.innerHTML = t || '';
+  if (b) { b.style.display = pct == null ? 'none' : 'block'; b.firstChild.style.width = (pct || 0) + '%'; }
+}
+async function verShow() {
+  VP.style.display = 'flex';
+  VB.innerHTML = '<div class="muted">讀取中…</div>';
+  try { verRender(await api('model3d', { site: SITE, op: 'versions' })); }
+  catch (e) { VB.innerHTML = '<div class="muted">讀不到：' + esc(errText(e)) + '</div>'; }
+}
+function verRender(r) {
+  VPEND = r.pending || [];
+  let h = '<div class="row" style="margin-top:0"><button class="btn solid" id="vpUp"' + (vBusy ? ' disabled' : '') + '>⬆ 上傳新的 3D</button><span class="muted">SketchUp 檔（.skp）或 .glb</span></div>' +
+    '<div class="muted" id="vpMsg" style="margin-top:6px"></div><div class="bar2" id="vpBar"><i></i></div>';
+  VPEND.forEach(p => {
+    h += '<div class="tip" style="margin-top:8px">' + (p.err ? '⚠️ ' : '⏳ ') + esc(p.name || 'SketchUp 檔') + '：' +
+      (p.err ? '轉檔失敗（' + esc(p.err) + '）' : '等電腦轉好（有轉檔工具的那台電腦開著，大約 5 分鐘）') + '<div class="muted">' + esc(p.by || '') + '・' + vTime(p.at) + '</div>' +
+      (p.err ? '<button class="btn ghost" style="margin-top:6px" data-jdel="' + esc(p.id) + '"' + (vBusy ? ' disabled' : '') + '>移除</button>' : '') + '</div>';
+  });
+  const c = r.cur;
+  h += '<div class="card" style="margin-top:10px"><div class="t">現在的模型</div>' + (c
+    ? '<div class="muted">' + esc(c.name || 'SketchUp 模型') + '・' + esc(c.by || '電腦上傳') + '・' + vTime(c.at) + '・' + vMB(c.size) + (c.from ? '（切回 ' + vTime(c.from) + ' 那版）' : '') + '</div>'
+    : '<div class="muted">還沒有</div>') + '</div>';
+  h += '<div class="card"><div class="t">舊版 <span class="muted">（最多留 10 個，可以切回來）</span></div>';
+  if (!(r.old || []).length) h += '<div class="muted" style="padding:6px 0">還沒有舊版（上傳新的以後，現在這版會放到這裡）</div>';
+  (r.old || []).forEach(o => {
+    h += '<div class="vrow"><div class="g"><b>' + vTime(o.at) + '</b><div class="muted">' + esc(o.name || 'SketchUp 模型') + '・' + esc(o.by || '電腦上傳') + '・' + vMB(o.size) + '</div></div>' +
+      '<button class="btn ghost" data-rid="' + esc(o.id) + '" data-at="' + o.at + '"' + (vBusy ? ' disabled' : '') + '>切回這版</button></div>';
+  });
+  VB.innerHTML = h + '</div>';
+  document.getElementById('vpUp').onclick = () => { if (vBusy) return; VF.value = ''; VF.click(); };
+  VB.querySelectorAll('[data-rid]').forEach(b => b.onclick = () => verRestore(b.dataset.rid, +b.dataset.at));
+  VB.querySelectorAll('[data-jdel]').forEach(b => b.onclick = async () => {   // 轉不了的 .skp 拿掉
+    if (vBusy) return; vBusy = true; b.disabled = true;
+    const id = b.dataset.jdel;
+    try {
+      await api('model3d', { site: SITE, op: 'jobdel', id: id }); vBusy = false;
+      const v = await api('model3d', { site: SITE, op: 'versions' });
+      v.pending = (v.pending || []).filter(p => p.id !== id);   // 雲端硬碟要幾秒才不列出剛丟的
+      verRender(v); verInit(CANUP, VPEND);
+    }
+    catch (e) { vBusy = false; b.disabled = false; vMsg('沒有移除：' + esc(errText(e))); }
+  });
+}
+async function verRestore(id, at) {
+  if (vBusy || !confirm('切回 ' + vTime(at) + ' 那一版？\n現在這版會放進舊版，之後也可以再切回來。')) return;
+  vBusy = true; vMsg('切換中…');
+  try { await api('model3d', { site: SITE, op: 'restore', id: id }); vMsg('✅ 換好了，重新打開 3D…'); setTimeout(() => location.reload(), 700); }
+  catch (e) { vBusy = false; vMsg('沒有換成功：' + esc(errText(e))); }
+}
+function vB64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+VF.onchange = async () => {
+  const f = VF.files && VF.files[0]; if (!f || vBusy) return;
+  const ext = ((/\.(skp|glb)$/i.exec(f.name) || [])[1] || '').toLowerCase();
+  if (!ext) { vMsg('只能傳 SketchUp 檔（.skp）或 .glb'); return; }
+  if (f.size > 300 * 1048576) { vMsg('檔案太大（超過 300 MB）'); return; }
+  vBusy = true; document.getElementById('vpUp').disabled = true;
+  try {
+    vMsg('讀檔案…', 0);
+    // 一次只讀 2 MB（手機傳很大的 .skp 也不會記憶體不夠）
+    let src = f;
+    // .glb 先壓縮（跟電腦上傳的一樣用 gzip，打開時會解開）
+    const head = new Uint8Array(await f.slice(0, 2).arrayBuffer());
+    if (ext === 'glb' && !(head[0] === 0x1f && head[1] === 0x8b) && typeof CompressionStream === 'function') {
+      vMsg('壓縮中…', 0);
+      src = await new Response(f.stream().pipeThrough(new CompressionStream('gzip'))).blob();
+    }
+    const CH = 2 * 1024 * 1024, size = src.size, parts = Math.ceil(size / CH), up = 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    let r = null;
+    for (let i = 0; i < parts; i++) {
+      vMsg('上傳中 ' + (i + 1) + '／' + parts + '（' + vMB(size) + '）…', Math.round(i / parts * 100));
+      const seg = new Uint8Array(await src.slice(i * CH, (i + 1) * CH).arrayBuffer());
+      r = await api('model3d', { site: SITE, op: 'up', up: up, part: i, parts: parts, size: size, name: f.name, data: vB64(seg) });
+    }
+    if (r && r.installed) { vMsg('✅ 換好了，重新打開 3D…', 100); setTimeout(() => location.reload(), 700); return; }
+    vBusy = false;
+    vMsg('✅ 傳上去了：' + esc(f.name) + '。等電腦轉好（大約 5 分鐘）就會自動換成新的，舊的會放進舊版。', 100);
+    const v = await api('model3d', { site: SITE, op: 'versions' }); verRender(v); verInit(CANUP, VPEND);
+    vMsg('✅ 傳上去了：' + esc(f.name) + '。等電腦轉好（大約 5 分鐘）就會自動換成新的。');
+  } catch (e) { vBusy = false; vMsg('沒有傳完：' + esc(errText(e)) + '。再傳一次。'); const b = document.getElementById('vpUp'); if (b) b.disabled = false; }
+};
+document.getElementById('verBtn').onclick = verShow;
+document.getElementById('verClose').onclick = () => { if (!vBusy) VP.style.display = 'none'; };
+
 // ---------- 開始（放最後：上面的 const、let 都準備好了才跑） ----------
 try {
   say('載入中…');
@@ -2139,9 +2251,10 @@ try {
   if (!SK && !ST_ON) throw { error: 'NONE' };   // 3D 結構先藏起來：只有 3D 結構的工地也當作還沒有
   start();
 } catch (e) {
-  const t = e && e.error === 'NONE' ? '這個工地還沒有 SketchUp 模型。<br><span class="muted">電腦上把 .skp 拖到「SketchUp 傳到工地App」就有了'
-    + (ST_ON ? '；3D 結構：BricsCAD「混凝土」按「全部樓層」，再按「上傳 3D 到工地App」。' : '。') + '</span>' : esc(errText(e));
-  say('<div>' + t + '</div><button class="btn ghost" onclick="location.reload()">再試一次</button>');
+  const t = e && e.error === 'NONE' ? '這個工地還沒有 SketchUp 模型。<br><span class="muted">' + (CANUP ? '按右上「🗂 版本」→「⬆ 上傳新的 3D」，或電腦上把 .skp 拖到「SketchUp 傳到工地App」'
+    : '開發者、老闆上傳以後就有了') + (ST_ON ? '；3D 結構：BricsCAD「混凝土」按「全部樓層」，再按「上傳 3D 到工地App」。' : '。') + '</span>' : esc(errText(e));
+  say('<div>' + t + '</div>' + (CANUP && e && e.error === 'NONE' ? '<button class="btn solid" style="margin-right:8px" onclick="document.getElementById(\'verBtn\').click()">⬆ 上傳 3D</button>' : '') +
+    '<button class="btn ghost" onclick="location.reload()">再試一次</button>');
   console.error(e);
 }
 </script>
