@@ -309,6 +309,42 @@ img[data-cap] { cursor:zoom-in; }
 .dlph .cap { display:block; font-size:12.5px; line-height:16px; padding:4px 6px; color:var(--text); }
 .dlph .new { position:absolute; top:6px; left:6px; background:var(--warn); color:#fff; font-size:11px; border-radius:6px; padding:1px 5px; }
 .big.dlsave { position:sticky; bottom:10px; z-index:5; box-shadow:0 4px 14px rgba(0,0,0,.18); }
+/* 開發者的施工日誌、工地頁：跟摺疊機一樣一欄（App 的 contentWidth 640；使用者 2026-11-14「顯示方式也要跟android手機一樣」） */
+.wrap.one, .r-dlog .wrap { max-width:640px; }
+.tiles.one { display:block; }
+.top .camb { flex:none; background:var(--orange); border-radius:16px; padding:6px 12px; margin-left:10px; font-size:14px; }
+.dlpill { display:flex; align-items:center; background:#F1F7F8; border-radius:20px; }
+.dlpill > button { border:0; background:none; font-size:26px; line-height:1.2; color:var(--teal); padding:0 12px; }
+.dlpill > button:disabled { color:var(--line); }
+.dldate { position:relative; display:flex; align-items:center; gap:6px; font-size:18px; font-weight:bold; padding:4px 0; cursor:pointer; white-space:nowrap; }
+.dldate.old { color:var(--warn); }
+.dldate input { position:absolute; left:0; top:0; width:100%; height:100%; opacity:0; padding:0; border:0; cursor:pointer; }
+.wxhint { margin-top:8px; background:#FFF6EC; color:var(--warn); font-weight:bold; font-size:13.5px; line-height:19px; border-radius:10px; padding:6px 10px; }
+.phrow { display:flex; align-items:center; width:100%; margin-top:8px; border:0; border-radius:8px; background:#FFF6EC; padding:9px 10px; font:inherit; font-size:15px; color:var(--ink); text-align:left; }
+.phrow b { color:var(--navy); font-size:14px; white-space:nowrap; }
+.pcnote { font-size:13px; color:var(--navy); line-height:18px; background:#EEF3FA; border-radius:10px; padding:8px 10px; margin-bottom:12px; }
+.card.lcard { padding:6px 8px; }
+.lrow { display:flex; align-items:center; gap:4px; width:100%; min-height:46px; border:0; background:none; border-radius:8px; padding:6px; font:inherit; color:var(--ink); text-align:left; }
+.lrow.done { background:#F1FAF5; }
+.lrow > b { width:84px; flex:none; font-size:16px; }
+.lrow.wide > b { width:auto; }
+.lrow .v { flex:1; min-width:0; padding-left:8px; font-size:13px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.lrow.done .v { color:var(--ink); }
+.lrow .pn { font-size:13px; color:var(--warn); padding:0 4px; white-space:nowrap; }
+.lrow .ck { width:18px; flex:none; text-align:center; font-size:22px; font-weight:bold; color:var(--line); }
+.lrow.done .ck { font-size:18px; color:var(--green); }
+.lsep { height:1px; background:#EDF0F4; margin:0 6px; }
+.wrow { font-size:13.5px; line-height:19px; color:var(--blue); padding:0 8px 6px 14px; white-space:pre-wrap; }
+.wrow.wait { color:#8A96A3; }
+.snrow { display:flex; align-items:center; gap:6px; width:100%; margin-top:6px; border:0; border-radius:8px; background:#fff; padding:7px 10px; font:inherit; font-size:15px; line-height:21px; color:var(--ink); text-align:left; }
+.snrow b { color:var(--navy); }
+.card.phlink { display:flex; align-items:center; gap:10px; width:100%; border:0; font:inherit; color:inherit; text-align:left; }
+.dlgrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+.dlgrid .gph, .dlgrid .ph { position:relative; display:block; width:100%; padding:0; border:0; border-radius:8px; overflow:hidden; background:#DDE5EA; }
+.dlgrid img { display:block; width:100%; aspect-ratio:4/3; object-fit:cover; }
+.dlgrid .new { position:absolute; top:6px; left:6px; background:var(--warn); color:#fff; font-size:11px; border-radius:6px; padding:1px 5px; }
+.dlgrid .gc { font-size:14px; font-weight:bold; margin-top:4px; }
+.dlgrid .gl { font-size:13px; line-height:17px; white-space:pre-wrap; }
 /* 開發者往左滑才出現「刪除」（使用者 2026-11-13「能否做成往左滑才會出現刪除」）：底下藏紅色按鈕，上面那列滑開 */
 .swp { position:relative; overflow:hidden; border-radius:12px; margin-bottom:9px; box-shadow:0 1px 2px rgba(24,59,86,.10); }
 .swp > .item { position:relative; z-index:1; margin:0; border-radius:0; box-shadow:none; transition:transform .2s ease; touch-action:pan-y; }
@@ -327,7 +363,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/13f';
+var WEB_VERSION = '11/14a';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1286,17 +1322,19 @@ function money(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g
 
 function renderSite() {
   var o = S.office, site = S.site, t = todayYmd();
-  var h = topBar(site, 'hub') + '<div class="wrap">';
+  // 開發者（Google 驗證過）：跟摺疊機一樣一欄、同樣的格子（使用者 2026-11-14「為何ipad開發人員介面跟手機不一樣」「電腦版的也有一樣的問題」）
+  var dev = isOwner();
+  var h = topBar(site, 'hub') + '<div class="wrap' + (dev ? ' one' : '') + '">';
   if (!o) h += '<div class="sub" style="font-size:15px;margin:0 4px 10px">' + esc(S.officeErr || '讀取中…') + '</div>';
   var sheets = o ? (o.sheets || []).filter(function (d) { return d.site === site; }).length : 0;
   var pours = o ? (o.pours || []).filter(function (d) { return d.site === site; }) : [];
   var next = pourOrder(pours).filter(function (d) { return pourOf(d).pourDate && pourOf(d).pourDate >= t; })[0];
   var book = o && o.books && o.books[site];
   var cb = book ? contractBook(book) : null;
-  h += '<div class="tiles">';
-  h += tile('施工日誌', '每天的日誌、施工人員傳的、照片', '#2F80ED', '📋', 'logs');
-  // 開發者（Google 驗證過）在 iPad／電腦寫日誌（使用者 2026-11-13「iPad 完整功能」第 1 步）
-  if (isOwner()) h += tile('寫施工日誌（開發者）', '天氣、大項、材料、討論、拍照・跟摺疊機同一份', '#0F766E', '✏️', 'dlog').replace('data-act="tile"', 'data-act="dlopenday"').replace('data-v="dlog"', 'data-v=""');
+  h += '<div class="tiles' + (dev ? ' one' : '') + '">';
+  // 開發者點「施工日誌」直接是寫日誌那一頁（跟摺疊機一樣；以前另外一格「寫施工日誌（開發者）」）
+  if (dev) h += tile('施工日誌', '天氣、大項、材料、討論、拍照・跟摺疊機同一份', '#2F80ED', '📋', 'dlog').replace('data-act="tile"', 'data-act="dlopenday"').replace('data-v="dlog"', 'data-v=""');
+  else h += tile('施工日誌', '每天的日誌、施工人員傳的、照片', '#2F80ED', '📋', 'logs');
   h += tile('鋼筋施工單', sheets + ' 份', '#16A6A0', '📐', 'sheets');
   h += tile('混凝土灌漿數量', next ? '下一次 ' + rocDate(pourOf(next).pourDate) + '（' + (pourOf(next).part || '') + '）' + (pourOf(next).m3 ? ' ・ ' + pourOf(next).m3 + ' m³' : '') : pours.length + ' 份', '#F2994A', '🚚', 'pours');
   h += tile('發包', cb ? '未發包 ' + cb.todo.length + ' ・ 已發包 ' + cb.done.length : '還沒有發包資料', '#9B51E0', '🤝', 'contracts');
@@ -1307,7 +1345,8 @@ function renderSite() {
   // 按鈕不寫「結構」「配筋」（使用者 2026-11-13「不要顯示結構跟配筋」：3D 現在是 SketchUp 模型）
   if (isLead()) h += tile('3D 模型', 'SketchUp・分樓層・圈要改的', '#4F6BD8', '🏗️', '3d');
   // 管理者（第 13 版，跟摺疊機一樣）：這個工地施工人員傳的、幫補一筆、同意修改
-  if (isAdmin() && !S.asCode) h += tile('施工人員傳的', '幫補一筆・同意修改・改或刪', '#2D9CDB', '👷', 'work');
+  // 開發者：跟摺疊機一樣放在施工日誌裡面（最下面「👷 施工人員傳的」）
+  if (isAdmin() && !S.asCode && !dev) h += tile('施工人員傳的', '幫補一筆・同意修改・改或刪', '#2D9CDB', '👷', 'work');
   h += '</div>';
   if (o && S.officeErr) h += '<div class="sub">' + esc(S.officeErr) + '</div>';
   return h + '</div>';
@@ -3538,6 +3577,8 @@ function dlStamp(before, after, now) {
   e.materials = dlMats(e.materials);
   if (JSON.stringify(e.materials) !== JSON.stringify(dlMats(b.materials))) { e.editAt.materials = now; delete e.materialsSrc; }
   if ((e.discussion || '') !== (b.discussion || '')) { e.editAt.discussion = now; delete e.discussionSrc; }
+  // 施工人員工作狀況（2026-11-14 網頁也能記）：跟摺疊機一樣，改過就記時間，合併時新的贏
+  if (JSON.stringify(e.staffNotes || []) !== JSON.stringify(b.staffNotes || [])) e.editAt.staffNotes = now;
   (b.photos || []).forEach(function (p) { bp[p.file] = p; });
   e.photos = (e.photos || []).map(function (p) { var o = bp[p.file]; if (o && dlPhotoKey(o) === dlPhotoKey(p)) return p; p.at = now; return p; });
   (b.photos || []).forEach(function (o) { if (!e.photos.some(function (p) { return p.file === o.file; })) e.gone['photo:' + o.file] = now; });
@@ -3612,7 +3653,8 @@ function dlKey(dl) { return 'dl|' + dl.site + '|' + dl.date; }
 function dlOpen(date) {
   if (!isOwner()) return;
   S.dl = { site: S.site, date: date || todayYmd(), e0: null, e: null, fileId: '', loaded: false, busy: '', err: '', msg: '', dirty: false,
-    open: '', cur: null, two: false, ph: '', add: { cat: '', line: '', vendor: '', kind: '' }, newPh: [], thumbs: {}, lists: null, from: S.route === 'logs' ? 'logs' : 'site' };
+    open: '', cur: null, two: false, ph: '', add: { cat: '', line: '', vendor: '', kind: '' }, newPh: [], thumbs: {}, lists: null, from: S.route === 'logs' ? 'logs' : 'site',
+    view: '', note: null, day: null, y: 0 };
   loadGis(function () { });
   go('dlog');
   if (dHasToken()) dlLoad();
@@ -3620,6 +3662,13 @@ function dlOpen(date) {
 function dlLoad() {
   var dl = S.dl; if (!dl) return;
   dl.busy = '讀取雲端的日誌…'; dl.err = ''; dl.loaded = false; render();
+  // 這天施工人員傳的（放在各大項下面、最下面的照片）：跟收件服務拿，不用等
+  var wd = dl.date; dl.day = null;
+  logFetch(dl.site, wd).then(function (day) {
+    if (S.dl !== dl || dl.date !== wd) return;
+    dl.day = day.date === wd ? day : { log: null, workers: [] };
+    if (dl.loaded && !dl.view && S.route === 'dlog') render();   // 在填大項、打字的時候不重畫
+  }).catch(function () { });
   Promise.all([dl.lists ? Promise.resolve(dl.lists) : dlLists(), dlReadDay(dl.site, dl.date), dlIdbGet(dlKey(dl))]).then(function (r) {
     if (S.dl !== dl) return;
     dl.lists = r[0]; dl.fileId = r[1].id; dl.e0 = r[1].log; dl.e = dlCopy(r[1].log); dl.newPh = []; dl.dirty = false; dl.msg = '';
@@ -3657,64 +3706,136 @@ function dlTouch() {
   clearTimeout(dl.tm); dl.tm = setTimeout(function () { if (S.dl === dl && dl.dirty) dlIdbPut(dlKey(dl), { e: dl.e, newPh: dl.newPh, base: (dl.e0 || {}).savedAt || '', at: dlNow() }); }, 600);
   var st = $('dlstate'); if (st) { st.textContent = '● 還沒存到雲端'; st.className = 'dlstate dirty'; }
 }
+/**
+ * 開發者的施工日誌（跟摺疊機 LogOverviewScreen 一樣；使用者 2026-11-14「ipad顯示的開發者,顯示方式也要跟android手機一樣像圖二」）：
+ * 最上面「📷 拍照記錄」→ 日期＋天氣 → 工地、存檔狀態、這天的照片 → 11 個大項一排一排（點進去填）→ 材料／討論 → 🔒 工作狀況 → 施工人員傳的 → 照片一排兩張。
+ * 點大項、材料、照片、記一筆都是另外一頁（dl.view：item／mats／photos／note），左上角 ‹ 回來。
+ */
+function dlHead(dl, title, sub) {
+  var back = sub ? '<button class="back" data-act="dlback">‹</button>' : '<button class="back" data-act="nav" data-v="' + (dl ? dl.from : 'site') + '">‹</button>';
+  var cam = !sub && dl && dl.loaded ?'<button class="camb" data-act="dlview" data-v="photos">📷 拍照記錄</button>' : '';
+  return '<div class="top">' + back + '<h1' + (cam ? ' style="flex:0 1 auto"' : '') + '>' + esc(title) + '</h1>' + cam + '</div>';
+}
+function dlRow(act, v, name, val, done, photos, pc, wide) {
+  return '<button class="lrow' + (done ? ' done' : '') + (wide ? ' wide' : '') + '" data-act="' + act + '" data-v="' + esc(v) + '"><b>' + esc(name) + '</b><span class="v">' + esc(val || '─') + '</span>' +
+    (photos ? '<span class="pn">📷' + photos + '</span>' : '') + (pc ? '<span>🖥</span>' : '') + '<span class="ck">' + (done ? '✓' : '›') + '</span></button>';
+}
 function renderDlog() {
   var dl = S.dl;
-  var h = topBar('寫施工日誌・' + (dl ? dl.site : ''), dl ? dl.from : 'site') + '<div class="wrap">';
-  if (!dl) return h + '</div>';
-  if (!dHasToken()) {
-    return h + '<div class="card"><div class="ttl">先連上 Google 雲端</div><div style="font-size:15px;line-height:22px;margin:6px 0 10px">用<b>開發者的 Google 帳號</b>，讓這台直接寫進跟摺疊機同一個雲端資料夾（摺疊機、電腦 Excel 都看得到）。</div>' +
+  if (!dl) return topBar('施工日誌', 'site') + '<div class="wrap"></div>';
+  // 讀進來以後權限過期（一小時）也照樣可以改；按「存到雲端」才要再連
+  if (dl.loaded && dl.e) {
+    if (dl.view === 'item' && dl.cur) return dlItemPage(dl);
+    if (dl.view === 'mats') return dlMatsPage(dl);
+    if (dl.view === 'photos') return dlPhotosPage(dl);
+    if (dl.view === 'note' && dl.note) return dlNotePage(dl);
+  }
+  var h = dlHead(dl, '施工日誌') + '<div class="wrap">';
+  if (!dl.loaded && !dHasToken()) {
+    return h + '<div class="card" style="background:#FFF6EC"><div class="ttl">先連上 Google 雲端</div><div style="font-size:15px;line-height:22px;margin:6px 0 10px">' + esc(dl.site) + ' 的日誌跟摺疊機放在同一個雲端資料夾。用<b>開發者的 Google 帳號</b>連上，這台就可以寫、改（摺疊機、電腦 Excel 都看得到）。</div>' +
       '<button class="big" data-act="dlauth">🔑 連上 Google 雲端</button>' + (dl.err ? '<div class="err">' + esc(dl.err) + '</div>' : '') +
-      '<div class="note" style="margin-top:8px">第一次會問「要不要讓 柏捷工地App 存取它自己建的檔案」，按「允許」。權限一小時要再連一次（按這顆就好）；大約每 7 天會再問一次同意。</div></div></div>';
+      '<button class="ghost" style="margin:4px 0 8px" data-act="dlreadonly">只看這天（不用連）</button>' +
+      '<div class="note">第一次會問「要不要讓 柏捷工地App 存取它自己建的檔案」，按「允許」。權限一小時要再連一次（按上面那顆就好）；大約每 7 天會再問一次同意。</div></div></div>';
   }
   if (!dl.loaded) return h + '<div class="card sub" style="font-size:15px">' + esc(dl.busy || '') + '</div>' + (dl.err ? '<div class="err">' + esc(dl.err) + '</div><button class="ghost" data-act="dlreload">再試一次</button>' : '') + '</div>';
-  var e = dl.e, L = dl.lists, t = todayYmd();
-  h += '<div class="stepper" style="background:#fff;border-radius:20px;margin:0 0 8px"><button data-act="dlday" data-v="' + addDays(dl.date, -1) + '">‹</button>' +
-    '<div class="mid" style="font-size:18px;font-weight:800;padding:8px 0;text-align:center">' + rocDate(dl.date) + '（' + weekday(dl.date) + '）</div>' +
-    '<button data-act="dlday" data-v="' + addDays(dl.date, 1) + '"' + (dl.date >= t ? ' disabled' : '') + '>›</button></div>';
-  h += '<div class="row" style="margin:0 4px 8px;gap:8px"><span class="sub" style="font-size:14px">其他日子</span><input type="date" data-df="date" value="' + esc(dl.date) + '" max="' + esc(t) + '" style="max-width:180px"></div>';
-  h += '<div id="dlstate" class="dlstate' + (dl.dirty ? ' dirty' : '') + '">' + esc(dl.dirty ? '● 還沒存到雲端' : dl.msg || (dl.fileId ? '雲端的這一天（' + (e.savedAt ? '最後存 ' + shortTime(e.savedAt) : '') + '）' : '這天雲端還沒有日誌')) + '</div>';
-  if (dl.dirty && dl.msg) h += '<div class="box" style="font-size:14.5px">' + esc(dl.msg) + '</div>';
+  var e = dl.e, cats = dlCats(dl), ps = e.photos || [], cnt = {};
+  ps.forEach(function (p) { cnt[p.category] = (cnt[p.category] || 0) + 1; });
+  // 1. 日期＋天氣
+  h += dlDayCard(dl);
+  // 2. 工地、存檔狀態、這天的照片
+  var uncls = cnt[DL_UNCLS] || 0;
+  var state = dl.dirty ? '● 還沒存到雲端' : dl.fileId ? '雲端的這一天' + (e.savedAt ? '・最後存 ' + shortTime(e.savedAt) : '') : '這天雲端還沒有日誌';
+  h += '<div class="card"><div class="ttl" style="font-size:18px">' + esc(dl.site) + '</div><div id="dlstate" class="dlstate' + (dl.dirty ? ' dirty' : '') + '" style="margin:2px 0 0">' + esc(state) + '</div>' +
+    '<button class="phrow" data-act="dlview" data-v="photos"><span class="grow"' + (uncls ? ' style="color:var(--red)"' : '') + '>📷 這天的照片 ' + ps.length + ' 張' + (uncls ? '（' + uncls + ' 張還沒分類）' : '') + '</span><b>看照片 ›</b></button></div>';
+  if (dl.msg) h += '<div class="box" style="font-size:14.5px">' + esc(dl.msg) + '</div>';
   if (dl.err) h += '<div class="err">' + esc(dl.err) + '</div>';
-  // 天氣
-  h += '<div class="card"><div class="label">天氣' + (e.weatherSrc === '電腦' ? PC_TAG : '') + '</div><div class="chips">' + L.weathers.map(function (w) { return chip('dlwx', w, w, e.weather === w); }).join('') + '</div></div>';
-  // 大項
-  h += '<div class="logcards">';
-  dlCats(dl).forEach(function (c) {
-    var it = dlItemOf(dl, c);
-    if (dl.open === c) { h += dlItemEditor(dl, c); return; }
-    h += '<button class="card dlsum" data-act="dlopen" data-v="' + esc(c) + '"><div class="ttl">' + esc(c) + (it && it.src === '電腦' ? PC_TAG : '') + '<span class="arrow" style="float:right">✎</span></div>';
-    if (it && dlFilled(it)) {
-      var head = [it.vendor, dlQty(it) ? dlQty(it) + (it.unit || '') : ''].filter(Boolean).join(' ・ ');
-      if (head) h += '<div class="sub" style="font-size:14px">' + esc(head) + '</div>';
-      (it.lines || []).forEach(function (l, k) { var f = dlFull(l, k); if (f) h += '<div style="font-size:15px;line-height:21px">' + esc(f) + '</div>'; });
-    } else h += '<div class="sub" style="font-size:14px">（沒寫）點一下填</div>';
-    h += '</button>';
+  var hasPc = (e.items || []).some(function (i) { return i.src === '電腦'; }) || e.materialsSrc === '電腦' || e.discussionSrc === '電腦';
+  if (hasPc) h += '<div class="pcnote">🖥 這天有電腦（Excel 施工日誌）傳來的內容，標 🖥 的就是。Excel 那天再改、再傳一次，會以 Excel 為準。</div>';
+  // 3. 11 個大項（施工人員傳的放在那個大項下面，藍字）
+  var ws = ((dl.day && dl.day.workers) || []).map(effW), cv = S.s && Number(S.s.version) >= 25;
+  h += '<div class="card lcard">';
+  cats.forEach(function (c, i) {
+    var it = dlItemOf(dl, c), done = !!(it && dlFilled(it)), sum = '';
+    if (done) {
+      var head = [it.vendor, dlQty(it) ? dlQty(it) + (it.unit || '') : ''].filter(Boolean).join(' ');
+      sum = [head, (it.lines || []).map(dlFull).filter(Boolean)[0] || ''].filter(Boolean).join(' ・ ');
+    }
+    h += dlRow('dlopen', c, c, sum, done, cnt[c] || 0, done && it.src === '電腦', false);
+    ws.filter(function (w) { return canonCat(w.category) === c; }).forEach(function (w) {
+      var wait = cv && !w.ok;
+      h += '<div class="wrow' + (wait ? ' wait' : '') + '">👷 ' + esc(w.name + (String(w.hours || '').trim() ? '（' + w.hours + '）' : '') + '：' + w.text) + (wait ? '（待確認）' : '') + '</div>';
+    });
+    if (i < cats.length - 1) h += '<div class="lsep"></div>';
   });
   h += '</div>';
-  // 材料／機具
-  var mats = e.materials || [];
-  h += '<div class="card"><div class="label">材料／機具（最多 9 筆）' + (e.materialsSrc === '電腦' ? PC_TAG : '') + '</div>';
-  mats.forEach(function (m, i) {
-    h += '<div class="mat"><input type="text" style="flex:1.5" data-df="mat.' + i + '.vendor" value="' + esc(m.vendor) + '" placeholder="廠商">' +
-      '<input type="text" style="flex:.8" inputmode="decimal" data-df="mat.' + i + '.qty" value="' + esc(m.qty) + '" placeholder="數量">' +
-      '<input type="text" style="flex:.7" data-df="mat.' + i + '.unit" value="' + esc(m.unit) + '" placeholder="單位"></div>' +
-      '<div class="chips" style="margin-bottom:4px">' + L.vendors.map(function (v) { return chip('dlmv', i + '|' + v, v, m.vendor === v, true); }).join('') + '</div>' +
-      '<div class="chips">' + L.units.map(function (u) { return chip('dlmu', i + '|' + u, u, m.unit === u, true); }).join('') + '</div>' +
-      '<button class="link red" data-act="dlmdel" data-v="' + i + '">刪掉這筆</button>';
-  });
-  if (mats.length < 9) h += '<button class="link" data-act="dlmadd">' + (mats.length ? '＋ 再加一筆' : '＋ 新增材料／機具') + '</button>';
-  h += '</div>';
-  // 與業主、建築師討論
-  h += '<div class="card"><div class="label">與業主、建築師討論' + (e.discussionSrc === '電腦' ? PC_TAG : '') + '</div><textarea data-df="disc" placeholder="沒有就空著">' + esc(e.discussion || '') + '</textarea></div>';
-  // 照片
-  h += dlPhotosCard(dl);
+  // 4. 材料／機具、討論
+  var mats = dlMats(e.materials), disc = String(e.discussion || '').trim();
+  h += '<div class="card lcard">' + dlRow('dlview', 'mats', '材料/機具', mats.map(function (m) { return [m.vendor, m.qty + m.unit].filter(Boolean).join(' '); }).join('、'), mats.length > 0, 0, mats.length > 0 && e.materialsSrc === '電腦', false) +
+    '<div class="lsep"></div>' + dlRow('dlview', 'mats', '與業主、建築師討論', disc, !!disc, 0, !!disc && e.discussionSrc === '電腦', true) + '</div>';
+  // 5. 🔒 施工人員工作狀況（開發者記）
+  var sn = e.staffNotes || [];
+  h += '<div class="card" style="background:#FFF5F5"><div class="ttl">🔒 施工人員工作狀況</div><div class="sub" style="font-size:12.5px;line-height:17px">只有開發者、老闆、主任看得到；公司、施工人員看不到，也不會匯進 Excel。</div>';
+  if (!sn.length) h += '<div class="sub" style="font-size:14px;margin-top:6px">這天還沒有記錄</div>';
+  sn.forEach(function (n, i) { h += '<button class="snrow" data-act="dlnote" data-v="' + i + '"><span class="grow">' + esc((n.who ? n.who + '：' : '') + (n.text || '')) + '</span><b>✎</b></button>'; });
+  h += '<button class="ghost red" style="margin:10px 0 0" data-act="dlnote" data-v="-1">＋ 記一筆（例：提早下班）</button></div>';
+  // 6. 施工人員傳的（幫補一筆、同意修改）
+  if (isAdmin() && !S.asCode) h += '<button class="card phlink" data-act="tile" data-v="work"><span class="grow"><b style="font-size:16px">👷 施工人員傳的' + (ws.length ? '（這天 ' + ws.length + ' 筆）' : '') + '</b>' +
+    '<span class="sub" style="display:block;font-size:13px">幫補一筆・同意修改・改或刪</span></span><span class="arrow">›</span></button>';
+  // 7. 這天的照片（像 PDF 一樣一排兩張）
+  h += dlGridCard(dl, cats);
   h += '<button class="big dlsave" data-act="dlsave"' + (dl.busy ? ' disabled' : '') + '>' + esc(dl.busy || '💾 存到雲端') + '</button>';
   h += '<div class="note" style="text-align:center;margin-top:6px">存的時候會先抓雲端最新的，跟摺疊機改的一塊一塊合併：兩台改不同大項都留著，改到同一塊用最後改的。</div>';
   return h + '</div>';
 }
+/** 日期（‹ 115.11.14（週六）▼ ›，點日期選別天）＋這天的天氣 */
+function dlDayCard(dl) {
+  var e = dl.e, t = todayYmd(), today = dl.date === t;
+  var h = '<div class="card"><div class="row" style="gap:6px"><div class="dlpill"><button data-act="dlday" data-v="' + addDays(dl.date, -1) + '">‹</button>' +
+    '<label class="dldate' + (today ? '' : ' old') + '">' + rocDate(dl.date) + '（' + weekday(dl.date) + '）<span class="chev">▼</span>' +
+    '<input type="date" id="dldate" data-df="date" value="' + esc(dl.date) + '" max="' + esc(t) + '" aria-label="選別天"></label>' +
+    '<button data-act="dlday" data-v="' + addDays(dl.date, 1) + '"' + (today ? ' disabled' : '') + '>›</button></div><span class="grow"></span>' +
+    (today ? '' : '<button class="link" style="font-size:14px;white-space:nowrap" data-act="dlday" data-v="' + t + '">回今天</button>') + '</div>';
+  if (!e.weather) h += '<div class="wxhint">🌤️ ' + (today ? '今天的天氣還沒點喔～點一下下面的天氣，日誌就更完整了，謝謝你！' : '這天的天氣還沒點喔～點一下下面的天氣就好，辛苦了！') + '</div>';
+  h += '<div class="chips" style="margin-top:8px">' + dl.lists.weathers.map(function (w) { return chip('dlwx', w, weatherEmoji(w) + ' ' + w, e.weather === w); }).join('') + (e.weatherSrc === '電腦' ? PC_TAG : '') + '</div></div>';
+  return h;
+}
+/** 最下面：這天的照片（開發者拍的點了可以改；施工人員傳的點了放大） */
+function dlGridCard(dl, cats) {
+  var e = dl.e, roc = rocDate(dl.date), list = [];
+  uniq(cats.concat((e.photos || []).map(function (p) { return p.category; }))).forEach(function (c) {
+    var it = dlItemOf(dl, c), vq = it ? [it.vendor, dlQty(it) ? dlQty(it) + (it.unit || '') : ''].filter(Boolean).join('-') : '';
+    (e.photos || []).filter(function (p) { return p.category === c; }).forEach(function (p) {
+      var isNew = dl.newPh.some(function (x) { return x.file === p.file; });
+      var cat = c === DL_RECEIPT ? (p.kind === 'site' ? '📍 材料現場' : '🧾 單據') + (p.vendor ? '・' + p.vendor : '') : c;
+      var line = [c === DL_RECEIPT ? '' : vq, c === DL_RECEIPT && p.line ? '📍 ' + p.line : p.line].filter(Boolean).join('\n');
+      list.push('<div><button class="gph" data-act="dlgph" data-v="' + esc(p.file) + '"><img data-dlf="' + esc(p.file) + '" src="' + esc(dlSrcOf(dl, p)) + '" alt="">' + (isNew ? '<span class="new">未上傳</span>' : '') + '</button>' +
+        '<div class="gc">' + esc(cat) + '</div>' + (line ? '<div class="gl">' + esc(line) + '</div>' : '') + '<div class="sub" style="font-size:12px">' + roc + '</div></div>');
+    });
+  });
+  var wps = dl.day ? dayPhotos(dl.day.log, dl.day.workers || [], cats, dl.date).filter(function (p) { return p.w; }) : [];
+  wps.forEach(function (p) {
+    list.push('<div><div class="ph"><img data-pid="' + esc(p.id) + '" data-cap="' + esc([p.cat, p.line, p.date].filter(Boolean).join('\n')) + '" alt=""></div><div class="gc">' + esc(p.cat) + '</div>' +
+      (p.line ? '<div class="gl">' + esc(p.line) + '</div>' : '') + '<div class="sub" style="font-size:12px">' + esc(p.date) + '</div></div>');
+  });
+  return '<div class="card"><div class="ttl">📷 這天的照片（' + list.length + ' 張）</div><div class="sub" style="font-size:12.5px">開發者拍的、施工人員傳的都在這裡（跟匯出的 PDF 一樣一排兩張）；點開發者拍的可以改大項、刪掉</div>' +
+    (list.length ? '<div class="dlgrid">' + list.join('') + '</div>' : '<div class="sub" style="padding:8px 0;font-size:14.5px">這天沒有照片</div>') + '</div>';
+}
+/** 點一個大項：另外一頁填（跟摺疊機一樣） */
+function dlItemPage(dl) {
+  var c = dl.open, h = dlHead(dl, c, true) + '<div class="wrap">';
+  h += '<div class="sub" style="margin:0 4px 8px;font-size:14px">' + esc(dl.site) + '・' + rocDate(dl.date) + '（' + weekday(dl.date) + '）</div>';
+  h += dlItemEditor(dl, c);
+  var ps = (dl.e.photos || []).filter(function (p) { return p.category === c; });
+  h += '<div class="card"><div class="label">這個大項的照片（' + ps.length + ' 張）</div>';
+  if (ps.length) h += '<div class="dlgrid">' + ps.map(function (p) {
+    return '<div><button class="gph" data-act="dlgph" data-v="' + esc(p.file) + '"><img data-dlf="' + esc(p.file) + '" src="' + esc(dlSrcOf(dl, p)) + '" alt=""></button>' + (p.line ? '<div class="gl">' + esc(p.line) + '</div>' : '') + '</div>';
+  }).join('') + '</div>';
+  h += '<div class="row2" style="margin-top:10px"><button class="ghost" style="margin:0" data-act="dlcamc" data-v="' + esc(c) + '">📷 拍照</button><button class="ghost" style="margin:0" data-act="dlpickc" data-v="' + esc(c) + '">🖼 相簿</button></div></div>';
+  return h + '</div>';
+}
 function dlItemEditor(dl, c) {
   var it = dl.cur, L = dl.lists;
-  var h = '<div class="card dled"><div class="ttl">' + esc(c) + '</div>';
+  var h = '<div class="card dled">';
   h += '<div class="label">廠商</div><input type="text" data-df="iv" value="' + esc(it.vendor) + '" maxlength="30"><div class="chips" style="margin-top:6px">' + L.vendors.map(function (v) { return chip('dliv', v, v, it.vendor === v, true); }).join('') + '</div>';
   h += '<div class="label" style="margin-top:10px">單位</div><div class="chips">' + L.units.map(function (u) { return chip('dliu', u, u, it.unit === u, true); }).join('') + '</div>';
   h += '<div class="label" style="margin-top:10px">人數 × 工時</div><div class="row" style="gap:6px;flex-wrap:wrap"><input type="number" inputmode="numeric" min="0" max="99" data-df="ip" value="' + (+it.people || '') + '" placeholder="人數" style="max-width:90px"><span>×</span>' +
@@ -3728,18 +3849,57 @@ function dlItemEditor(dl, c) {
     h += '<div style="margin:6px 0 10px"><input type="text" data-df="il.' + k + '" value="' + esc(l.text) + '" placeholder="' + (k + 1) + '. 例：地梁綁紮（A 區）" maxlength="80">' +
       '<div class="chips" style="margin-top:4px">' + L.workers.map(function (w) { return chip('dliw', k + '|' + w, w, (l.workers || []).indexOf(w) >= 0, true); }).join('') + '</div></div>';
   });
-  h += '<div class="row2"><button class="ghost" style="margin:0" data-act="dlclose">完成</button><button class="ghost red" style="margin:0" data-act="dlclear">清空這個大項</button></div></div>';
+  h += '<div class="row2"><button class="ghost" style="margin:0" data-act="dlback">完成</button><button class="ghost red" style="margin:0" data-act="dlclear">清空這個大項</button></div></div>';
   return h;
 }
-function dlPhotosCard(dl) {
-  var e = dl.e, ps = e.photos || [], L = dl.lists, a = dl.add;
-  var cats = dlCats(dl).concat([DL_RECEIPT, DL_UNCLS]);
-  var h = '<div class="card"><div class="label">📷 照片（' + ps.length + ' 張）</div>';
-  if (ps.length) h += '<div class="dlphs">' + ps.map(function (p) {
+/** 材料／機具、與業主建築師討論（跟摺疊機一樣同一頁） */
+function dlMatsPage(dl) {
+  var e = dl.e, L = dl.lists, mats = e.materials || [];
+  var h = dlHead(dl, '材料/機具、討論', true) + '<div class="wrap">';
+  h += '<div class="card"><div class="label">材料／機具（最多 9 筆）' + (e.materialsSrc === '電腦' ? PC_TAG : '') + '</div>';
+  mats.forEach(function (m, i) {
+    h += '<div class="mat"><input type="text" style="flex:1.5" data-df="mat.' + i + '.vendor" value="' + esc(m.vendor) + '" placeholder="廠商">' +
+      '<input type="text" style="flex:.8" inputmode="decimal" data-df="mat.' + i + '.qty" value="' + esc(m.qty) + '" placeholder="數量">' +
+      '<input type="text" style="flex:.7" data-df="mat.' + i + '.unit" value="' + esc(m.unit) + '" placeholder="單位"></div>' +
+      '<div class="chips" style="margin-bottom:4px">' + L.vendors.map(function (v) { return chip('dlmv', i + '|' + v, v, m.vendor === v, true); }).join('') + '</div>' +
+      '<div class="chips">' + L.units.map(function (u) { return chip('dlmu', i + '|' + u, u, m.unit === u, true); }).join('') + '</div>' +
+      '<button class="link red" data-act="dlmdel" data-v="' + i + '">刪掉這筆</button>';
+  });
+  if (mats.length < 9) h += '<button class="link" data-act="dlmadd">' + (mats.length ? '＋ 再加一筆' : '＋ 新增材料／機具') + '</button>';
+  h += '</div>';
+  h += '<div class="card"><div class="label">與業主、建築師討論' + (e.discussionSrc === '電腦' ? PC_TAG : '') + '</div><textarea data-df="disc" placeholder="沒有就空著">' + esc(e.discussion || '') + '</textarea></div>';
+  return h + '<button class="big" data-act="dlback">完成</button></div>';
+}
+/** 拍照記錄・這天的照片：先選大項再拍；點一張改大項、刪掉 */
+function dlPhotosPage(dl) {
+  var h = dlHead(dl, '拍照記錄・這天的照片', true) + '<div class="wrap">';
+  if (dl.busy) h += '<div class="box" style="font-size:14.5px">' + esc(dl.busy) + '</div>';
+  h += dl.ph ? dlPhotoListCard(dl) + dlShootCard(dl) : dlShootCard(dl) + dlPhotoListCard(dl);
+  h += '<button class="big dlsave" data-act="dlsave"' + (dl.busy ? ' disabled' : '') + '>' + esc(dl.busy || '💾 存到雲端') + '</button>';
+  return h + '<button class="ghost" data-act="dlback">回日誌</button></div>';
+}
+function dlShootCard(dl) {
+  var e = dl.e, a = dl.add, cats = dlCats(dl).concat([DL_RECEIPT, DL_UNCLS]);
+  var al = a.cat ? (function () { var it = dlItemOf(dl, a.cat); return it ? (it.lines || []).map(dlFull).filter(Boolean) : []; })() : [];
+  var h = '<div class="card"><div class="ttl">📷 拍新的</div><div class="label" style="margin-top:8px">下一張的大項</div><div class="chips">' + cats.map(function (c) { return chip('dlac', c, c, a.cat === c, true); }).join('') + '</div>';
+  if (al.length) h += '<div class="label" style="margin-top:8px">內容</div><div class="chips">' + al.map(function (l) { return chip('dlal', l, l, a.line === l, true); }).join('') + '</div>';
+  if (a.cat === DL_RECEIPT) {
+    var vs = uniq(dlMats(e.materials).map(function (m) { return m.vendor; }));
+    if (vs.length) h += '<div class="label" style="margin-top:8px">哪一家</div><div class="chips">' + vs.map(function (v) { return chip('dlav', v, v, a.vendor === v, true); }).join('') + '</div>';
+    h += '<div class="row" style="margin-top:8px;gap:6px"><span class="sub" style="font-size:14px">下一張是：</span><button class="kindpick' + (a.kind === 'site' ? '' : ' on') + '" data-act="dlak" data-v="">🧾 單據</button><button class="kindpick site' + (a.kind === 'site' ? ' on' : '') + '" data-act="dlak" data-v="site">📍 材料現場</button></div>';
+  }
+  return h + '<div class="row2" style="margin-top:10px"><button class="ghost" style="margin:0" data-act="dlcam">📷 拍照</button><button class="ghost" style="margin:0" data-act="dlpick">🖼 相簿</button></div>' +
+    '<div class="note" style="margin-top:6px">照片先縮小（長邊 1600），按「存到雲端」才傳上去。</div></div>';
+}
+function dlPhotoListCard(dl) {
+  var e = dl.e, ps = e.photos || [], cats = dlCats(dl).concat([DL_RECEIPT, DL_UNCLS]);
+  var h = '<div class="card"><div class="ttl">這天的照片（' + ps.length + ' 張）</div><div class="sub" style="font-size:12.5px">點一張可以改大項、內容，或刪掉</div>';
+  if (ps.length) h += '<div class="dlphs" style="margin-top:8px">' + ps.map(function (p) {
     var n = dl.newPh.some(function (x) { return x.file === p.file; }), on = dl.ph === p.file;
     return '<button class="dlph' + (on ? ' on' : '') + '" data-act="dlph" data-v="' + esc(p.file) + '"><img data-dlf="' + esc(p.file) + '" src="' + esc(dlSrcOf(dl, p)) + '" alt="">' +
       (n ? '<span class="new">未上傳</span>' : '') + '<span class="cap"><b>' + esc(p.category === DL_RECEIPT ? (p.kind === 'site' ? '📍 材料現場' : '🧾 單據') + (p.vendor ? '・' + p.vendor : '') : p.category) + '</b>' + (p.line ? '<br>' + esc(p.line) : '') + '</span></button>';
   }).join('') + '</div>';
+  else h += '<div class="sub" style="padding:8px 0;font-size:14.5px">這天還沒有照片</div>';
   // 點一張：改大項、內容、單據廠商／種類、刪掉
   var cur = ps.filter(function (p) { return p.file === dl.ph; })[0];
   if (cur) {
@@ -3748,24 +3908,27 @@ function dlPhotosCard(dl) {
     if (lines.length) h += '<div class="label" style="margin-top:8px">內容（連到那一行）</div><div class="chips">' + lines.map(function (l) { return chip('dlpl', l, l, cur.line === l, true); }).join('') + '</div>';
     if (cur.category === DL_RECEIPT) {
       var vs = uniq(dlMats(e.materials).map(function (m) { return m.vendor; }));
-      h += '<div class="label" style="margin-top:8px">哪一家（材料／機具裡的廠商）</div><div class="chips">' + (vs.length ? vs.map(function (v) { return chip('dlpv', v, v, cur.vendor === v, true); }).join('') : '<span class="sub">先在上面「材料／機具」填廠商</span>') + '</div>' +
+      h += '<div class="label" style="margin-top:8px">哪一家（材料／機具裡的廠商）</div><div class="chips">' + (vs.length ? vs.map(function (v) { return chip('dlpv', v, v, cur.vendor === v, true); }).join('') : '<span class="sub">先在「材料/機具」填廠商</span>') + '</div>' +
         '<div class="row" style="margin-top:8px;gap:6px"><button class="kindpick' + (cur.kind === 'site' ? '' : ' on') + '" data-act="dlpk" data-v="">🧾 單據</button><button class="kindpick site' + (cur.kind === 'site' ? ' on' : '') + '" data-act="dlpk" data-v="site">📍 材料現場</button></div>' +
         '<div class="label" style="margin-top:8px">施作位置</div><input type="text" data-df="pline" value="' + esc(cur.line || '') + '" maxlength="60" placeholder="例：2F 樓板">';
     }
     h += '<div class="row2" style="margin-top:8px"><button class="ghost" style="margin:0" data-act="dlph" data-v="">完成</button><button class="ghost red" style="margin:0" data-act="dlpdel">刪掉這張</button></div></div>';
   }
-  // 拍新的：先選大項（和內容）再拍
-  var al = a.cat ? (function () { var it = dlItemOf(dl, a.cat); return it ? (it.lines || []).map(dlFull).filter(Boolean) : []; })() : [];
-  h += '<div class="label" style="margin-top:10px">下一張的大項</div><div class="chips">' + cats.map(function (c) { return chip('dlac', c, c, a.cat === c, true); }).join('') + '</div>';
-  if (al.length) h += '<div class="label" style="margin-top:8px">內容</div><div class="chips">' + al.map(function (l) { return chip('dlal', l, l, a.line === l, true); }).join('') + '</div>';
-  if (a.cat === DL_RECEIPT) {
-    var vs2 = uniq(dlMats(e.materials).map(function (m) { return m.vendor; }));
-    if (vs2.length) h += '<div class="label" style="margin-top:8px">哪一家</div><div class="chips">' + vs2.map(function (v) { return chip('dlav', v, v, a.vendor === v, true); }).join('') + '</div>';
-    h += '<div class="row" style="margin-top:8px;gap:6px"><span class="sub" style="font-size:14px">下一張是：</span><button class="kindpick' + (a.kind === 'site' ? '' : ' on') + '" data-act="dlak" data-v="">🧾 單據</button><button class="kindpick site' + (a.kind === 'site' ? ' on' : '') + '" data-act="dlak" data-v="site">📍 材料現場</button></div>';
-  }
-  h += '<div class="row2" style="margin-top:10px"><button class="ghost" style="margin:0" data-act="dlcam">📷 拍照</button><button class="ghost" style="margin:0" data-act="dlpick">🖼 相簿</button></div>' +
-    '<div class="note" style="margin-top:6px">照片先縮小（長邊 1600），按「存到雲端」才傳上去。點照片可以改大項、刪掉。</div></div>';
-  return h;
+  return h + '</div>';
+}
+/** 記一筆／改一筆施工人員工作狀況（跟摺疊機的視窗一樣：誰可以複選、常用狀況點一下加進去） */
+var DL_QUICK = ['提早下班', '晚到', '請假', '沒來', '中途離開', '表現很好'];
+function dlNotePage(dl) {
+  var d = dl.note, names = uniq((dl.lists.workers || []).concat(d.who));
+  var h = dlHead(dl, d.i < 0 ? '記一筆工作狀況' : '改這筆工作狀況', true) + '<div class="wrap"><div class="card" style="background:#FFF5F5">';
+  h += '<div class="label">誰（可以不選；可以選好幾個）</div><div class="chips">' + names.map(function (n) { return chip('dlnw', n, n, d.who.indexOf(n) >= 0, true); }).join('') + '</div>';
+  h += '<input type="text" data-df="nother" value="' + esc(d.other) + '" maxlength="40" placeholder="其他人（自己打；好幾個用「、」分開）" style="margin-top:6px">';
+  h += '<div class="label" style="margin-top:10px">狀況</div><textarea data-df="ntext" maxlength="200" placeholder="例：15:00 提早下班">' + esc(d.text) + '</textarea>';
+  h += '<div class="chips" style="margin-top:6px">' + DL_QUICK.map(function (q) { return chip('dlnq', q, '＋' + q, false, true); }).join('') + '</div>';
+  if (d.err) h += '<div class="err">' + esc(d.err) + '</div>';
+  h += '<div class="row2" style="margin-top:12px"><button class="ghost" style="margin:0" data-act="dlback">取消</button><button class="ghost" style="margin:0;background:var(--navy);color:#fff" data-act="dlnsave">存</button></div>';
+  if (d.i >= 0) h += '<button class="ghost red" style="margin:10px 0 0" data-act="dlndel">🗑 刪除這筆</button>';
+  return h + '</div></div>';
 }
 function dlCloseItem(dl) {
   var it = dl.cur; if (!it) return;
@@ -3776,7 +3939,43 @@ function dlCloseItem(dl) {
 }
 ACT.dlauth = function () { dLogin(function () { dlLoad(); }); };
 ACT.dlreload = function () { dLogin(function () { dlLoad(); }); };
-ACT.dlday = function (v) { var dl = S.dl; if (!dl || !v || v > todayYmd() || dl.busy) return; dlCloseItem(dl); dl.date = v; dl.thumbs = {}; dl.ph = ''; dlLoad(); window.scrollTo(0, 0); };
+ACT.dlday = function (v) { var dl = S.dl; if (!dl || !v || v > todayYmd() || dl.busy) return; dlCloseItem(dl); dl.date = v; dl.thumbs = {}; dl.ph = ''; dl.view = ''; dl.note = null; dlLoad(); window.scrollTo(0, 0); };
+/** 從大項、材料、照片、記一筆那一頁回日誌（大項填的放回去；捲回原來的位置） */
+ACT.dlback = function () {
+  var dl = S.dl; if (!dl) return;
+  if (dl.view === 'item') dlCloseItem(dl);
+  dl.view = ''; dl.ph = ''; dl.note = null;
+  if (dl.dirty) dlTouch();
+  render(); window.scrollTo(0, dl.y || 0);
+};
+ACT.dlview = function (v) { var dl = S.dl; if (!dl || !dl.loaded) return; dlCloseItem(dl); dl.y = window.scrollY; dl.view = v; dl.ph = ''; render(); window.scrollTo(0, 0); };
+ACT.dlgph = function (v) { var dl = S.dl; if (!dl) return; dlCloseItem(dl); if (!dl.view) dl.y = window.scrollY; dl.view = 'photos'; dl.ph = v; render(); window.scrollTo(0, 0); };
+// 大項那一頁的「📷 拍照」「🖼 相簿」：下一張就是這個大項
+ACT.dlcamc = function (c) { var dl = S.dl; if (!dl) return; dl.add.cat = c; dl.add.line = ''; ACT.dlcam(); };
+ACT.dlpickc = function (c) { var dl = S.dl; if (!dl) return; dl.add.cat = c; dl.add.line = ''; ACT.dlpick(); };
+ACT.dlreadonly = function () { var d = S.dl && S.dl.date; openLogs('site'); if (d) loadLog(d); };
+// 施工人員工作狀況：記一筆（-1）／改第幾筆
+function dlSplitWho(s) { return String(s || '').split(/[、,，\s]+/).map(function (x) { return x.trim(); }).filter(Boolean); }
+ACT.dlnote = function (v) {
+  var dl = S.dl; if (!dl || !dl.loaded) return; dlCloseItem(dl);
+  var i = +v, n = i >= 0 ? (dl.e.staffNotes || [])[i] : null;
+  dl.y = window.scrollY; dl.note = { i: n ? i : -1, who: n ? dlSplitWho(n.who) : [], other: '', text: n ? n.text || '' : '', err: '' }; dl.view = 'note'; render(); window.scrollTo(0, 0);
+};
+ACT.dlnw = function (v) { var d = S.dl && S.dl.note; if (!d) return; var k = d.who.indexOf(v); if (k >= 0) d.who.splice(k, 1); else d.who.push(v); render(); };
+ACT.dlnq = function (v) { var d = S.dl && S.dl.note; if (!d) return; d.text = d.text.trim() ? d.text.trim() + '，' + v : v; d.err = ''; render(); };
+ACT.dlnsave = function () {
+  var dl = S.dl, d = dl && dl.note; if (!d) return;
+  if (!d.text.trim()) { d.err = '要寫狀況（例：15:00 提早下班）'; render(); return; }
+  var names = uniq((dl.lists.workers || []).concat(d.who)), who = names.filter(function (n) { return d.who.indexOf(n) >= 0; }).concat(dlSplitWho(d.other));
+  var n = { who: uniq(who).join('、'), text: d.text.trim(), at: dlNow() }, list = (dl.e.staffNotes || []).slice();
+  if (d.i >= 0) list[d.i] = n; else list.push(n);
+  dl.e.staffNotes = list; dl.view = ''; dl.note = null; dlTouch(); render(); window.scrollTo(0, dl.y || 0);
+};
+ACT.dlndel = function () {
+  var dl = S.dl, d = dl && dl.note; if (!d || d.i < 0) return;
+  if (!confirm('刪除這筆工作狀況？')) return;
+  dl.e.staffNotes = (dl.e.staffNotes || []).filter(function (x, j) { return j !== d.i; }); dl.view = ''; dl.note = null; dlTouch(); render(); window.scrollTo(0, dl.y || 0);
+};
 ACT.dlwx = function (v) { var dl = S.dl; if (!dl) return; dl.e.weather = dl.e.weather === v ? '' : v; dlTouch(); render(); };
 ACT.dlopen = function (c) {
   var dl = S.dl; if (!dl) return; dlCloseItem(dl);
@@ -3784,10 +3983,14 @@ ACT.dlopen = function (c) {
   var cur = it ? dlCopy(it) : { category: c, vendor: '柏捷', unit: '工', people: 0, hours: L.hours.indexOf('1') >= 0 ? '1' : L.hours[0] || '1', lines: [] };
   cur.lines = (cur.lines || []).map(function (l) { return { text: l.text || '', workers: (l.workers || []).slice() }; });
   while (cur.lines.length < 3) cur.lines.push({ text: '', workers: [] });
-  dl.open = c; dl.cur = cur; dl.two = +cur.people2 > 0; render();
+  dl.open = c; dl.cur = cur; dl.two = +cur.people2 > 0;
+  dl.y = window.scrollY; dl.view = 'item'; render(); window.scrollTo(0, 0);   // 另外一頁填（跟摺疊機一樣）
 };
-ACT.dlclose = function () { var dl = S.dl; if (!dl) return; dlCloseItem(dl); dlTouch(); render(); };
-ACT.dlclear = function () { var dl = S.dl; if (!dl || !dl.cur) return; if (!confirm('清空「' + dl.cur.category + '」？')) return; dl.e.items = (dl.e.items || []).filter(function (i) { return i.category !== dl.cur.category; }); dl.open = ''; dl.cur = null; dlTouch(); render(); };
+ACT.dlclose = function () { ACT.dlback(); };
+ACT.dlclear = function () {
+  var dl = S.dl; if (!dl || !dl.cur) return; if (!confirm('清空「' + dl.cur.category + '」？')) return;
+  dl.e.items = (dl.e.items || []).filter(function (i) { return i.category !== dl.cur.category; }); dl.open = ''; dl.cur = null; dl.view = ''; dlTouch(); render(); window.scrollTo(0, dl.y || 0);
+};
 ACT.dltwo = function () { var dl = S.dl; if (!dl || !dl.cur) return; dl.two = true; if (!dl.cur.hours2) dl.cur.hours2 = '1'; render(); };
 ACT.dliv = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.vendor = v; dlTouch(); render(); };
 ACT.dliu = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.unit = v; dlTouch(); render(); };
@@ -3895,6 +4098,7 @@ document.addEventListener('input', function (ev) {
   var k = ev.target.getAttribute && ev.target.getAttribute('data-df'); if (!k) return;
   var dl = S.dl; if (!dl || !dl.e) return; var v = ev.target.value;
   if (k === 'date') return;
+  if (k === 'ntext' || k === 'nother') { if (dl.note) { if (k === 'ntext') { dl.note.text = v; dl.note.err = ''; } else dl.note.other = v; } return; }   // 記一筆：按「存」才算
   if (k === 'disc') dl.e.discussion = v;
   else if (k === 'iv' && dl.cur) dl.cur.vendor = v;
   else if (k === 'ip' && dl.cur) dl.cur.people = Math.max(0, Math.min(99, parseInt(v, 10) || 0));
@@ -3908,6 +4112,8 @@ document.addEventListener('change', function (ev) {
   if (!(ev.target.getAttribute && ev.target.getAttribute('data-df') === 'date')) return;
   var v = ev.target.value; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) ACT.dlday(v);
 });
+// 點日期：電腦的瀏覽器要叫出月曆（iPad、手機點上去本來就會跳出來）
+document.addEventListener('click', function (ev) { var t = ev.target; if (t && t.id === 'dldate' && t.showPicker) { try { t.showPicker(); } catch (x) { } } });
 
 // ---------- 往左滑才出現「刪除」（使用者 2026-11-13「能否做成往左滑才會出現刪除」）：手指往左滑；電腦滑鼠按住往左拖 ----------
 // 滑超過一半停在打開，不然彈回去；打開時點那一列＝收回去（不會順便打開）；點別的地方也會收回去
