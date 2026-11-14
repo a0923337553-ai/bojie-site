@@ -98,6 +98,10 @@ button{font:inherit}
 #meas .ml{position:absolute;transform:translate(-50%,-50%);background:#1971C2;color:#fff;font-weight:700;font-size:13px;border-radius:8px;padding:2px 8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.35);text-align:center;line-height:1.3}
 #meas .ml.on{font-size:16px;padding:3px 10px}
 #meas .ml small{display:block;font-size:11px;font-weight:600;opacity:.92}
+#meas .aimTag{position:absolute;background:#E8590C;color:#fff;font-weight:700;font-size:13px;border-radius:8px;padding:2px 8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+#meas .aimTag.lock{background:#2B8A3E}
+#view,#meas{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body.aiming #measBar{opacity:.15;pointer-events:none}   /* 拖十字的時候上面那塊淡掉，才看得到下面 */
 body.measuring #pins .pin{pointer-events:none}
 body.measuring #hint{display:none}   /* 量的時候「點一下看構件」不對，直接藏 */
 .mk{border:1px solid var(--line);border-radius:12px;padding:7px 10px;margin:0 0 8px;cursor:pointer}
@@ -698,7 +702,7 @@ function fitTo(objs, keepAngle) {
 }
 function visibleObjs() { if (st.view === 'sk') return skVisible(); return items.filter(it => it.mesh.visible && it.mesh.material.opacity !== 0.08).map(it => it.mesh); }
 
-const ptrs = new Map(); let downAt = null;
+const ptrs = new Map(); let downAt = null, lpTimer = null;
 function bindInput() {
   cam.target = new THREE.Vector3();
   el.addEventListener('contextmenu', e => e.preventDefault());
@@ -707,12 +711,20 @@ function bindInput() {
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     downAt = ptrs.size === 1 ? { x: e.clientX, y: e.clientY, t: performance.now(), moved: false, btn: e.button, shift: e.shiftKey } : (downAt && Object.assign(downAt, { moved: true }));
     hideHint();
+    // 量尺寸：一指按住不動 0.38 秒＝出現十字，拖到要的位置再放開（使用者 2026-11-14「先長按螢幕，他會跑出十字標誌然後可以跟著拖曳」）
+    clearTimeout(lpTimer); lpTimer = null;
+    if (meas.aim && ptrs.size > 1) aimCancel();   // 拖到一半第二隻手指放下來＝不放點，改成縮放
+    if (meas.on && ptrs.size === 1 && e.button === 0 && !e.shiftKey) {
+      const id = e.pointerId, type = e.pointerType;
+      lpTimer = setTimeout(() => { lpTimer = null; if (downAt && !downAt.moved && ptrs.size === 1 && ptrs.has(id)) aimStart(downAt.x, downAt.y, type); }, 380);
+    }
   });
   el.addEventListener('pointermove', e => {
     if (!ptrs.has(e.pointerId)) return;
     const prev = ptrs.get(e.pointerId), cur = { x: e.clientX, y: e.clientY };
+    if (meas.aim) { ptrs.set(e.pointerId, cur); if (ptrs.size === 1) aimMove(cur.x, cur.y); return; }   // 十字跟著手指走，畫面不轉
     if (ptrs.size === 1 && downAt) {
-      if (Math.hypot(cur.x - downAt.x, cur.y - downAt.y) > 6) downAt.moved = true;
+      if (Math.hypot(cur.x - downAt.x, cur.y - downAt.y) > 6) { downAt.moved = true; clearTimeout(lpTimer); lpTimer = null; }
       if (downAt.moved) {
         const dx = cur.x - prev.x, dy = cur.y - prev.y;
         if (downAt.btn === 2 || downAt.btn === 1 || downAt.shift) pan(dx, dy);
@@ -730,6 +742,8 @@ function bindInput() {
   const end = e => {
     if (!ptrs.has(e.pointerId)) return;
     ptrs.delete(e.pointerId);
+    clearTimeout(lpTimer); lpTimer = null;
+    if (meas.aim) { if (e.type === 'pointerup' && ptrs.size === 0) aimEnd(); else aimCancel(); if (ptrs.size === 0) downAt = null; return; }   // 放開＝放在十字的地方
     if (downAt && !downAt.moved && ptrs.size === 0 && performance.now() - downAt.t < 600 && downAt.btn === 0) pick(e.clientX, e.clientY);
     if (ptrs.size === 0) downAt = null;
   };
@@ -1024,13 +1038,35 @@ function measSnap(x, y) {
   };
   return pickOf(verts, 18, 'v') || pickOf(lines, 12, 'e') || { p: h.point.clone(), s: 'f' };
 }
-function measTap(x, y) {
-  const s = measSnap(x, y);
+function measTap(x, y) { measPlace(measSnap(x, y)); }
+function measPlace(s) {
   if (!s) { measUi(true); return; }
   if (!meas.a) { meas.a = s; meas.last = null; }
   else { meas.last = { a: meas.a, b: s }; meas.segs.push(meas.last); meas.a = null; }
   measUi(); needs = true;
 }
+// 長按出現的十字：手機放在手指上面 80 px（手指才不會蓋住），滑鼠就在游標上；吸到角落、邊線會變綠色＝鎖住
+const AIM_UP = 80;
+function aimXY(a) {
+  const r = el.getBoundingClientRect();
+  a.x = Math.min(r.right - 2, Math.max(r.left + 2, a.fx)); a.y = Math.min(r.bottom - 2, Math.max(r.top + 2, a.fy - a.off));
+}
+function aimSnap(force) {
+  const a = meas.aim; if (!a) return;
+  const now = performance.now();
+  // 大模型一直打光線會卡：最多 0.045 秒算一次，最後停的位置一定會算到
+  if (!force && now - a.t < 45) { if (!a.timer) a.timer = setTimeout(() => { a.timer = null; if (meas.aim === a) { aimSnap(true); needs = true; } }, 50); return; }
+  a.t = now; a.s = measSnap(a.x, a.y);
+}
+function aimStart(fx, fy, type) {
+  meas.aim = { fx, fy, off: type === 'mouse' ? 0 : AIM_UP, x: 0, y: 0, s: null, t: 0, timer: null };
+  aimXY(meas.aim); aimSnap(true);
+  document.body.classList.add('aiming'); measUi(); needs = true;
+}
+function aimMove(fx, fy) { const a = meas.aim; a.fx = fx; a.fy = fy; aimXY(a); aimSnap(false); needs = true; }
+function aimStop() { const a = meas.aim; if (a) clearTimeout(a.timer); meas.aim = null; document.body.classList.remove('aiming'); return a; }
+function aimEnd() { const a = aimStop(); if (!a) return; measPlace(measSnap(a.x, a.y)); }
+function aimCancel() { aimStop(); measUi(); needs = true; }
 function measUi(miss) {
   const b = document.getElementById('measBtn');
   b.textContent = meas.on ? '✖ 結束量' : '📏 量尺寸'; b.classList.toggle('on', meas.on);
@@ -1038,12 +1074,14 @@ function measUi(miss) {
   document.getElementById('measBar').style.display = meas.on ? 'flex' : 'none';
   document.getElementById('meUndo').disabled = document.getElementById('meClear').disabled = !meas.a && !meas.segs.length;
   const t = document.getElementById('meText');
-  if (miss) t.innerHTML = '沒點到模型：要點在模型上<br><span>會自動吸到角落、邊線</span>';
-  else if (meas.a) t.innerHTML = '再點<b style="font-size:inherit">第二個點</b><br><span>' + (WIDE() ? '拖曳轉動、滾輪縮放' : '一指轉動、兩指放大縮小') + '</span>';
+  const lp = WIDE() ? '按住不動會出現十字，拖到位置再放開' : '長按出現十字，拖到位置再放開';
+  if (meas.aim) t.innerHTML = '拖到要量的地方，<b style="font-size:inherit">放開</b>就放下這一點<br><span>變綠色＝鎖在角落或邊線上</span>';
+  else if (miss) t.innerHTML = '沒點到模型：要點在模型上<br><span>會自動吸到角落、邊線</span>';
+  else if (meas.a) t.innerHTML = '再點<b style="font-size:inherit">第二個點</b>（或' + lp + '）<br><span>' + (WIDE() ? '拖曳轉動、滾輪縮放' : '一指轉動、兩指放大縮小') + '</span>';
   else if (meas.last) {
     const i = measInfo(meas.last);
     t.innerHTML = '長度 <b>' + measFmt(i.d) + ' cm</b>' + (i.both ? '　水平 ' + measFmt(i.dh) + '・高差 ' + measFmt(i.dy) : '') + '<br><span>再點兩個點可以量下一段</span>';
-  } else t.innerHTML = '點<b style="font-size:inherit">第一個點</b>（會自動吸到角落、邊線）<br><span>' + (WIDE() ? '拖曳轉動、滾輪縮放、右鍵移動' : '一指轉動、兩指放大縮小') + '</span>';
+  } else t.innerHTML = '點<b style="font-size:inherit">第一個點</b>（會自動吸到角落、邊線）<br><span>' + lp + '・' + (WIDE() ? '拖曳轉動、滾輪縮放、右鍵移動' : '一指轉動、兩指縮放') + '</span>';
 }
 function measStart() {
   if (st.draft || st.marking) cancelDraft();   // 圈到一半的先取消
@@ -1052,7 +1090,7 @@ function measStart() {
   renderSide(); measUi(); layout(); hideHint();
 }
 function measEnd() {
-  meas.on = false; meas.a = null; meas.segs = []; meas.last = null;
+  aimStop(); meas.on = false; meas.a = null; meas.segs = []; meas.last = null;
   if (st.sideWasM !== undefined) { st.sideMin = st.sideWasM; st.sideWasM = undefined; }
   renderSide(); measUi(); layout(); needs = true;
 }
@@ -1075,7 +1113,7 @@ function bindMeasure() {
 /** 每次重畫畫面：量的線、點、長度投影到螢幕上（轉動、放大都跟著） */
 function measDraw() {
   const box = document.getElementById('meas'); if (!box || !camera) return;
-  if (!meas.on || (!meas.a && !meas.segs.length)) { if (box.innerHTML) box.innerHTML = ''; return; }
+  if (!meas.on || (!meas.a && !meas.segs.length && !meas.aim)) { if (box.innerHTML) box.innerHTML = ''; return; }
   const r = el.getBoundingClientRect();
   const sc = v => { const q = v.clone().project(camera); return q.z > 1 ? null : [+((q.x + 1) / 2 * r.width).toFixed(1), +((1 - q.y) / 2 * r.height).toFixed(1)]; };
   // 角落＝實心藍點、邊線上＝空心藍圈、面上＝小藍點
@@ -1097,7 +1135,30 @@ function measDraw() {
       + (on && i.both ? '<small>水平 ' + measFmt(i.dh) + '・高差 ' + measFmt(i.dy) + '</small>' : '') + '</div>';
   });
   if (meas.a) svg += dot(sc(meas.a.p), meas.a.s);
-  box.innerHTML = '<svg width="' + Math.round(r.width) + '" height="' + Math.round(r.height) + '">' + svg + '</svg>' + lab;
+  // 長按的十字：橘色＝還沒鎖、綠色＝鎖在角落／邊線上；有第一點就拉一條虛線、即時顯示長度
+  const a = meas.aim;
+  if (a) {
+    const cx = +(a.x - r.left).toFixed(1), cy = +(a.y - r.top).toFixed(1), lock = a.s && a.s.s !== 'f', col = lock ? '#2B8A3E' : '#E8590C';
+    const S = a.s && sc(a.s.p);
+    if (meas.a && S) {
+      const A = sc(meas.a.p);
+      if (A) {
+        const d = meas.a.p.distanceTo(a.s.p);
+        svg += '<line x1="' + A[0] + '" y1="' + A[1] + '" x2="' + S[0] + '" y2="' + S[1] + '" stroke="#fff" stroke-width="6" stroke-linecap="round"/>'
+          + '<line x1="' + A[0] + '" y1="' + A[1] + '" x2="' + S[0] + '" y2="' + S[1] + '" stroke="#1971C2" stroke-width="3" stroke-dasharray="8 6" stroke-linecap="round"/>';
+        lab += '<div class="ml on aimL" style="left:' + ((A[0] + S[0]) / 2) + 'px;top:' + ((A[1] + S[1]) / 2 - 26) + 'px">' + measFmt(d) + ' cm</div>';
+      }
+    }
+    if (a.off) svg += '<line x1="' + cx + '" y1="' + (cy + 26) + '" x2="' + (a.fx - r.left).toFixed(1) + '" y2="' + (a.fy - r.top).toFixed(1) + '" stroke="#495057" stroke-width="1.5" stroke-dasharray="3 4" stroke-opacity=".7"/>';
+    const arm = (x1, y1, x2, y2) => '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#fff" stroke-width="5" stroke-linecap="round"/>'
+      + '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + col + '" stroke-width="2.2" stroke-linecap="round"/>';
+    svg += '<circle cx="' + cx + '" cy="' + cy + '" r="17" fill="none" stroke="#fff" stroke-width="5"/><circle cx="' + cx + '" cy="' + cy + '" r="17" fill="none" stroke="' + col + '" stroke-width="2.2"/>'
+      + arm(cx - 30, cy, cx - 6, cy) + arm(cx + 6, cy, cx + 30, cy) + arm(cx, cy - 30, cx, cy - 6) + arm(cx, cy + 6, cx, cy + 30);
+    if (S) svg += lock ? dot(S, a.s.s).replace('#1971C2', '#2B8A3E').replace('#1971C2', '#2B8A3E') : '<circle cx="' + S[0] + '" cy="' + S[1] + '" r="3" fill="' + col + '"/>';
+    lab += '<div class="aimTag' + (lock ? ' lock' : '') + '" style="left:' + (cx + 24) + 'px;top:' + (cy - 40) + 'px">'
+      + (!a.s ? '沒有模型' : a.s.s === 'v' ? '🔒 角落' : a.s.s === 'e' ? '🔒 邊線上' : '面上') + '</div>';
+  }
+  box.innerHTML ='<svg width="' + Math.round(r.width) + '" height="' + Math.round(r.height) + '">' + svg + '</svg>' + lab;
 }
 /**
  * 圈的時候的畫面（使用者 2026-11-10「圈起來的地方他會自動跳到目前設定的圖層及位置」）：哪一層、開了哪些種類、整層鋼筋、看哪一支的配筋。
@@ -1975,12 +2036,14 @@ function layout() {
   const dr = document.getElementById('draw'); dr.setAttribute('width', vr.width); dr.setAttribute('height', vr.height);
   const mb = document.getElementById('markBtn'); mb.style.top = (vr.top + 10) + 'px'; mb.style.right = (innerWidth - vr.right + 12) + 'px';
   // 圈的時候那條放在畫面上方中間、按鈕下面（窄的手機放在按鈕下面一點，不會擋到按鈕）
-  const mt = document.getElementById('markBar'), narrow = vr.width < 560;
-  mt.style.top = (vr.top + (narrow ? 50 : 10)) + 'px';
-  mt.style.left = (vr.left + (narrow ? vr.width / 2 : (vr.width - 150) / 2)) + 'px';
-  mt.style.width = Math.min(narrow ? vr.width - 16 : vr.width - 180, 520) + 'px';
   // 量尺寸：按鈕在「圈起來」左邊；那條跟圈的那條同一個位置（一次只會有一個）
   const me = document.getElementById('measBtn'); me.style.top = mb.style.top; me.style.right = (innerWidth - vr.right + 12 + (mb.offsetWidth || 0) + 8) + 'px';
+  // 右上角兩顆按鈕佔掉的寬度要讓開（使用者 2026-11-14 截圖：量的那條蓋住「結束量」）；左邊放不下 330 px 就放到按鈕下面
+  const btnW = 12 + (mb.offsetWidth || 0) + 8 + (me.offsetWidth ? me.offsetWidth + 8 : 0), room = vr.width - btnW - 8;
+  const mt = document.getElementById('markBar'), narrow = room < 330;
+  mt.style.top = (vr.top + (narrow ? 50 : 10)) + 'px';
+  mt.style.left = (vr.left + (narrow ? vr.width / 2 : 8 + room / 2)) + 'px';
+  mt.style.width = Math.min(narrow ? vr.width - 16 : room, 520) + 'px';
   const mz = document.getElementById('measBar'); mz.style.top = mt.style.top; mz.style.left = mt.style.left; mz.style.width = mt.style.width;
   needs = true;
 }
