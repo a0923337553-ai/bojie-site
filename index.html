@@ -376,7 +376,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/14e';
+var WEB_VERSION = '11/14f';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -2588,10 +2588,11 @@ var ACT = {
   // 跳出的視窗
   mclose: function () { if (S.modal && S.modal.busy) return; closeModal(); render(); },
   widgethelp: function () {
-    var m = { type: 'widget' }; S.modal = m; renderModal();
+    var m = { type: 'widget' }; S.modal = m;
     // 開發者用 Google 登入、這台沒有代碼：一打開就先拿自己的代碼（iPhone 要在按的那一下複製，不能按了才去拿）
-    if (!S.code && !S.saved && S.gMode && isOwner()) {
-      m.needOwn = true;
+    m.needOwn = !S.code && !S.saved && S.gMode && isOwner();
+    renderModal();   // 要拿代碼的：按鈕先「準備中…」
+    if (m.needOwn) {
       api('people').then(function (r) {
         var p = ((r && r.people) || []).filter(function (x) { return x.owner && x.code; })[0];
         if (p) m.ownCode = p.code; else m.err = '人員名單找不到你的代碼';
