@@ -316,7 +316,7 @@ img[data-cap] { cursor:zoom-in; }
 .dlpill { display:flex; align-items:center; background:#F1F7F8; border-radius:20px; }
 .dlpill > button { border:0; background:none; font-size:26px; line-height:1.2; color:var(--teal); padding:0 12px; }
 .dlpill > button:disabled { color:var(--line); }
-.dldate { position:relative; display:flex; align-items:center; gap:6px; font-size:18px; font-weight:bold; padding:4px 0; cursor:pointer; white-space:nowrap; }
+.dldate { position:relative; display:flex; align-items:center; gap:6px; font-size:18px; font-weight:bold; padding:4px 0; cursor:pointer; white-space:nowrap; border:0; background:none; font-family:inherit; color:var(--ink); }
 .dldate.old { color:var(--warn); }
 .dldate input { position:absolute; left:0; top:0; width:100%; height:100%; opacity:0; padding:0; border:0; cursor:pointer; }
 .wxhint { margin-top:8px; background:#FFF6EC; color:var(--warn); font-weight:bold; font-size:13.5px; line-height:19px; border-radius:10px; padding:6px 10px; }
@@ -376,7 +376,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/14c';
+var WEB_VERSION = '11/14d';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1714,8 +1714,14 @@ function calModal(m) {
  * 點日期 → 月曆，有資料的日子打青色點（使用者 2026-11-11「主任跟老闆都維持，只是多加月曆功能」；以前是一長串清單）。
  * 記了施工人員工作狀況的日子再一個紅點（「有紀錄用紅色」「另一個用青色」；只有開發者、老闆、主任拿得到 noteDates）
  */
+/** 月曆用哪一份：開發者寫日誌（m.dl）＝那一頁的日子＋跟收件服務拿的「有資料的日子」；不然＝看日誌那頁（S.log） */
+function logCalSrc() {
+  var m = S.modal;
+  if (m && m.dl && S.dl) { var d = S.dl.day || {}; return { date: S.dl.date, dates: d.dates || [], noteDates: d.noteDates }; }
+  return S.log;
+}
 function datesModal() {
-  var L = S.log, m = S.modal, has = {}, alert = {}, today = todayYmd(), seesNotes = Array.isArray(L.noteDates);
+  var L = logCalSrc(), m = S.modal, has = {}, alert = {}, today = todayYmd(), seesNotes = Array.isArray(L.noteDates);
   L.dates.forEach(function (d) { has[d] = 1; });
   (L.noteDates || []).forEach(function (d) { alert[d] = 1; });
   if (!m.month) m.month = L.date.slice(0, 7);
@@ -2628,10 +2634,14 @@ var ACT = {
     if (!m.ask) { m.ask = true; renderModal(); return; }
     closeModal(); todoDelNow(m.t.id);   // 馬上從畫面拿掉，收件服務在背景刪（使用者 2026-11-11「同步太慢，會讓人以為還沒刪除掉」）
   },
-  mlogdate: function (v) { closeModal(); if (v !== S.log.date) loadLog(v); },
+  mlogdate: function (v) {
+    var forDl = S.modal && S.modal.dl; closeModal();
+    if (forDl) { if (S.dl && v !== S.dl.date) ACT.dlday(v); else render(); return; }   // 開發者寫日誌：換到那天
+    if (v !== S.log.date) loadLog(v);
+  },
   // 月曆點日子＝選它（下面看那天）；再點一次同一天或按「看這天」才打開
-  mlogsel: function (v) { var m = S.modal; if (!m) return; if ((m.sel || S.log.date) === v) { ACT.mlogdate(v); return; } m.sel = v; renderModal(); },
-  mloggo: function () { var m = S.modal; ACT.mlogdate((m && m.sel) || S.log.date); },
+  mlogsel: function (v) { var m = S.modal; if (!m) return; if ((m.sel || logCalSrc().date) === v) { ACT.mlogdate(v); return; } m.sel = v; renderModal(); },
+  mloggo: function () { var m = S.modal; ACT.mlogdate((m && m.sel) || logCalSrc().date); },
   mlogmode: function (v) { S.calSum = v === 'month' ? 'month' : 'day'; LS.set('calSum', v === 'month' ? 'month' : ''); renderModal(); },
   mlogmonth: function (v) { var m = S.modal; if (!m) return; m.month = shiftMonth(m.month, +v); renderModal(); },
   mcaldate: function (v) { var m = S.modal; if (m.ev.series) return; m.date = addDays(m.date, +v); renderModal(); },
@@ -3692,7 +3702,7 @@ function dlLoad() {
   var wd = dl.date; dl.day = null;
   logFetch(dl.site, wd).then(function (day) {
     if (S.dl !== dl || dl.date !== wd) return;
-    dl.day = day.date === wd ? day : { log: null, workers: [] };
+    dl.day = day.date === wd ? day : { log: null, workers: [], dates: day.dates, noteDates: day.noteDates };   // 那天沒資料：月曆的記號照樣要
     if (dl.loaded && !dl.view && S.route === 'dlog') render();   // 在填大項、打字的時候不重畫
   }).catch(function () { });
   Promise.all([dl.lists ? Promise.resolve(dl.lists) : dlLists(), dlReadDay(dl.site, dl.date), dlIdbGet(dlKey(dl))]).then(function (r) {
@@ -3817,8 +3827,8 @@ function renderDlog() {
 function dlDayCard(dl) {
   var e = dl.e, t = todayYmd(), today = dl.date === t;
   var h = '<div class="card"><div class="row" style="gap:6px"><div class="dlpill"><button data-act="dlday" data-v="' + addDays(dl.date, -1) + '">‹</button>' +
-    '<label class="dldate' + (today ? '' : ' old') + '">' + rocDate(dl.date) + '（' + weekday(dl.date) + '）<span class="chev">▼</span>' +
-    '<input type="date" id="dldate" data-df="date" value="' + esc(dl.date) + '" max="' + esc(t) + '" aria-label="選別天"></label>' +
+    // 點日期＝跟摺疊機一樣的月曆（青點＝有資料、紅點＝有記工作狀況、下面看那天做了什麼；使用者 2026-11-14「要跟手機版的一樣」）
+    '<button class="dldate' + (today ? '' : ' old') + '" data-act="dlcal">' + rocDate(dl.date) + '（' + weekday(dl.date) + '）<span class="chev">▼</span></button>' +
     '<button data-act="dlday" data-v="' + addDays(dl.date, 1) + '"' + (today ? ' disabled' : '') + '>›</button></div><span class="grow"></span>' +
     (today ? '' : '<button class="link" style="font-size:14px;white-space:nowrap" data-act="dlday" data-v="' + t + '">回今天</button>') + '</div>';
   if (!e.weather) h += '<div class="wxhint">🌤️ ' + (today ? '今天的天氣還沒點喔～點一下下面的天氣，日誌就更完整了，謝謝你！' : '這天的天氣還沒點喔～點一下下面的天氣就好，辛苦了！') + '</div>';
@@ -4138,8 +4148,7 @@ document.addEventListener('change', function (ev) {
   if (!(ev.target.getAttribute && ev.target.getAttribute('data-df') === 'date')) return;
   var v = ev.target.value; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) ACT.dlday(v);
 });
-// 點日期：電腦的瀏覽器要叫出月曆（iPad、手機點上去本來就會跳出來）
-document.addEventListener('click', function (ev) { var t = ev.target; if (t && t.id === 'dldate' && t.showPicker) { try { t.showPicker(); } catch (x) { } } });
+ACT.dlcal = function () { var dl = S.dl; if (!dl || dl.busy) return; dlCloseItem(dl); S.modal = { type: 'dates', dl: 1, month: dl.date.slice(0, 7) }; renderModal(); };
 
 // ---------- 往左滑才出現「刪除」（使用者 2026-11-13「能否做成往左滑才會出現刪除」）：手指往左滑；電腦滑鼠按住往左拖 ----------
 // 滑超過一半停在打開，不然彈回去；打開時點那一列＝收回去（不會順便打開）；點別的地方也會收回去
