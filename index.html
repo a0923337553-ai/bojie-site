@@ -376,7 +376,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/14f';
+var WEB_VERSION = '11/14g';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -538,7 +538,7 @@ function warmGreeting(now) {
   var day = ['DAWN', 'MORNING', 'NOON', 'AFTERNOON'].indexOf(part) >= 0;
   if (dow === 1 && (part === 'DAWN' || part === 'MORNING')) return '新的一週開始了，一起平安順利';
   if (dow === 5 && (part === 'NOON' || part === 'AFTERNOON')) return '週末快到了，再撐一下，辛苦了';
-  if ((dow === 6 || dow === 0) && day) return '假日還在忙，真的辛苦你了';
+  if ((dow === 6 || dow === 0) && day) return '假日出勤辛苦了，忙完早點回家休息';   // 假日是被叫出來的（使用者 2026-11-14 選第 3 句）
   if (part === 'DAWN') return pick(['天還沒亮就出門，辛苦了，路上小心', '這麼早就開始，先吃點東西再上工']);
   if (part === 'MORNING') return pick(['平安出門、平安回家，今天也一起加油', '先喝口水、吃個早餐，再開工喔', '今天也請小心作業，安全第一', '新的一天，一步一步慢慢來']);
   if (part === 'NOON') return pick(['記得吃飯，找個陰涼處歇一下', '中午了，吃飽休息一下再繼續', '午休一下，下午才有精神']);
