@@ -363,7 +363,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/14a';
+var WEB_VERSION = '11/14b';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -3168,6 +3168,17 @@ function gsGone(msg) {
   S.err = msg || 'Google 驗證已經過期，請再用 Google 登入一次'; render();
 }
 ACT.glogin = function () { gsEnter(true); };
+/**
+ * 這台登出（開發者在首頁按）：Google 通行證、寫日誌用的 Google 雲端權限、這台記的代碼和首頁資料都清掉，重新打開回到登入畫面。
+ * 只動這一台；別台要一起登出用「👥 人員管理 → 全部登出」。
+ */
+ACT.gouthere = function () {
+  if (!confirm('這台登出 Google（開發者）？\n\n這台的 Google 登入、Google 雲端的權限、記住的代碼都會清掉，回到登入畫面。之後要再用 Google 登入（或輸入代碼）。\n其他 iPad、電腦不受影響。')) return;
+  try { if (DTOK.token && window.google && google.accounts && google.accounts.oauth2) google.accounts.oauth2.revoke(DTOK.token, function () { }); } catch (e) { }
+  DTOK.token = ''; DTOK.exp = 0; try { sessionStorage.removeItem('bojie.dtok'); } catch (e) { }
+  ['gs', 'gsess', 'code', 'sess', 'feed', 'here', 'fc', 'seen'].forEach(function (k) { LS.set(k, ''); });
+  location.replace(location.pathname + location.search);   // 重新打開：記憶體裡的資料一起清掉
+};
 ACT.gout = function () {
   if (!confirm('這台登出 Google（開發者）？之後要再用 Google 登入，或用代碼登入。')) return;
   LS.set('gs', ''); LS.set('gsess', ''); S.gs = ''; S.gMode = false; S.s = null; S.people = null; S.adminAll = null; S.route = 'login'; S.err = ''; render();
@@ -3332,6 +3343,8 @@ function adminCard() {
     '<button class="ghost" style="margin:0" data-act="adminq">👷 施工人員待處理' + badgeHtml(n) + '</button></div>';
   if (S.adminAll) h += '<div class="sub" style="margin-top:6px">等你同意 ' + c.pending + ' 筆 ・ 未分組 ' + c.unfiled + ' 筆（最近 62 天）</div>';
   if (!own && gAllowed()) h += '<button class="link" data-act="gverify">🔐 要改人員名單：用 Google 登入（開發者）</button>';
+  // 在裡面就能登出這一台（使用者 2026-11-14「要，加上去」：iPad 借別人用、不見了）
+  if (own && S.gMode) h += '<button class="link red" style="display:block;margin-top:4px" data-act="gouthere">🚪 這台登出 Google</button>';
   return h + '</div>';
 }
 function renderAdminQ() {
