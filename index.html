@@ -390,7 +390,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/14k';
+var WEB_VERSION = '11/14l';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1495,6 +1495,8 @@ function renderContracts() {
 // 跟摺疊機同一份：雲端 工地App/發包/<工地>.json。存的時候先抓雲端最新的，同一個工項留改得比較晚的（跟摺疊機 ContractBook.merge 一樣），
 // 刪掉的留 deleted 記號（摺疊機才不會加回來）。用寫日誌那個 Google 雲端權限（dLogin）。
 function cSafe(n) { return String(n).replace(/[\\\/:*?"<>|]/g, '_'); }
+/** 網頁直接改了雲端（發包、日誌）→ 告訴收件服務，叫醒手機馬上檢查（第 32 版即時推播；舊的收件服務不認得就算了） */
+function webPing() { try { api('ping').catch(function () { }); } catch (e) { } }
 function cNewId() { return 'c' + Date.now().toString(36) + (1000 + Math.floor(Math.random() * 9000)); }
 function cMerge(a, b) {
   var m = {};
@@ -1585,6 +1587,7 @@ function cCommit(item, okMsg, after) {
     cSave(site, item).then(function (items) {
       if (S.office && S.office.books) S.office.books[site] = items;
       if (after) after();
+      webPing();   // 叫醒手機馬上抓（收件服務第 32 版推播）
       S.contractMsg = okMsg; if (S.modal === m) closeModal(); render();
     }).catch(function (e) { fail(dlErrText(e) + '。再按一次「確定」。'); });
   }, fail);
@@ -4599,6 +4602,7 @@ function dlSave() {
     var d = new Date(); dl.msg = '✅ 已存到雲端 ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + '（摺疊機同步後就看得到）';
     dlIdbPut(dlKey(dl), null);
     delete LOGCACHE[logKey(site, date)]; delete LOGCACHE[logKey(site, null)];
+    webPing();   // 叫醒摺疊機、老闆主任的手機馬上抓（收件服務第 32 版推播）
     render(); dlThumbs();
   }).catch(function (e) {
     if (S.dl !== dl) return;
