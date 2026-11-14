@@ -390,7 +390,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/14j';
+var WEB_VERSION = '11/14k';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -4661,6 +4661,45 @@ document.addEventListener('pointerup', function () { swEnd(false); });
 document.addEventListener('pointercancel', function () { swEnd(true); });
 // 滑完放開不要順便打開那一列
 document.addEventListener('click', function (ev) { if (Date.now() - SW.eat < 500) { SW.eat = 0; ev.preventDefault(); ev.stopPropagation(); } }, true);
+
+// ---------- 網頁有新版就自己換（使用者 2026-11-14「為何電腦版的格式沒有改」） ----------
+// 電腦版（Edge 視窗）、iPad 主畫面的網頁常常一直開著，不會自己重新讀網頁 → 還是舊版。
+// 每 5 分鐘、從背景回來時看一次雲端的網頁版本；不一樣就重新整理。正在打字、跳出視窗、寫日誌還沒存、上傳中、看照片、看 3D：先不換，
+// 右下角出現「🔄 有新版，按這裡更新」，下次空下來再自己換。
+var WEBNEW = { ver: '', at: 0 };
+function webBusy() {
+  if (S.modal || S.busy || S.route === 'edit' || (S.dl && S.dl.dirty) || (S.cfile && S.cfile.busy) || $('pv') || document.querySelector('iframe[src^="3d.html"]')) return true;
+  var a = document.activeElement;
+  return !!(a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && String(a.value || '').trim());
+}
+function webApply() {
+  if (!WEBNEW.ver) return;
+  // 同一個新版 2 分鐘內已經重新整理過、還是舊的（瀏覽器硬給舊的）：不要一直重新整理，只出按鈕
+  var last = null; try { last = JSON.parse(sessionStorage.getItem('bojie.webreload') || 'null'); } catch (e) { }
+  var looping = last && last.ver === WEBNEW.ver && Date.now() - last.at < 120000;
+  if (!webBusy() && !looping) {
+    try { sessionStorage.setItem('bojie.webreload', JSON.stringify({ ver: WEBNEW.ver, at: Date.now() })); } catch (e) { }
+    location.reload(); return;
+  }
+  if ($('webnew')) return;
+  var b = document.createElement('button'); b.id = 'webnew'; b.type = 'button';
+  b.textContent = '🔄 網頁有新版（' + WEBNEW.ver + '），按這裡更新';
+  b.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:60;border:0;border-radius:20px;padding:10px 16px;font-size:15px;font-weight:bold;color:#fff;background:#1C5D99;box-shadow:0 3px 10px rgba(0,0,0,.25)';
+  b.addEventListener('click', function () { location.reload(); });
+  document.body.appendChild(b);
+}
+function webCheck() {
+  if (DRIVE_TEST || Date.now() - WEBNEW.at < 4 * 60000) return;
+  WEBNEW.at = Date.now();
+  // cache:'reload'：一定跟網站拿新的（順便把瀏覽器存的舊網頁換掉，重新整理才會拿到新的）
+  fetch(location.pathname + location.search, { cache: 'reload' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) {
+    var m = /var WEB_VERSION = '([^']+)'/.exec(t || '');
+    if (m && m[1] !== WEB_VERSION) { WEBNEW.ver = m[1]; webApply(); }
+  }).catch(function () { });
+}
+setInterval(function () { if (WEBNEW.ver) webApply(); else webCheck(); }, 5 * 60000);
+document.addEventListener('visibilitychange', function () { if (document.hidden) return; if (WEBNEW.ver) webApply(); else webCheck(); });
+setTimeout(webCheck, 20000);   // 打開 20 秒後先看一次（剛打開可能拿到瀏覽器存的舊網頁）
 
 // ---------- 開始 ----------
 contractActs();   // 發包的按鈕（開發者改發包，2026-11-14）
