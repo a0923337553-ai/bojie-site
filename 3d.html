@@ -233,6 +233,9 @@ function api(action, body) {
     cbs[id] = t => { let r = null; try { r = JSON.parse(t); } catch (e) { } if (r && r.ok) ok(r); else bad(r || { error: '收件服務回覆看不懂' }); };
     Android.call(JSON.stringify(req), id);
   });
+  // 網頁、電腦版嵌在 index.html 裡：用外面那一頁的 api（開發者用 Google 登入沒有代碼，要帶 Google 通行證；
+  // 切換成別人測試也跟外面一樣）。使用者 2026-11-14「ipad目前沒有3d」「跟ipad一樣的問題」（電腦版）
+  try { if (window.parent !== window && typeof parent.api === 'function' && parent.S) return parent.api(action, body); } catch (e) { }
   req.code = ls('code'); req.client = 'page'; req.device = ls('device');
   if (!req.code) return Promise.reject({ error: 'NOCODE' });
   return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(req) })
