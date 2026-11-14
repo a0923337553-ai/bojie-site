@@ -2161,8 +2161,14 @@ function vMsg(t, pct) {
   if (m) m.innerHTML = t || '';
   if (b) { b.style.display = pct == null ? 'none' : 'block'; b.firstChild.style.width = (pct || 0) + '%'; }
 }
+// 面板高度用程式量（跟下面那塊一樣）：App 裡的網頁 100vh 會算錯，面板只剩一條白邊、看不到上傳和刪除（使用者 2026-11-14 手機截圖）
+function vpFit() {
+  const scrH = Math.max(innerHeight || 0, document.documentElement.clientHeight || 0, (window.visualViewport && visualViewport.height) || 0);
+  VP.querySelector('.vp').style.maxHeight = Math.max(240, scrH - 60) + 'px';
+}
+addEventListener('resize', () => { if (VP.style.display === 'flex') vpFit(); });
 async function verShow() {
-  VP.style.display = 'flex';
+  VP.style.display = 'flex'; vpFit();
   VB.innerHTML = '<div class="muted">讀取中…</div>';
   try { verRender(await api('model3d', { site: SITE, op: 'versions' })); }
   catch (e) { VB.innerHTML = '<div class="muted">讀不到：' + esc(errText(e)) + '</div>'; }
