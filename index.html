@@ -348,6 +348,7 @@ img[data-cap] { cursor:zoom-in; }
 /* iPad、電腦：撐滿畫面（使用者 2026-11-14「這兩張是ipad上的畫面 能否優化成它的大小」：640 寬在 iPad 上中間一窄條、兩邊空太多）
    工地頁格子兩欄（很寬三欄）；日誌左右兩欄（左：日期、大項；右：材料、工作狀況、照片）；填東西的那幾頁 820 寬比較好填 */
 .dlcols > div { min-width:0; }
+.cmark { flex:none; border:1.5px solid var(--orange); color:var(--orange); background:#fff; border-radius:8px; padding:4px 9px; font-size:13.5px; font-weight:bold; }
 @media (min-width: 740px) {
   .wrap.one, .r-dlog .wrap { max-width:1240px; }
   .r-dlog .wrap.form { max-width:820px; }
@@ -376,7 +377,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="pick" accept="image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/14g';
+var WEB_VERSION = '11/14h';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -751,7 +752,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -1434,13 +1435,22 @@ function renderPdf() {
 function renderContracts() {
   var o = S.office, site = S.site, showMoney = !!(o && o.money);
   var b = contractBook(o && o.books ? o.books[site] : []);
-  var h = topBar('發包', 'site') + '<div class="wrap"><div class="label">' + esc(site) + '</div>';
+  // 開發者（Google 驗證過）可以改，跟摺疊機一樣：右上「＋ 新增工項」、點工項改、「標成已發包」（使用者 2026-11-14）
+  var ed = isOwner() && !!o;
+  var h = topBar('發包', 'site', ed ? '＋ 新增工項' : '', ed ? 'cadd' : '') + '<div class="wrap"><div class="label">' + esc(site) + '</div>';
   if (!o) return h + '<div class="sub">' + esc(S.officeErr || '讀取中…') + '</div></div>';
+  if (S.contractMsg) h += '<div class="box" style="font-size:14.5px">' + esc(S.contractMsg) + '</div>';
   h += '<div class="row" style="margin-bottom:10px"><button class="key' + (S.contractTab === 0 ? ' on' : '') + '" data-act="ctab" data-v="0">未發包 ' + b.todo.length + '</button>' +
     '<button class="key' + (S.contractTab === 1 ? ' on' : '') + '" data-act="ctab" data-v="1">已發包 ' + b.done.length + '</button></div>';
   if (S.contractTab === 0) {
-    if (!b.todo.length) h += '<div class="card sub" style="font-size:15px">' + (b.done.length ? '全部都發包了。' : '還沒有發包資料。') + '</div>';
-    b.todo.forEach(function (c) { h += '<div class="item"><span class="grow">' + esc(c.name) + (c.note ? '<span class="sub" style="display:block">' + esc(c.note) + '</span>' : '') + '</span></div>'; });
+    if (!b.todo.length) h += '<div class="card sub" style="font-size:15px">' + (b.done.length ? '全部都發包了。' : '還沒有發包資料。') + (ed ? '要加工項按右上「＋ 新增工項」。' : '') + '</div>';
+    b.todo.forEach(function (c) {
+      var inner = '<span class="grow">' + esc(c.name) + (c.note ? '<span class="sub" style="display:block">' + esc(c.note) + '</span>' : '') + '</span>';
+      if (!ed) { h += '<div class="item">' + inner + '</div>'; return; }
+      h += '<div class="item" style="cursor:pointer" data-act="cedit" data-v="' + esc(c.id) + '">' + inner +
+        '<button class="cmark" data-act="cmark" data-v="' + esc(c.id) + '">標成已發包</button></div>';
+    });
+    if (ed) h += '<div class="note" style="margin-top:4px">點工項可以改名稱或刪掉；按「標成已發包」填廠商、日期' + (o.money ? '、金額' : '') + '。</div>';
   } else {
     if (!b.done.length) h += '<div class="card sub" style="font-size:15px">還沒有已發包的工項。</div>';
     else if (showMoney) {
@@ -1449,13 +1459,121 @@ function renderContracts() {
         (noAmt ? '<div class="sub" style="font-size:12.5px">其中 ' + noAmt + ' 項還沒填金額</div>' : '') + '</div>';
     }
     b.done.forEach(function (c) {
-      h += '<div class="item"><span class="grow"><b style="display:block"><span style="color:var(--green)">✓ </span>' + esc(c.name) + '</b>' +
+      h += '<div class="item"' + (ed ? ' style="cursor:pointer" data-act="cedit" data-v="' + esc(c.id) + '"' : '') + '><span class="grow"><b style="display:block"><span style="color:var(--green)">✓ </span>' + esc(c.name) + '</b>' +
         '<span style="display:block;font-size:14px">' + esc([c.vendor || '（沒填廠商）', dateOf(c.date) ? rocDate(c.date) : ''].filter(Boolean).join(' ・ ')) + '</span>' +
         (c.note ? '<span class="sub" style="display:block">' + esc(c.note) + '</span>' : '') + '</span>' +
-        (showMoney ? (c.amount != null ? '<b style="color:var(--purple);font-size:15px;white-space:nowrap">NT$ ' + money(c.amount) + '</b>' : '<span class="sub">金額未填</span>') : '') + '</div>';
+        (showMoney ? (c.amount != null ? '<b style="color:var(--purple);font-size:15px;white-space:nowrap">NT$ ' + money(c.amount) + '</b>' : '<span class="sub">金額未填</span>') : '') +
+        (ed ? '<span class="arrow">›</span>' : '') + '</div>';
     });
+    if (ed && b.done.length) h += '<div class="note" style="margin-top:4px">點工項可以改廠商、日期' + (o.money ? '、金額' : '') + '，或退回未發包。</div>';
   }
-  return h + '<div class="note" style="margin-top:4px">只有開發者可以修改發包。</div></div>';
+  return h + (ed ? '' : '<div class="note" style="margin-top:4px">只有開發者可以修改發包。</div>') + '</div>';
+}
+
+// ---------- 發包：開發者在 iPad／電腦也能改（使用者 2026-11-14「Ipad是開發者權限為何不能編輯」） ----------
+// 跟摺疊機同一份：雲端 工地App/發包/<工地>.json。存的時候先抓雲端最新的，同一個工項留改得比較晚的（跟摺疊機 ContractBook.merge 一樣），
+// 刪掉的留 deleted 記號（摺疊機才不會加回來）。用寫日誌那個 Google 雲端權限（dLogin）。
+function cSafe(n) { return String(n).replace(/[\\\/:*?"<>|]/g, '_'); }
+function cNewId() { return 'c' + Date.now().toString(36) + (1000 + Math.floor(Math.random() * 9000)); }
+function cMerge(a, b) {
+  var m = {};
+  (a || []).concat(b || []).forEach(function (c) { var o = m[c.id]; if (!o || (Number(c.updated) || 0) > (Number(o.updated) || 0)) m[c.id] = c; });
+  return Object.keys(m).map(function (k) { return m[k]; }).sort(function (x, y) { return ((x.order || 0) - (y.order || 0)) || cmp(x.id, y.id); });
+}
+/** 115.11.14／115/11/14／1151114 → 2026-11-14；看不懂＝null */
+function parseRoc(s) {
+  s = String(s || '').trim();
+  var m = /^(\d{2,3})\s*[.\/\-年]\s*(\d{1,2})\s*[.\/\-月]\s*(\d{1,2})/.exec(s) || /^(\d{3})(\d{2})(\d{2})$/.exec(s);
+  if (!m) return null;
+  var y = +m[1] + 1911, mo = +m[2], d = +m[3], dt = new Date(y, mo - 1, d, 12);
+  return dt.getMonth() === mo - 1 && dt.getDate() === d ? ymdOf(dt) : null;
+}
+function cSave(site, item) {
+  item = Object.assign({}, item, { updated: Date.now() });
+  if (item.amount == null) delete item.amount;
+  var name = cSafe(site) + '.json', base = (S.office && S.office.books && S.office.books[site]) || [];
+  return dlRoot().then(function () { return dPath(['工地App', '發包'], true); }).then(function (dir) {
+    return dFind(dir, name, false).then(function (f) {
+      return (f ? dText(f.id).then(function (t) { try { return JSON.parse(t); } catch (e) { return null; } }) : Promise.resolve(null)).then(function (book) {
+        var items = cMerge(cMerge(base, book && book.items), [item]);
+        var blob = new Blob([JSON.stringify({ site: site, version: 1, items: items })], { type: 'application/json' });
+        return (f ? dUpdate(f.id, 'application/json', blob) : dCreate(dir, name, 'application/json', blob)).then(function () { return items; });
+      });
+    });
+  });
+}
+function contractProblem(m) {
+  if (m.ask) return '';
+  if (!String(m.name || '').trim()) return '請輸入工項名稱';
+  if (m.isNew && m.names.indexOf(String(m.name).trim()) >= 0) return '已經有「' + String(m.name).trim() + '」了';
+  if (m.done && !parseRoc(m.date)) return '發包日期看不懂，請寫成 115.11.09';
+  if (m.money && /[^\d,\s]/.test(String(m.amount || ''))) return '金額只能打數字';
+  return '';
+}
+function contractModal(m) {
+  var err = m.err ? '<div style="color:var(--red);font-size:14px;margin-top:6px">' + esc(m.err) + '</div>' : '';
+  if (m.ask) return '<h3>要刪掉「' + esc(m.c.name) + '」這個工項嗎？</h3><div style="line-height:1.5">摺疊機、老闆、主任那邊也會一起不見。</div>' + err +
+    '<div class="btns"><button class="dim" data-act="mcnodel"' + (m.busy ? ' disabled' : '') + '>不要刪</button><button class="redb" data-act="mcdel"' + (m.busy ? ' disabled' : '') + '>' + (m.busy ? '刪除中…' : '刪除') + '</button></div>';
+  var h = '<h3>' + esc(m.isNew ? '＋ 新增工項' : (m.done && !m.c.done ? m.c.name + ' → 已發包' : m.c.name || '工項')) + '</h3>';
+  h += '<div class="label">工項名稱</div><input type="text" data-f="m.name" value="' + esc(m.name) + '" maxlength="30" placeholder="例：鋼筋">';
+  if (!m.isNew) h += '<div class="chips" style="margin-top:10px">' + chip('mcdone', '0', '未發包', !m.done) + chip('mcdone', '1', '已發包', m.done) + '</div>';
+  if (m.done) {
+    h += '<div class="label" style="margin-top:10px">廠商</div><input type="text" data-f="m.vendor" value="' + esc(m.vendor) + '" maxlength="40">';
+    var vs = uniq(((S.s && S.s.vendors) || []).concat(((S.office && S.office.books && S.office.books[S.site]) || []).map(function (x) { return x.vendor; })).filter(Boolean)).slice(0, 12);
+    if (vs.length) h += '<div class="chips" style="margin-top:6px">' + vs.map(function (v) { return chip('mcvendor', v, v, m.vendor === v, true); }).join('') + '</div>';
+    h += '<div class="label" style="margin-top:10px">發包日期（民國，例：115.11.14）</div><input type="text" inputmode="decimal" data-f="m.date" value="' + esc(m.date) + '">';
+    if (m.money) h += '<div class="label" style="margin-top:10px">發包金額（元，可以先空著）</div><input type="text" inputmode="numeric" data-f="m.amount" value="' + esc(m.amount) + '">' +
+      '<div class="sub" style="font-size:12.5px">只有你和老闆看得到；主任看不到</div>';
+  }
+  h += '<div class="label" style="margin-top:10px">備註（可以空著）</div><textarea data-f="m.note" maxlength="200">' + esc(m.note) + '</textarea>';
+  var p = contractProblem(m);
+  if (p) h += '<div style="color:var(--warn);font-size:13.5px;margin-top:6px">' + esc(p) + '</div>';
+  if (!m.isNew) h += '<button class="link red" style="margin-top:6px" data-act="mcask">刪除這個工項</button>';
+  return h + err + '<div class="btns"><button class="dim" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button><button id="msave" data-act="mcsave"' + (modalOk(m) ? '' : ' disabled') + '>' + (m.busy ? '存到雲端…' : '確定') + '</button></div>';
+}
+function cOpen(c, isNew, done) {
+  var o = S.office, live = contractBook(o && o.books ? o.books[S.site] : []);
+  // site：打開的時候是哪個工地就存哪個（不要用按「確定」那時候的 S.site：背景登入回來可能換了工地）
+  S.modal = { type: 'contract', site: S.site, c: c, isNew: isNew, name: c.name || '', done: done, vendor: c.vendor || '',
+    date: rocDate(dateOf(c.date) ? c.date : todayYmd()), amount: c.amount != null ? money(c.amount) : '', note: c.note || '',
+    money: !!(o && o.money), names: live.todo.concat(live.done).map(function (x) { return x.name; }), busy: false, err: '', ask: false };
+  renderModal();
+}
+function cFind(id) { var o = S.office; return ((o && o.books && o.books[S.site]) || []).filter(function (x) { return x.id === id; })[0]; }
+// 按鈕：ACT 在下面才建好，開始的時候（最下面）才放進去
+function contractActs() {
+ACT.cadd = function () {
+  var live = contractBook((S.office && S.office.books && S.office.books[S.site]) || []), all = live.todo.concat(live.done);
+  cOpen({ id: '', name: '', order: all.reduce(function (a, x) { return Math.max(a, x.order || 0); }, 0) + 1 }, true, false);
+};
+ACT.cedit = function (id) { var c = cFind(id); if (c) cOpen(c, false, !!c.done); };
+ACT.cmark = function (id) { var c = cFind(id); if (c) cOpen(c, false, true); };   // 標成已發包：直接打開填廠商、日期
+ACT.mcdone = function (v) { var m = S.modal; if (!m) return; m.done = v === '1'; renderModal(); };
+ACT.mcvendor = function (v) { var m = S.modal; if (!m) return; m.vendor = v; renderModal(); };
+ACT.mcask = function () { var m = S.modal; if (!m) return; m.ask = true; m.err = ''; renderModal(); };
+ACT.mcnodel = function () { var m = S.modal; if (!m) return; m.ask = false; renderModal(); };
+function cCommit(item, okMsg) {
+  var m = S.modal; if (!m || m.busy || !m.site) return;
+  var site = m.site;
+  m.busy = true; m.err = ''; renderModal();
+  var fail = function (msg) { if (S.modal !== m) return; m.busy = false; m.err = msg; renderModal(); };
+  dLogin(function () {
+    cSave(site, item).then(function (items) {
+      if (S.office && S.office.books) S.office.books[site] = items;
+      S.contractMsg = okMsg; if (S.modal === m) closeModal(); render();
+    }).catch(function (e) { fail(dlErrText(e) + '。再按一次「確定」。'); });
+  }, fail);
+}
+ACT.mcsave = function () {
+  var m = S.modal; if (!m || m.busy || contractProblem(m)) return;
+  var c = m.c, amt = String(m.amount || '').replace(/[,\s]/g, ''), name = String(m.name).trim();
+  var item = m.isNew ? { id: cNewId(), name: name, done: false, vendor: '', date: '', note: String(m.note || '').trim(), order: c.order || 0 }
+    : Object.assign({}, c, { name: name, done: m.done, vendor: m.done ? String(m.vendor || '').trim() : (c.vendor || ''), date: m.done ? parseRoc(m.date) : (c.date || ''),
+      note: String(m.note || '').trim(), amount: m.done && m.money ? (amt ? Number(amt) : null) : (c.amount != null ? c.amount : null) });
+  if (item.done && !c.done && !m.isNew) S.contractTab = 1;
+  cCommit(item, '✅ 已存到雲端：' + name + (item.done ? '（已發包）' : '') + '。摺疊機同步後就看得到。');
+};
+ACT.mcdel = function () { var m = S.modal; if (!m || m.busy) return; cCommit(Object.assign({}, m.c, { deleted: true }), '🗑 已刪掉「' + m.c.name + '」'); };
 }
 
 // ===================== 待辦事項（一個工地） =====================
@@ -1645,6 +1763,7 @@ function modalOk(m) {
   if (m.type === 'todoedit') return !!m.text.trim();
   if (m.type === 'task') return !m.busy && !!m.text.trim() && m.to.length > 0;
   if (m.type === 'padd') return !m.busy && !!m.name.trim();
+  if (m.type === 'contract') return !m.busy && !contractProblem(m);
   return true;
 }
 
@@ -2543,7 +2662,7 @@ var ACT = {
   },
   // 工地頁
   tile: function (v) {
-    S.sheetMsg = '';
+    S.sheetMsg = ''; S.contractMsg = '';
     if (v === 'logs') openLogs('site');
     else if (v === 'todo') openTodo('site');
     else if (v === '3d') open3d();
@@ -2553,7 +2672,7 @@ var ACT = {
   },
   officereload: function () { loadOffice(); },
   pdfopen: function (id) { openPdf(id); },
-  ctab: function (v) { S.contractTab = +v; render(); },
+  ctab: function (v) { S.contractTab = +v; S.contractMsg = ''; render(); },
   // 待辦
   todoreload: function () { S.todoErr = ''; loadTodos(); },
   todoshowdone: function () { S.todoShowDone = !S.todoShowDone; render(); },
@@ -3190,6 +3309,7 @@ function onGoogle(resp) {
 function gsEnter(fast) {
   if (!S.gs || S.busy) return;
   S.gMode = true; S.code = ''; S.asCode = ''; S.asName = ''; S.err = ''; S.people = null; S.adminAll = null; S.adminAt = 0; S.office = null; LOGCACHE = {};
+  loadGis(function () { });   // 先載好 Google：點施工日誌、改發包時才能在按的那一下連上雲端
   var sess = fast ? LS.getJSON('gsess') : null;
   if (sess && sess.today && sess.owner) {
     S.s = sess; S.site = LS.get('site'); pickSite(sess);
@@ -3220,7 +3340,7 @@ ACT.glogin = function () { gsEnter(true); };
 ACT.gouthere = function () {
   if (!confirm('這台登出 Google（開發者）？\n\n這台的 Google 登入、Google 雲端的權限、記住的代碼都會清掉，回到登入畫面。之後要再用 Google 登入（或輸入代碼）。\n其他 iPad、電腦不受影響。')) return;
   try { if (DTOK.token && window.google && google.accounts && google.accounts.oauth2) google.accounts.oauth2.revoke(DTOK.token, function () { }); } catch (e) { }
-  DTOK.token = ''; DTOK.exp = 0; try { sessionStorage.removeItem('bojie.dtok'); } catch (e) { }
+  DTOK.token = ''; DTOK.exp = 0; try { sessionStorage.removeItem('bojie.dtok'); localStorage.removeItem('bojie.dtok'); } catch (e) { }
   ['gs', 'gsess', 'code', 'sess', 'feed', 'here', 'fc', 'seen'].forEach(function (k) { LS.set(k, ''); });
   location.replace(location.pathname + location.search);   // 重新打開：記憶體裡的資料一起清掉
 };
@@ -3518,21 +3638,26 @@ ACT.sheetdirdel = function (f) {
 var DRIVE_BASE = 'https://www.googleapis.com', DRIVE_TEST = false;   // 本機測試（webtest_proxy3）換成 /drive
 var DSCOPE = 'https://www.googleapis.com/auth/drive.file', DFOLDER = 'application/vnd.google-apps.folder', DL_RECEIPT = '材料單據', DL_UNCLS = '未分類';
 var DTOK = { token: '', exp: 0, client: null, pending: null };
-(function () { try { var t = JSON.parse(sessionStorage.getItem('bojie.dtok') || 'null'); if (t && t.exp > Date.now() + 60000) { DTOK.token = t.token; DTOK.exp = t.exp; } } catch (e) { } })();
+// 雲端權限記在 localStorage（使用者 2026-11-14「施工日誌也是都會跑出這個」：以前 sessionStorage，iPad 主畫面的網頁一關掉就沒了）；Google 只給一小時
+(function () { try { var t = JSON.parse(localStorage.getItem('bojie.dtok') || sessionStorage.getItem('bojie.dtok') || 'null'); if (t && t.exp > Date.now() + 60000) { DTOK.token = t.token; DTOK.exp = t.exp; } } catch (e) { } })();
 function dHasToken() { return DRIVE_TEST || (!!DTOK.token && Date.now() < DTOK.exp - 60000); }
 /** 跟 Google 要寫雲端的權限：要在按鈕的 click 裡直接叫（iPad 才跳得出視窗）；拿到就跑 then */
-function dLogin(then) {
+/** fail(訊息)：沒連成（發包那些跳出的視窗用；寫日誌照舊寫在 S.dl.err） */
+function dFail(msg) { var g = DTOK.fail; DTOK.fail = null; if (g) g(msg); }
+function dLogin(then, fail) {
   if (dHasToken()) { then(); return; }
-  if (!(window.google && google.accounts && google.accounts.oauth2)) { loadGis(function () { }); if (S.dl) { S.dl.err = 'Google 還在載入，等一秒再按一次'; render(); } return; }
+  DTOK.fail = fail || null;
+  if (!(window.google && google.accounts && google.accounts.oauth2)) { loadGis(function () { }); if (S.dl) { S.dl.err = 'Google 還在載入，等一秒再按一次'; render(); } dFail('Google 還在載入，等一秒再按一次'); return; }
   if (!DTOK.client) DTOK.client = google.accounts.oauth2.initTokenClient({ client_id: WEB_CLIENT_ID, scope: DSCOPE,
     callback: function (r) {
       var f = DTOK.pending; DTOK.pending = null;
-      if (!r || r.error || !r.access_token) { if (S.dl) { S.dl.err = 'Google 沒有給權限' + (r && r.error ? '（' + r.error + '）' : '') + '，再按一次，記得按「允許」'; render(); } return; }
+      if (!r || r.error || !r.access_token) { var em = 'Google 沒有給權限' + (r && r.error ? '（' + r.error + '）' : '') + '，再按一次，記得按「允許」'; if (S.dl) { S.dl.err = em; render(); } dFail(em); return; }
+      DTOK.fail = null;
       DTOK.token = r.access_token; DTOK.exp = Date.now() + (Number(r.expires_in) || 3600) * 1000;
-      try { sessionStorage.setItem('bojie.dtok', JSON.stringify({ token: DTOK.token, exp: DTOK.exp })); } catch (e) { }
+      try { localStorage.setItem('bojie.dtok', JSON.stringify({ token: DTOK.token, exp: DTOK.exp })); } catch (e) { }
       if (f) f();
     },
-    error_callback: function (e) { DTOK.pending = null; if (S.dl) { S.dl.err = e && e.type === 'popup_closed' ? '登入視窗關掉了，再按一次' : 'Google 登入視窗打不開' + (e && e.type ? '（' + e.type + '）' : ''); render(); } } });
+    error_callback: function (e) { DTOK.pending = null; var em = e && e.type === 'popup_closed' ? '登入視窗關掉了，再按一次' : 'Google 登入視窗打不開' + (e && e.type ? '（' + e.type + '）' : ''); if (S.dl) { S.dl.err = em; render(); } dFail(em); } });
   DTOK.pending = then;
   DTOK.client.requestAccessToken({ prompt: '' });
 }
@@ -3541,7 +3666,7 @@ function dFetch(method, path, body, ctype) {
   var h = { Authorization: 'Bearer ' + (DRIVE_TEST ? 'proxy' : DTOK.token) };
   if (ctype) h['Content-Type'] = ctype;
   return fetch(DRIVE_BASE + path, { method: method, headers: h, body: body }).then(function (r) {
-    if (r.status === 401) { DTOK.token = ''; DTOK.exp = 0; try { sessionStorage.removeItem('bojie.dtok'); } catch (e) { } throw { error: 'DLOGIN' }; }
+    if (r.status === 401) { DTOK.token = ''; DTOK.exp = 0; try { sessionStorage.removeItem('bojie.dtok'); localStorage.removeItem('bojie.dtok'); } catch (e) { } throw { error: 'DLOGIN' }; }
     if (!r.ok) return r.text().then(function (t) { throw { error: 'DRIVE', message: '雲端回覆 ' + r.status + (t ? '：' + t.slice(0, 160) : '') }; });
     return r;
   }, function () { throw { error: 'NET', message: '連不上 Google 雲端（網路有問題）' }; });
@@ -3715,7 +3840,14 @@ function dlOpen(date) {
     view: '', note: null, day: null, y: 0 };
   loadGis(function () { });
   go('dlog');
-  if (dHasToken()) dlLoad();
+  if (dHasToken()) { dlLoad(); return; }
+  // 點「施工日誌」的這一下就去連 Google 雲端（以前要再按一次「連上 Google 雲端」；使用者 2026-11-14「施工日誌也是都會跑出這個」）：
+  // 按過「允許」的只會閃一下 Google 的小視窗；連不上才停在「先連上 Google 雲端」那張卡片
+  var dl = S.dl;
+  if (window.google && google.accounts && google.accounts.oauth2) {
+    dl.busy = '連上 Google 雲端…'; render();
+    dLogin(function () { if (S.dl === dl) dlLoad(); }, function (msg) { if (S.dl !== dl) return; dl.busy = ''; dl.err = msg; render(); });
+  }
 }
 function dlLoad() {
   var dl = S.dl; if (!dl) return;
@@ -3789,7 +3921,7 @@ function renderDlog() {
     if (dl.view === 'note' && dl.note) return dlNotePage(dl);
   }
   var h = dlHead(dl, '施工日誌') + '<div class="wrap">';
-  if (!dl.loaded && !dHasToken()) {
+  if (!dl.loaded && !dHasToken() && !dl.busy) {   // 正在自動連（dlOpen）：先顯示「連上 Google 雲端…」
     return h + '<div class="card" style="background:#FFF6EC"><div class="ttl">先連上 Google 雲端</div><div style="font-size:15px;line-height:22px;margin:6px 0 10px">' + esc(dl.site) + ' 的日誌跟摺疊機放在同一個雲端資料夾。用<b>開發者的 Google 帳號</b>連上，這台就可以寫、改（摺疊機、電腦 Excel 都看得到）。</div>' +
       '<button class="big" data-act="dlauth">🔑 連上 Google 雲端</button>' + (dl.err ? '<div class="err">' + esc(dl.err) + '</div>' : '') +
       '<button class="ghost" style="margin:4px 0 8px" data-act="dlreadonly">只看這天（不用連）</button>' +
@@ -4207,11 +4339,14 @@ document.addEventListener('pointercancel', function () { swEnd(true); });
 document.addEventListener('click', function (ev) { if (Date.now() - SW.eat < 500) { SW.eat = 0; ev.preventDefault(); ev.stopPropagation(); } }, true);
 
 // ---------- 開始 ----------
+contractActs();   // 發包的按鈕（開發者改發包，2026-11-14）
 // 記住的代碼：顯示鎖住的 ●●●●●●，按「登入」才進去（使用者 2026-11-08）
 S.saved = LS.get('code');
 S.gs = LS.get('gs');   // 這台用 Google 登入過（開發者）
 S.site = LS.get('site');
-render();
+// 開發者用 Google 登入過：打開就直接進去，不用每次按「以開發者進入」（使用者 2026-11-14「每次登入都會跑出這個畫面」）。
+// 通行證過期會回登入畫面；要換人用首頁的「🚪 這台登出 Google」
+if (S.gs) gsEnter(true); else render();
 </script>
 </body>
 </html>
