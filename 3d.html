@@ -155,6 +155,8 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
 #verPanel .vh span{flex:1}
 #verPanel .vrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
 #verPanel .vrow .g{flex:1;min-width:0}
+#verPanel .vb{display:flex;flex-direction:column;gap:6px}
+#verPanel .btn.red{color:#C62828;border-color:#F0C4C4}
 #verPanel .bar2{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:6px;display:none}
 #verPanel .bar2 i{display:block;height:100%;width:0;background:var(--teal);transition:width .2s}
 .bar h1{min-width:0}   /* 手機：標題太長就「…」，按鈕才不會被擠出畫面 */
@@ -2169,35 +2171,69 @@ function verRender(r) {
   VPEND = r.pending || [];
   let h = '<div class="row" style="margin-top:0"><button class="btn solid" id="vpUp"' + (vBusy ? ' disabled' : '') + '>⬆ 上傳新的 3D</button><span class="muted">SketchUp 檔（.skp）或 .glb</span></div>' +
     '<div class="muted" id="vpMsg" style="margin-top:6px"></div><div class="bar2" id="vpBar"><i></i></div>';
+  const dis = vBusy ? ' disabled' : '', old = r.old || [];
+  // 刪除：傳錯的檔（使用者 2026-11-14「第三點的修改也包含刪除功能」「有時候是錯誤的檔案」）。只丟雲端硬碟垃圾桶，30 天內「最近刪除」救得回來
+  const delBtn = (id, kind, label) => '<button class="btn ghost red" data-del="' + esc(id) + '" data-kind="' + kind + '"' + dis + '>' + label + '</button>';
   VPEND.forEach(p => {
     h += '<div class="tip" style="margin-top:8px">' + (p.err ? '⚠️ ' : '⏳ ') + esc(p.name || 'SketchUp 檔') + '：' +
       (p.err ? '轉檔失敗（' + esc(p.err) + '）' : '等電腦轉好（有轉檔工具的那台電腦開著，大約 5 分鐘）') + '<div class="muted">' + esc(p.by || '') + '・' + vTime(p.at) + '</div>' +
-      (p.err ? '<button class="btn ghost" style="margin-top:6px" data-jdel="' + esc(p.id) + '"' + (vBusy ? ' disabled' : '') + '>移除</button>' : '') + '</div>';
+      '<div style="margin-top:6px">' + delBtn(p.id, 'skp', p.err ? '移除' : '取消（傳錯了）') + '</div></div>';
   });
   const c = r.cur;
   h += '<div class="card" style="margin-top:10px"><div class="t">現在的模型</div>' + (c
-    ? '<div class="muted">' + esc(c.name || 'SketchUp 模型') + '・' + esc(c.by || '電腦上傳') + '・' + vTime(c.at) + '・' + vMB(c.size) + (c.from ? '（切回 ' + vTime(c.from) + ' 那版）' : '') + '</div>'
+    ? '<div class="vrow" style="border-top:0;padding-top:2px"><div class="g muted">' + esc(c.name || 'SketchUp 模型') + '・' + esc(c.by || '電腦上傳') + '・' + vTime(c.at) + '・' + vMB(c.size) + (c.from ? '（切回 ' + vTime(c.from) + ' 那版）' : '') + '</div>' + delBtn(c.id, 'cur', '刪除') + '</div>'
     : '<div class="muted">還沒有</div>') + '</div>';
   h += '<div class="card"><div class="t">舊版 <span class="muted">（最多留 10 個，可以切回來）</span></div>';
-  if (!(r.old || []).length) h += '<div class="muted" style="padding:6px 0">還沒有舊版（上傳新的以後，現在這版會放到這裡）</div>';
-  (r.old || []).forEach(o => {
+  if (!old.length) h += '<div class="muted" style="padding:6px 0">還沒有舊版（上傳新的以後，現在這版會放到這裡）</div>';
+  old.forEach(o => {
     h += '<div class="vrow"><div class="g"><b>' + vTime(o.at) + '</b><div class="muted">' + esc(o.name || 'SketchUp 模型') + '・' + esc(o.by || '電腦上傳') + '・' + vMB(o.size) + '</div></div>' +
-      '<button class="btn ghost" data-rid="' + esc(o.id) + '" data-at="' + o.at + '"' + (vBusy ? ' disabled' : '') + '>切回這版</button></div>';
+      '<div class="vb"><button class="btn ghost" data-rid="' + esc(o.id) + '" data-at="' + o.at + '"' + dis + '>切回這版</button>' + delBtn(o.id, 'old', '刪除') + '</div></div>';
   });
-  VB.innerHTML = h + '</div>';
+  h += '</div>';
+  const del = r.del || [];
+  if (del.length) {
+    h += '<div class="card"><div class="t">最近刪除 <span class="muted">（30 天內可以救回來，之後雲端硬碟自己清掉）</span></div>';
+    del.forEach(d => {
+      const left = Math.max(0, 30 - Math.floor((Date.now() - d.del) / 864e5));
+      h += '<div class="vrow"><div class="g"><b>' + esc(d.name || 'SketchUp 模型') + '</b><div class="muted">' + ({ cur: '原本是現在的模型', old: '舊版', skp: 'SketchUp 檔（還沒轉）' }[d.kind] || '') +
+        '・' + esc(d.dby || '') + ' ' + vTime(d.del) + ' 刪的・還剩 ' + left + ' 天</div></div><button class="btn ghost" data-undel="' + esc(d.id) + '" data-kind="' + esc(d.kind || '') + '"' + dis + '>救回</button></div>';
+    });
+    h += '</div>';
+  }
+  VB.innerHTML = h;
   document.getElementById('vpUp').onclick = () => { if (vBusy) return; VF.value = ''; VF.click(); };
   VB.querySelectorAll('[data-rid]').forEach(b => b.onclick = () => verRestore(b.dataset.rid, +b.dataset.at));
-  VB.querySelectorAll('[data-jdel]').forEach(b => b.onclick = async () => {   // 轉不了的 .skp 拿掉
-    if (vBusy) return; vBusy = true; b.disabled = true;
-    const id = b.dataset.jdel;
-    try {
-      await api('model3d', { site: SITE, op: 'jobdel', id: id }); vBusy = false;
-      const v = await api('model3d', { site: SITE, op: 'versions' });
-      v.pending = (v.pending || []).filter(p => p.id !== id);   // 雲端硬碟要幾秒才不列出剛丟的
-      verRender(v); verInit(CANUP, VPEND);
-    }
-    catch (e) { vBusy = false; b.disabled = false; vMsg('沒有移除：' + esc(errText(e))); }
-  });
+  VB.querySelectorAll('[data-del]').forEach(b => b.onclick = () => verDelete(r, b.dataset.del, b.dataset.kind));
+  VB.querySelectorAll('[data-undel]').forEach(b => b.onclick = () => verUndel(b.dataset.undel, b.dataset.kind));
+}
+/** 雲端硬碟要幾秒才不列出剛丟、剛救回的：先自己拿掉 */
+async function verReload(dropId, msg, lists) {
+  const v = await api('model3d', { site: SITE, op: 'versions' });
+  if (dropId) { (lists || ['pending', 'old']).forEach(k => v[k] = (v[k] || []).filter(x => x.id !== dropId)); if (!lists && v.cur && v.cur.id === dropId) v.cur = null; }
+  verRender(v); verInit(CANUP, VPEND); if (msg) vMsg(msg);
+}
+async function verDelete(r, id, kind) {
+  if (vBusy) return;
+  const all = [].concat(r.cur ? [r.cur] : [], r.old || [], r.pending || []), x = all.find(y => y.id === id) || {}, nm = '「' + (x.name || 'SketchUp 模型') + '」';
+  const old = (r.old || []).filter(o => o.id !== id);
+  const ask = kind === 'cur' ? '刪除現在的模型？\n' + nm + '\n\n' + (old.length ? '會換回上一版（' + vTime(old[0].at) + ' 那版）。' : '刪除後這個工地就沒有 3D 模型了。')
+    : kind === 'skp' ? (x.err ? '移除這個轉不了的檔？\n' : '取消這個 SketchUp 檔？\n') + nm + (x.err ? '' : '\n\n還沒轉好，取消就不會換上。')
+    : '刪除這個舊版？\n' + vTime(x.at) + ' ' + nm;
+  if (!confirm(ask + '\n\n刪錯了：30 天內可以在「最近刪除」救回來。')) return;
+  vBusy = true; vMsg('刪除中…');
+  try {
+    const res = await api('model3d', { site: SITE, op: 'del', id: id });
+    if (kind === 'cur') { vMsg('✅ 刪好了' + (res.back ? '，換回 ' + vTime(res.back.at) + ' 那版' : '') + '，重新打開 3D…'); setTimeout(() => location.reload(), 700); return; }
+    vBusy = false; await verReload(id, '✅ 刪好了（30 天內可以在「最近刪除」救回來）');
+  } catch (e) { vBusy = false; vMsg('沒有刪除：' + esc(errText(e))); }
+}
+async function verUndel(id, kind) {
+  if (vBusy) return;
+  vBusy = true; vMsg('救回中…');
+  try {
+    await api('model3d', { site: SITE, op: 'undel', id: id }); vBusy = false;
+    await verReload(id, kind === 'skp' ? '✅ 救回來了：等電腦轉好就會換上（雲端硬碟要幾秒才會列出來）' : '✅ 救回來了：放在「舊版」，要用就按「切回這版」（雲端硬碟要幾秒才會列出來）', ['del']);
+  } catch (e) { vBusy = false; vMsg('沒有救回：' + esc(errText(e))); }
 }
 async function verRestore(id, at) {
   if (vBusy || !confirm('切回 ' + vTime(at) + ' 那一版？\n現在這版會放進舊版，之後也可以再切回來。')) return;
