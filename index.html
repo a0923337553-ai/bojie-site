@@ -393,7 +393,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/15a';
+var WEB_VERSION = '11/15b';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1002,7 +1002,8 @@ function renderLogin() {
 // ===================== 首頁 =====================
 function renderHub() {
   var s = S.s, f = S.feed, off = isOffice(), sites = feedSites(), news = shownNews();
-  var week = off && f && f.cal;
+  // 這週行程：辦公室的人；施工人員（收件服務第 35 版）只有管理者選了給他看的行程才有（一個都沒有＝收件服務給 null）
+  var week = f && f.cal;
   // 手機一欄（照這個順序）；電腦兩欄，左右各自往下排（左：工地、提醒、天氣；右：這週行程、最新消息）
   var todos = off ? homeTodos() : null;
   var cSite = '<div class="a-site">' + siteCard(sites, news) + '</div>';
@@ -1136,7 +1137,7 @@ function weekCalCard(events) {
       list.map(function (e) { return '<div style="font-size:14.5px;line-height:20px">' + esc(e.title + (e.site ? '（' + e.site + '）' : '') + (e.allDay || !e.start ? '' : '（' + ampm(e.start) + '）')) + '</div>'; }).join('') + '</div></div>';
     any = true;
   }
-  if (!any) body = '<div class="sub" style="padding:6px 0;font-size:14px">這週沒有行程。按右上「打開」可以新增。</div>';
+  if (!any) body = '<div class="sub" style="padding:6px 0;font-size:14px">這週沒有行程。' + (isOffice() ? '按右上「打開」可以新增。' : '') + '</div>';
   return scrollCard('📅 這週行程', 176, body, '', { label: '打開 ›', act: 'calopen', v: '' }, 'week');
 }
 
@@ -2076,15 +2077,20 @@ function renderCal() {
   h += '<div class="card"><div class="row"><span class="grow" style="font-size:18px;font-weight:800">' + calDay(C.sel) + '</span>' + (C.sel === t ? '<span style="font-size:13px;color:var(--teal);font-weight:bold">今天</span>' : '') + '</div>';
   if (!day.length) h += '<div class="sub" style="font-size:14.5px;padding:8px 0">' + (C.loading ? '讀取中…' : '這天沒有行程') + '</div>';
   day.forEach(function (e, i) { h += evRow(e, i); });
-  h += '</div><button class="big" data-act="caladd">＋ 新增行程（' + md(C.sel) + '）</button>' +
-    '<div class="note">放在 Google 日曆「工地」：App、網頁改的，Google 日曆也看得到；Google 日曆改的，按「⟳ 更新」就有。施工人員看不到行事曆。</div></div></div></div>';
+  // 施工人員（收件服務第 35 版）：只能看管理者選了給他看的行程，不能新增、改
+  if (isOffice()) h += '</div><button class="big" data-act="caladd">＋ 新增行程（' + md(C.sel) + '）</button>' +
+    '<div class="note">放在 Google 日曆「工地」：App、網頁改的，Google 日曆也看得到；Google 日曆改的，按「⟳ 更新」就有。施工人員只看得到管理者選了給他們看的行程（標 👷 的）。</div></div></div></div>';
+  else h += '</div><div class="note">這裡是管理者給你看的行程。</div></div></div></div>';
   return h;
 }
+/** 給哪些施工人員看（收件服務第 35 版）：[]＝不給、['*']＝全部施工人員、名字 */
+function calWText(w) { w = w || []; return !w.length ? '' : w.indexOf('*') >= 0 ? '全部施工人員' : w.join('、'); }
 function evRow(e, i) {
   var sub = [];
   if (!e.allDay && e.end) sub.push('到 ' + e.end);
   if (e.endDate && e.endDate > e.date) sub.push('到 ' + calDay(e.endDate));
   if (e.series) sub.push('🔁 重複的行程');
+  if (isOffice() && calWText(e.workers)) sub.push('👷 ' + calWText(e.workers));
   sub.push(!e.editBy ? 'Google 日曆' : (e.editBy !== e.by && e.by) ? e.by + ' 新增・' + e.editBy + ' 改過' : e.editBy + ' 新增');
   var note = String(e.note || '').replace(/<[^>]+>/g, ' ').trim();
   return '<button class="ev" data-act="calev" data-v="' + i + '"><span style="width:56px;flex:none;color:var(--blue);font-weight:bold;font-size:14.5px">' + esc(e.allDay ? '全天' : e.start) + '</span>' +
@@ -2154,6 +2160,15 @@ function todoEditModal(m) {
     '<div class="btns"><button class="dim" data-act="mclose">取消</button><button id="msave" data-act="mtsave"' + (modalOk(m) && !m.busy ? '' : ' disabled') + '>存檔</button></div>';
 }
 function calModal(m) {
+  // 施工人員（收件服務第 35 版）：管理者給他看的行程，只能看
+  if (!isOffice()) {
+    var t0 = m.ev, note0 = String(t0.note || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
+    return '<h3>📅 ' + esc(t0.title) + '</h3><div style="font-size:16px;line-height:24px">' + calDay(t0.date) + (t0.endDate && t0.endDate > t0.date ? ' ～ ' + calDay(t0.endDate) : '') +
+      '　' + (t0.allDay ? '全天' : esc(ampm(t0.start)) + (t0.end ? ' ～ ' + esc(ampm(t0.end)) : '')) + '</div>' +
+      (t0.site ? '<div style="margin-top:6px"><span class="sitechip" style="margin-left:0">' + esc(t0.site) + '</span></div>' : '') +
+      (note0 ? '<div style="margin-top:8px;font-size:15px;line-height:22px;white-space:pre-wrap">' + esc(note0) + '</div>' : '') +
+      '<div class="btns"><button class="dim" data-act="mclose">關閉</button></div>';
+  }
   var ro = !!m.ev.series, sites = siteNames(), dis = ro ? ' disabled' : '';
   if (m.ask) return '<h3>要刪除「' + esc(m.ev.title) + '」嗎？</h3><div style="line-height:1.5">Google 日曆「工地」裡的這個行程也會一起刪掉，大家都看不到了。</div>' +
     (m.err ? '<div style="color:var(--red);font-size:14px;margin-top:6px">' + esc(m.err) + '</div>' : '') +
@@ -2170,6 +2185,16 @@ function calModal(m) {
   h += '<div class="label" style="margin-top:10px">工地（可以不選）</div><div class="chips">' + chip('mcalsite', '', '不選', !m.site, true) +
     sites.map(function (n) { return chip('mcalsite', n, n, m.site === n, true); }).join('') + (m.site && sites.indexOf(m.site) < 0 ? chip('mcalsite', m.site, m.site, true, true) : '') + '</div>';
   h += '<div class="label" style="margin-top:10px">備註（可以空著）</div><textarea data-f="m.note" maxlength="1000"' + dis + '>' + esc(m.note) + '</textarea>';
+  // 給施工人員看（收件服務第 35 版；使用者 2026-11-15「這裡管理者可以選擇那些讓施工人員看到」）：只有管理者能選，其他人看得到選了什麼
+  var wm = m.w.indexOf('*') >= 0 ? 'all' : m.w.length || m.wPick ? 'pick' : 'none';
+  if (isAdmin() && !ro) {
+    var ws = S.taskWorkers;
+    h += '<div class="label" style="margin-top:10px">👷 給施工人員看</div><div class="chips">' + chip('mcalw', 'none', '不給看', wm === 'none', true) +
+      chip('mcalw', 'all', '全部施工人員', wm === 'all', true) + chip('mcalw', 'pick', '選人', wm === 'pick', true) + '</div>';
+    if (wm === 'pick') h += '<div class="chips" style="margin-top:6px;flex-wrap:wrap">' + (ws ? (ws.length ? ws.map(function (x) { return chip('mcalwn', x.name, x.name, m.w.indexOf(x.name) >= 0, true); }).join('') :
+      '<span class="sub">沒有施工人員</span>') : '<span class="sub">讀取施工人員名單中…</span>') + '</div>' + (m.w.length ? '' : '<div class="sub" style="font-size:13px;margin-top:2px">點名字選（可以選好幾個）；都不選＝不給看</div>');
+    h += '<div class="sub" style="font-size:12.5px;margin-top:4px">' + (wm === 'none' ? '只有辦公室的人看得到。' : '選到的施工人員首頁「這週行程」、行事曆看得到，新增、改、取消會跳通知；他們不能改。') + '</div>';
+  } else if (calWText(m.w)) h += '<div class="sub" style="margin-top:8px;font-size:13.5px">👷 給施工人員看：' + esc(calWText(m.w)) + '（只有管理者能改）</div>';
   if (!m.isNew) {
     var who = [m.ev.by ? m.ev.by + ' 新增' : '', m.ev.editBy && m.ev.editBy !== m.ev.by ? m.ev.editBy + ' 最後改' : '', !m.ev.by && !m.ev.editBy ? 'Google 日曆加的' : ''].filter(Boolean).join(' ・ ');
     if (who) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(who) + '</div>';
@@ -2798,8 +2823,10 @@ function loadCal() {
 function openCalEdit(e) {
   var ev = e ? JSON.parse(JSON.stringify(e)) : { id: '', title: '', allDay: true, date: S.cal.sel, endDate: S.cal.sel, start: '', end: '', site: '', note: '', by: '', editBy: '', series: false };
   S.modal = { type: 'cal', ev: ev, isNew: !ev.id, title: ev.title || '', date: ev.date, allDay: e ? ev.allDay === true : true, start: ev.start || '09:00', end: ev.end || (e ? '' : '10:00'),
-    site: ev.site || '', note: String(ev.note || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ''), span: Math.max(0, ev.endDate ? daysBetween(ev.date, ev.endDate) : 0), busy: false, err: '', ask: false };
+    site: ev.site || '', note: String(ev.note || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ''), span: Math.max(0, ev.endDate ? daysBetween(ev.date, ev.endDate) : 0), busy: false, err: '', ask: false,
+    w: (ev.workers || []).slice(), wPick: false };   // 給哪些施工人員看（收件服務第 35 版）
   renderModal();
+  if (isAdmin() && !S.taskWorkers) api('task', { op: 'workers' }).then(function (r) { S.taskWorkers = r.workers || []; if (S.modal && S.modal.type === 'cal') renderModal(); }).catch(function () { });
 }
 
 /** 看一則注意事項 */
@@ -2870,7 +2897,7 @@ var ACT = {
       var n = ((S.feed && S.feed.news) || []).filter(function (x) { return x.key === key; })[0];
       if (n) { openNotice(n); return; }
     }
-    if (r.kind === 'cal' && isOffice()) { openCal(r.date); return; }
+    if (r.kind === 'cal') { openCal(r.date); return; }   // 施工人員也有（只有給他看的行程）
     if (r.site) { setSite(r.site); if (isOffice() && r.kind === 'pour') openOffice('pours'); else render(); }
   },
   hubtab: function (v) { S.hubTab = +v; render(); },
@@ -3157,6 +3184,9 @@ var ACT = {
   mcaldate: function (v) { var m = S.modal; if (m.ev.series) return; m.date = addDays(m.date, +v); renderModal(); },
   mallday: function (v) { var m = S.modal; if (m.ev.series) return; m.allDay = v === '1'; if (!m.allDay && !m.start) m.start = '09:00'; renderModal(); },
   mcalsite: function (v) { var m = S.modal; if (m.ev.series) return; m.site = v; renderModal(); },
+  // 給施工人員看：不給／全部／選人；選人時點名字加減
+  mcalw: function (v) { var m = S.modal; if (!m || m.ev.series) return; if (v === 'all') { m.w = ['*']; m.wPick = false; } else if (v === 'none') { m.w = []; m.wPick = false; } else { m.w = m.w.filter(function (x) { return x !== '*'; }); m.wPick = true; } renderModal(); },
+  mcalwn: function (v) { var m = S.modal; if (!m) return; var i = m.w.indexOf(v); if (i >= 0) m.w.splice(i, 1); else m.w.push(v); m.wPick = true; renderModal(); },
   mcaldel: function () { S.modal.ask = true; S.modal.err = ''; renderModal(); },
   mcalnodel: function () { S.modal.ask = false; S.modal.err = ''; renderModal(); },
   mcalsave: function () {
@@ -3164,6 +3194,7 @@ var ACT = {
     m.busy = true; m.err = ''; renderModal();
     var body = { op: m.isNew ? 'add' : 'edit', id: m.ev.id, title: m.title.trim(), allDay: m.allDay, date: m.date, endDate: addDays(m.date, m.span),
       start: m.allDay ? '' : m.start, end: (m.allDay || !HM.test(m.end)) ? '' : m.end, site: m.site, note: m.note.trim() };
+    if (isAdmin()) body.workers = m.w.slice();   // 只有管理者送（收件服務也只認管理者的）
     api('cal', body).then(function (r) {
       var d = (r.event && r.event.date) || m.date;
       S.modal = null; renderModal();
