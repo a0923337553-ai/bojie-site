@@ -199,6 +199,8 @@ img[data-cap] { cursor:zoom-in; }
 #pdfpages .pgbar button { border:0; border-radius:16px; padding:7px 14px; font-size:15px; font-weight:bold; }
 .snpen { background:#E03131; color:#fff; }
 .sncnt { background:#FFF3A0; color:#8A6D00; }
+.sddone { background:#fff; color:var(--green); box-shadow:inset 0 0 0 2px var(--green); }
+.sddone.on { background:var(--green); color:#fff; box-shadow:none; }
 /* 畫記號（整個畫面） */
 #ned { position:fixed; inset:0; z-index:60; background:#5A6270; display:flex; flex-direction:column; }
 #ned .top { flex:none; }
@@ -398,7 +400,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/15g';
+var WEB_VERSION = '11/15h';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -773,7 +775,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -1065,7 +1067,8 @@ function siteCard(sites, news) {
   function badge(n) { var c = 0; news.forEach(function (x) { if (x.site === n && x.isNew) c++; }); return c; }
   var others = 0; sites.forEach(function (x) { if (!cur || x.name !== cur.name) others += badge(x.name); });
   var h = '<div class="card"><div class="row"><span class="label" style="margin:0">我的工地</span>' +
-    (others ? '<span style="font-size:12.5px;color:var(--red);font-weight:bold">其他工地有 ' + others + ' 則新的</span>' : '') + '</div>';
+    (others ? '<span style="font-size:12.5px;color:var(--red);font-weight:bold">其他工地有 ' + others + ' 則新的</span>' : '') + '</div>' +
+    (S.siteMsg ? '<div class="box" style="margin-top:6px">' + esc(S.siteMsg) + '</div>' : '');
   h += '<div class="row" style="margin-top:6px"><button class="sitebox grow" data-act="siteopen"><div class="row" style="gap:4px">' +
     '<span style="font-size:21px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(cur ? cur.name : '還沒有工地') + '</span>' +
     (cur ? badgeHtml(badge(cur.name)) : '') + '<span class="grow"></span><span class="chev">' + (S.siteOpen ? '▲' : '▼') + '</span></div>' + (cur ? progressHtml(cur) : '') + '</button>';
@@ -1074,12 +1077,155 @@ function siteCard(sites, news) {
   if (S.siteOpen) {
     h += '<div style="margin-top:8px;border-top:1px solid #EAF0F4">';
     sites.forEach(function (x) {
-      h += '<button class="siteopt" data-act="enter" data-v="' + esc(x.name) + '"><div style="font-size:18px;font-weight:bold">' + esc(x.name) + badgeHtml(badge(x.name)) + '</div>' + progressHtml(x) + '</button>';
+      var row = '<button class="siteopt" data-act="enter" data-v="' + esc(x.name) + '"' + (siteAdmin() ? ' style="flex:1"' : '') + '><div style="font-size:18px;font-weight:bold">' + esc(x.name) + badgeHtml(badge(x.name)) + '</div>' + progressHtml(x) + '</button>';
+      h += siteAdmin() ? '<div style="display:flex;align-items:center;gap:6px">' + row + '<button class="key" style="flex:none" data-act="siteedit" data-v="' + esc(x.name) + '">✎ 編輯</button></div>' : row;
     });
+    if (siteAdmin()) h += '<button class="siteopt" data-act="siteadd" style="color:var(--navy);font-weight:bold;font-size:17px">＋ 新增工地</button><div class="note" style="margin:2px 4px 0">開發者：✎ 編輯可以改名字、開工／竣工日期、刪除（跟摺疊機一樣）。</div>';
     h += '</div>';
   }
   return h + '</div>';
 }
+// ---------- 開發者：新增、改名、刪工地，改開工／竣工日期（使用者 2026-11-15 巡查 ⑤c「iPad、電腦也要能做」） ----------
+// 做法跟摺疊機首頁工地選單往左滑「編輯／刪除」一樣：雲端 手機新增.json 的 sites／hidden、雲端各類的工地資料夾、收件服務的表（改名）
+var SITE_ACTS = {};   // 開機時併進 ACT（這段在 var ACT 前面）
+function siteAdmin() { return isOwner() && !!S.gMode; }
+function siteSafe(n) { return String(n).replace(/[\\\/:*?"<>|]/g, '_'); }
+SITE_ACTS.siteadd = function () { S.modal = { type: 'siteedit', old: '', name: '', start: todayYmd(), end: '', busy: '', err: '', ask: false }; renderModal(); var i = $('sitename'); if (i) i.focus(); };
+SITE_ACTS.siteedit = function (n) {
+  var st = feedSites().filter(function (x) { return x.name === n; })[0] || { name: n };
+  S.modal = { type: 'siteedit', old: n, name: n, start: st.start || '', end: st.end || '', busy: '', err: '', ask: false }; renderModal();
+};
+function siteEditProblem(m) {
+  var n = String(m.name || '').trim();
+  if (!n) return '要打工地名稱';
+  if (/[\\\/:*?"<>|]/.test(n)) return '名稱不能有 \\ / : * ? " < > |';
+  if (n !== m.old && siteNames().indexOf(n) >= 0) return '已經有「' + n + '」這個工地了';
+  if (!dateOf(m.start)) return '要選開工日期';
+  if (m.end && !dateOf(m.end)) return '竣工日期不對';
+  if (m.end && m.end < m.start) return '竣工日期比開工早';
+  return '';
+}
+function siteEditModal(m) {
+  var p = siteEditProblem(m), ren = m.old && String(m.name || '').trim() !== m.old;
+  if (m.ask) return '<h3>刪掉「' + esc(m.old) + '」？</h3><div style="font-size:15.5px;line-height:24px;margin:4px 0 12px">雲端「工地App」裡這個工地的日誌、照片、日誌 PDF、施工單、灌漿數量、3D、發包資料夾都放進 Google 雲端的垃圾桶（30 天內救得回來）；工地清單拿掉（摺疊機同步後也拿掉）。施工人員傳的（收件服務的表）不會刪。</div>' +
+    (m.err ? '<div class="err">' + esc(m.err) + '</div>' : '') +
+    '<button class="big" style="background:var(--red)" data-act="sitedelok"' + (m.busy ? ' disabled' : '') + '>' + esc(m.busy || '刪除') + '</button><button class="ghost" data-act="sitedelno"' + (m.busy ? ' disabled' : '') + '>不要刪</button>';
+  return '<h3>' + (m.old ? '編輯工地' : '新增工地') + '</h3>' +
+    '<div class="label">工地名稱</div><input type="text" id="sitename" data-f="m.name" maxlength="30" autocomplete="off" value="' + esc(m.name) + '">' +
+    '<div class="row2" style="margin-top:8px"><div><div class="label">開工日期</div><input type="date" data-f="m.start" value="' + esc(m.start) + '"></div>' +
+    '<div><div class="label">竣工日期（可以空著）</div><input type="date" data-f="m.end" value="' + esc(m.end) + '"></div></div>' +
+    '<div class="note" id="mmsg" style="margin-top:6px">' + esc(m.err || siteEditNote(m)) + '</div>' +
+    '<button class="big" style="margin-top:12px" id="msave" data-act="siteeditok"' + (p || m.busy ? ' disabled' : '') + '>' + esc(m.busy || (m.old ? '存檔' : '加入')) + '</button>' +
+    (m.old ? '<button class="ghost red" data-act="sitedelask"' + (m.busy ? ' disabled' : '') + '>刪除這個工地</button>' : '') +
+    '<button class="ghost" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button>';
+}
+function siteEditNote(m) {
+  var p = siteEditProblem(m); if (p) return p;
+  if (m.old && String(m.name || '').trim() !== m.old) return '改名：雲端的資料夾、施工人員傳的、注意事項、待辦、派工都一起改成新名字（跟摺疊機一樣）。改之前摺疊機最好先同步好（首頁沒有「還有幾筆等網路上傳」）。';
+  return m.old ? '只改日期。' : '加好之後摺疊機同步就會有；電腦 Excel 按「從手機匯入」建日誌。';
+}
+function siteEditMsg(m, t) { m.busy = t; if (S.modal === m) renderModal(); }
+function siteEditFail(m, e) { m.busy = ''; m.err = (e && e.error === 'DLOGIN') ? 'Google 雲端的權限過期了，再按一次' : (e && e.message) || errText(e); if (S.modal === m) renderModal(); }
+/** 存好：首頁的工地清單重讀（收件服務最慢 2 分鐘看到雲端的清單），先在這台改好 */
+function siteEditDone(m, name, start, end, gone) {
+  var f = S.feed;
+  if (f && f.sites) {
+    f.sites = f.sites.map(function (x) { return typeof x === 'string' ? { name: x } : x; }).filter(function (x) { return x.name !== gone && x.name !== name; });
+    if (name) f.sites.push({ name: name, start: start, end: end || '' });
+  }
+  if (S.s && S.s.sites) { S.s.sites = S.s.sites.filter(function (x) { return x !== gone; }); if (name && S.s.sites.indexOf(name) < 0) S.s.sites.push(name); }
+  if (gone && S.site === gone) setSite(name || (siteNames()[0] || ''));
+  else if (name && !m.old) setSite(name);
+  closeModal(); S.feedStale = true; render();
+  setTimeout(function () { loadFeed(true); }, 130000);
+}
+SITE_ACTS.siteeditok = function () {
+  var m = S.modal; if (!m || m.type !== 'siteedit' || m.busy || siteEditProblem(m)) return;
+  var name = String(m.name).trim(), start = m.start, end = m.end || '', old = m.old;
+  m.err = '';
+  dLogin(function () {
+    if (!old || name === old) {   // 新增，或只改日期：手機新增.json 的 sites（跟摺疊機 addSite／editSiteDates 一樣）
+      siteEditMsg(m, '存到雲端…');
+      dCustomEdit(function (o) {
+        o.sites = o.sites.filter(function (s) { return s && s.name !== name; }).concat([{ name: name, start: start, end: end }]);
+        o.hidden = o.hidden.filter(function (h) { return h !== 'sites:' + name; });
+      }).then(function () { siteEditDone(m, name, start, end, ''); }, function (e) { siteEditFail(m, e); });
+      return;
+    }
+    // 改名（跟摺疊機 renameSiteCloud 一樣）：先改收件服務的表，再改雲端資料夾；雲端改到一半出錯就把收件服務改回去
+    siteEditMsg(m, '改收件服務的表…');
+    var moved = 0;
+    api('renamesite', { from: old, to: name }).then(function () {
+      siteEditMsg(m, '改雲端資料夾…');
+      return dPath(['工地App'], false).then(function (root) {
+        if (!root) return;
+        return dChildren(root).then(function (kinds) {
+          kinds = kinds.filter(function (k) { return k.mimeType === DFOLDER; });
+          var i = 0;
+          var next = function () {
+            var k = kinds[i++]; if (!k) return Promise.resolve();
+            return dChildren(k.id).then(function (fs) {
+              var jobs = [];
+              fs.forEach(function (f) {
+                var folder = f.mimeType === DFOLDER;
+                if (folder && f.name === old) {
+                  if (fs.some(function (x) { return x.mimeType === DFOLDER && x.name === name; })) throw new Error('雲端「' + k.name + '」已經有「' + name + '」資料夾');
+                  if (k.name === '日誌PDF') jobs.push(dChildren(f.id).then(function (ps) { var p = ps.filter(function (x) { return x.name === old + '-整個專案.pdf'; })[0]; return p ? dRename(p.id, name + '-整個專案.pdf') : null; }));
+                  jobs.push(dRename(f.id, name).then(function () { moved++; }));
+                } else if (!folder && k.name === '發包' && f.name === siteSafe(old) + '.json') jobs.push(dRename(f.id, siteSafe(name) + '.json').then(function () { moved++; }));
+              });
+              return Promise.all(jobs);
+            }).then(next);
+          };
+          return next();
+        });
+      }).catch(function (e) {
+        return api('renamesite', { from: name, to: old }).catch(function () { }).then(function () { throw e; });   // 兩邊對不上就改回去
+      });
+    }).then(function () {
+      siteEditMsg(m, '改工地清單…');
+      return dCustomEdit(function (o) {
+        o.sites = o.sites.filter(function (s) { return s && s.name !== old && s.name !== name; }).concat([{ name: name, start: start, end: end }]);
+        o.hidden = o.hidden.filter(function (h) { return h !== 'sites:' + name; }); if (o.hidden.indexOf('sites:' + old) < 0) o.hidden.push('sites:' + old);
+        if (o.siteGeo[old]) { o.siteGeo[name] = o.siteGeo[old]; delete o.siteGeo[old]; }
+        var sd = {}; Object.keys(o.sheetDone).forEach(function (k) { sd[k.indexOf(old + '/') === 0 ? name + k.slice(old.length) : k] = o.sheetDone[k]; }); o.sheetDone = sd;
+        // 摺疊機 App 0.9.96 起看到這個，就把手機裡舊名字的日誌、照片、施工單搬到新名字（不然它會以為舊工地還在）
+        var rn = o.renamed && typeof o.renamed === 'object' ? o.renamed : (o.renamed = {});
+        Object.keys(rn).forEach(function (k) { if (rn[k] === old) rn[k] = name; });
+        rn[old] = name; delete rn[name];
+      });
+    }).then(function () { siteEditDone(m, name, start, end, old); pdfStatusSafe('已改名「' + old + '」→「' + name + '」（雲端 ' + moved + ' 個資料夾、檔案）'); },
+      function (e) { siteEditFail(m, e); });
+  }, function (msg) { siteEditFail(m, new Error(msg || '沒連上 Google 雲端')); });
+};
+function pdfStatusSafe(t) { S.sheetMsg = ''; S.siteMsg = t; render(); setTimeout(function () { if (S.siteMsg === t) { S.siteMsg = ''; render(); } }, 8000); }
+SITE_ACTS.sitedelask = function () { var m = S.modal; if (!m || m.type !== 'siteedit' || m.busy) return; m.ask = true; m.err = ''; renderModal(); };
+SITE_ACTS.sitedelno = function () { var m = S.modal; if (!m || m.busy) return; m.ask = false; renderModal(); };
+SITE_ACTS.sitedelok = function () {
+  var m = S.modal; if (!m || m.type !== 'siteedit' || m.busy || !m.old) return;
+  var old = m.old, n = 0;
+  dLogin(function () {
+    siteEditMsg(m, '雲端資料夾放進垃圾桶…');
+    // 跟摺疊機 deleteSiteCloud 一樣：工地App/（各類）/這個工地 放進垃圾桶
+    dPath(['工地App'], false).then(function (root) {
+      if (!root) return;
+      return dChildren(root).then(function (kinds) {
+        return Promise.all(kinds.filter(function (k) { return k.mimeType === DFOLDER; }).map(function (k) {
+          return dChildren(k.id).then(function (fs) { return Promise.all(fs.filter(function (f) { return f.mimeType === DFOLDER && f.name === old; }).map(function (f) { return dTrash(f.id).then(function () { n++; }); })); });
+        }));
+      });
+    }).then(function () {
+      siteEditMsg(m, '改工地清單…');
+      return dCustomEdit(function (o) {
+        o.sites = o.sites.filter(function (s) { return s && s.name !== old; });
+        if (o.hidden.indexOf('sites:' + old) < 0) o.hidden.push('sites:' + old);
+        delete o.siteGeo[old];
+        if (o.renamed && typeof o.renamed === 'object') delete o.renamed[old];
+      });
+    }).then(function () { siteEditDone(m, '', '', '', old); pdfStatusSafe('已刪除「' + old + '」（雲端 ' + n + ' 個資料夾放進垃圾桶，30 天內救得回來）'); },
+      function (e) { siteEditFail(m, e); });
+  }, function (msg) { siteEditFail(m, new Error(msg || '沒連上 Google 雲端')); });
+};
 function progressHtml(st) {
   var t = siteDaysText(st), p = siteProgress(st);
   return (t ? '<div class="sub" style="font-size:12.5px">' + esc(t) + '</div>' : '') + (p != null ? '<div class="bar"><i style="width:' + Math.max(2, Math.round(p * 100)) + '%"></i></div>' : '');
@@ -1448,9 +1594,10 @@ function renderSheets() {
   else if (!fo && !list.length && !folders.length) h += '<div class="card sub" style="font-size:15px">這個工地還沒有施工單。要看別的工地，回首頁換工地。</div>';
   list.forEach(function (d) {
     h += swp('<button class="item" data-act="pdfopen" data-v="' + esc(d.id) + '"><span class="pdfph">PDF</span><span class="grow"><b style="font-size:16px;display:block">' + esc(docTitle(d)) + '</b>' +
-      '<span class="sub" style="display:block">' + esc(shortTime(d.modified) || '─') + ' 列印</span></span><span class="arrow">›</span></button>', 'sheetdel', d.id);
+      '<span class="sub" style="display:block">' + esc(shortTime(d.modified) || '─') + ' 列印</span>' + sdBadge(d) + '</span><span class="arrow">›</span></button>', 'sheetdel', d.id);
   });
-  return h + '<div class="note" style="margin-top:4px">同一個群組重新列印，就會自動換成新的。</div></div>';
+  if (sdCan()) { sdLoad(); if (SDONE.err) h += '<div class="note" style="color:var(--warn)">綁完打勾讀不到：' + esc(SDONE.err) + '</div>'; }
+  return h + '<div class="note" style="margin-top:4px">同一個群組重新列印，就會自動換成新的。' + (sdCan() ? '開發者：打開施工單，每頁下面有「☐ 綁完打勾」（跟摺疊機同一份）。' : '') + '</div></div>';
 }
 
 function renderPdf() {
@@ -2216,6 +2363,7 @@ function modalOk(m) {
   if (m.type === 'dladd') return dlAddOk(m);
   if (m.type === 'omat') return !m.busy && !!(String(m.vendor || '').trim() || String(m.qty || '').trim());
   if (m.type === 'contract') return !m.busy && !contractProblem(m);
+  if (m.type === 'siteedit') return !m.busy && !siteEditProblem(m);
   return true;
 }
 
@@ -2783,7 +2931,8 @@ function openPdf(id) {
   var o = S.office; if (!o) return;
   var doc = (o.pours || []).concat(o.sheets || []).filter(function (d) { return d.id === id; })[0]; if (!doc) return;
   // 施工單記號（第 15 版）：主任、老闆、開發者看得到、可以畫
-  openPdfDoc(doc, { notes: (o.sheets || []).indexOf(doc) >= 0 && isLead() });
+  var sheet = (o.sheets || []).indexOf(doc) >= 0;
+  openPdfDoc(doc, { notes: sheet && isLead(), sd: sheet && sdCan() });   // sd＝開發者綁完打勾（使用者 2026-11-15 巡查 ⑤b）
 }
 /**
  * 看 PDF。opt.notes＝蓋上施工單記號（每頁下面「✏️ 畫記號」「📝 幾筆」）；opt.worker＝施工人員：只畫給他的那幾頁；opt.start＝先捲到第幾頁（0 起算）
@@ -2791,7 +2940,8 @@ function openPdf(id) {
 function openPdfDoc(doc, opt) {
   opt = opt || {};
   var from = opt.from || S.route, my = { doc: doc, from: from, title: opt.title || (pourOf(doc).part || docTitle(doc)), status: '下載中…', notes: !!opt.notes || !!opt.worker,
-    worker: !!opt.worker, start: opt.start || 0, cv: {}, save: opt.save || '', img: opt.img || '' };
+    worker: !!opt.worker, start: opt.start || 0, cv: {}, save: opt.save || '', img: opt.img || '', sd: !!opt.sd && !!opt.notes };
+  if (my.sd) sdLoad();
   var key = my.key = doc.id + '|' + doc.modified;
   S.pdf = my; go('pdf');
   // opt.load：自己下載（發包的報價單、合約從開發者的雲端拿）；沒有就跟收件服務拿
@@ -2813,6 +2963,7 @@ function openPdfDoc(doc, opt) {
     pdfStatus('畫圖中…');
     return a[1].getDocument({ data: a[0].slice(0) }).promise.then(function (pdf) {
       var n = pdf.numPages, box = $('pdfpages');
+      if (my.sd) SDONE.pages[doc.id] = n;   // 施工單清單的「綁完 3/10 頁」
       // 施工人員：只有給他的那幾頁（加上消息說的那頁）
       var list = [];
       if (my.worker) { snotesOf(doc).forEach(function (x) { if (list.indexOf(x.page) < 0) list.push(x.page); }); if (list.indexOf(my.start) < 0) list.push(my.start); list = list.filter(function (p) { return p < n; }).sort(function (x, y) { return x - y; }); }
@@ -3328,6 +3479,7 @@ document.addEventListener('input', function (ev) {
     var b = $('msave'); if (b) b.disabled = !modalOk(m) || !!m.busy;
     var mm = $('mmsg'); if (mm && m.type === 'cal') mm.textContent = m.err || calProblem(m);
     if (mm && m.type === 'dladd') mm.textContent = dlAddNote(m);
+    if (mm && m.type === 'siteedit') { m.err = ''; mm.textContent = siteEditNote(m); }
     if (mm && m.type === 'omat') mm.textContent = modalOk(m) ? '' : '要填廠商或數量';
     return;
   }
@@ -3551,7 +3703,8 @@ function snDrawPage(my, pi) {
   list.forEach(function (n) { snDraw(ctx, n.data || {}, ov.width, ov.height); });
   var bar = $('pgbar' + pi);
   if (bar) bar.innerHTML = (list.length ? '<button class="sncnt" data-act="snlist" data-v="' + pi + '">📝 ' + list.length + ' 筆記號</button>' : '') +
-    (isLead() ? '<button class="snpen" data-act="snedit" data-v="' + pi + '">✏️ 畫記號</button>' : '');
+    (isLead() ? '<button class="snpen" data-act="snedit" data-v="' + pi + '">✏️ 畫記號</button>' : '') +
+    (my.sd && SDONE.map ? (sdPages(my.doc).indexOf(pi) >= 0 ? '<button class="sddone on" data-act="sdtoggle" data-v="' + pi + '">✅ 綁完了</button>' : '<button class="sddone" data-act="sdtoggle" data-v="' + pi + '">☐ 綁完打勾</button>') : my.sd && !SDONE.busy ? '<button class="sddone" data-act="sdconnect">☐ 綁完打勾（先連雲端）</button>' : '');
 }
 function snDrawAll() { var my = S.pdf; if (!my || !my.notes) return; Object.keys(my.cv).forEach(function (pi) { snDrawPage(my, +pi); }); }
 /** 最新消息「施工單記號」：打開那份、跳到那一頁（施工人員只看得到給他的那幾頁） */
@@ -4237,6 +4390,7 @@ function dCreate(parent, name, mime, blob, extra) {
   return dJSON('POST', '/upload/drive/v3/files?uploadType=multipart&fields=' + DFIELDS, body, 'multipart/related; boundary=' + b);
 }
 function dUpdate(id, mime, blob) { return dJSON('PATCH', '/upload/drive/v3/files/' + encodeURIComponent(id) + '?uploadType=media&fields=' + DFIELDS, blob, mime); }
+function dRename(id, name) { return dJSON('PATCH', '/drive/v3/files/' + encodeURIComponent(id) + '?fields=id,name', JSON.stringify({ name: name }), 'application/json; charset=UTF-8'); }
 function dTrash(id) { return dJSON('PATCH', '/drive/v3/files/' + encodeURIComponent(id) + '?fields=id', JSON.stringify({ trashed: true }), 'application/json; charset=UTF-8'); }
 function dText(id) { return dFetch('GET', '/drive/v3/files/' + encodeURIComponent(id) + '?alt=media').then(function (r) { return r.text(); }); }
 function dBlob(id) { return dFetch('GET', '/drive/v3/files/' + encodeURIComponent(id) + '?alt=media').then(function (r) { return r.blob(); }); }
@@ -4638,6 +4792,7 @@ function dlPhotoListCard(dl) {
         '<div class="row" style="margin-top:8px;gap:6px"><button class="kindpick' + (cur.kind === 'site' ? '' : ' on') + '" data-act="dlpk" data-v="">🧾 單據</button><button class="kindpick site' + (cur.kind === 'site' ? ' on' : '') + '" data-act="dlpk" data-v="site">📍 材料現場</button></div>' +
         '<div class="label" style="margin-top:8px">施作位置</div><input type="text" data-df="pline" value="' + esc(cur.line || '') + '" maxlength="60" placeholder="例：2F 樓板">';
     }
+    if (cur.src !== '電腦') h += '<button class="ghost" style="margin:8px 0 0" data-act="dlprot"' + (dl.busy ? ' disabled' : '') + '>↻ 轉 90°（順時針）</button>';
     h += '<div class="row2" style="margin-top:8px"><button class="ghost" style="margin:0" data-act="dlph" data-v="">完成</button><button class="ghost red" style="margin:0" data-act="dlpdel">刪掉這張</button></div></div>';
   }
   return h + '</div>';
@@ -4824,6 +4979,133 @@ function dlListSave(kind, v, add) {
     });
   }, function (msg) { fail(msg || '沒連上 Google 雲端'); });
 }
+/** 雲端 工地App/設定/手機新增.json（摺疊機同一份）：讀最新的 */
+function dCustomRead() {
+  return dPath(['工地App', '設定'], false).then(function (dir) {
+    if (!dir) return null;
+    return dFind(dir, '手機新增.json', false).then(function (f) { return f ? dText(f.id).then(function (t) { return JSON.parse(t); }) : null; });
+  });
+}
+/**
+ * 改雲端 手機新增.json：讀最新的 → fn(o) 只改要改的 → 存回去（其他欄位原樣留著）；跟清單「＋ 新增」排同一個隊，不會互相蓋掉。
+ * fn 回傳 false＝不用存。存好叫醒摺疊機同步。要先 dLogin（在按的那一下）。回傳 Promise(o)
+ */
+function dCustomEdit(fn) {
+  var job = DLL.q.then(function () {
+    return dPath(['工地App', '設定'], true).then(function (dir) {
+      if (!dir) throw new Error('找不到雲端的工地App資料夾');
+      return dFind(dir, '手機新增.json', false).then(function (f) {
+        return (f ? dText(f.id) : Promise.resolve('')).then(function (t) {
+          var o;
+          try { o = t ? JSON.parse(t) : { version: 1, added: {}, hidden: [], sites: [], sheetDone: {}, siteGeo: {} }; } catch (e) { throw new Error('雲端的清單檔讀不懂，沒有動它'); }
+          if (!o || typeof o !== 'object') throw new Error('雲端的清單檔讀不懂，沒有動它');
+          if (!o.added || typeof o.added !== 'object') o.added = {};
+          if (!Array.isArray(o.hidden)) o.hidden = [];
+          if (!Array.isArray(o.sites)) o.sites = [];
+          if (!o.sheetDone || typeof o.sheetDone !== 'object') o.sheetDone = {};
+          if (!o.siteGeo || typeof o.siteGeo !== 'object') o.siteGeo = {};
+          if (fn(o) === false) return o;
+          var blob = new Blob([JSON.stringify(o, null, 1)], { type: 'application/json' });
+          return (f ? dUpdate(f.id, 'application/json', blob) : dCreate(dir, '手機新增.json', 'application/json', blob)).then(function () { webPing('lists'); return o; });
+        });
+      });
+    });
+  });
+  DLL.q = job.catch(function () { });
+  return job;
+}
+
+// ---------- 施工單綁完打勾（開發者；使用者 2026-11-15 巡查 ⑤b「施工單綁完打勾」網頁也要有）----------
+// 跟摺疊機同一份：手機新增.json 的 sheetDone「工地/資料夾/檔名」→ 打勾的頁數（0 起算）。摺疊機 App 0.9.96 起，網頁取消的勾也會跟著取消
+var SDONE = { map: null, at: 0, busy: false, err: '', pages: {} };
+function sdCan() { return isOwner(); }   // 切換成別人時不算
+function sdKey(d) { return d.site + '/' + docKey(d); }
+function sdPages(d) { return (SDONE.map && SDONE.map[sdKey(d)]) || []; }
+function sdLoad(force) {
+  if (!sdCan() || SDONE.busy) return;
+  if (!force && SDONE.map && Date.now() - SDONE.at < 120000) return;
+  if (!dHasToken()) { dPrefetch(function () { if (dHasToken() && !SDONE.busy) sdLoad(true); }); return; }
+  SDONE.busy = true;
+  dCustomRead().then(function (o) { SDONE.map = (o && o.sheetDone) || {}; SDONE.at = Date.now(); SDONE.err = ''; })
+    .catch(function (e) { SDONE.err = dlErrText(e); })
+    .then(function () { SDONE.busy = false; if (S.route === 'sheets') renderSoft(); if (S.route === 'pdf') snDrawAll(); });
+}
+/** 施工單清單上的「綁完 3/10 頁」 */
+function sdBadge(d) {
+  if (!sdCan() || !SDONE.map) return '';
+  var n = SDONE.pages[d.id] || 0, done = sdPages(d).filter(function (p) { return !n || p < n; }).length;
+  if (!done) return '';
+  return '<span style="display:block;font-size:13.5px;color:var(--green);font-weight:bold">' + (n && done >= n ? '✓ 全部綁完' : '✅ 綁完 ' + done + (n ? '/' + n : '') + ' 頁') + '</span>';
+}
+/** 打勾／取消（pages：0 起算）；先改畫面，雲端存不進去就改回來 */
+function sdSet(d, pages, on) {
+  var k = sdKey(d), before = (SDONE.map || {})[k] ? SDONE.map[k].slice() : [];
+  var apply = function (cur) { cur = (cur || []).slice(); pages.forEach(function (p) { var i = cur.indexOf(p); if (on && i < 0) cur.push(p); if (!on && i >= 0) cur.splice(i, 1); }); return cur.sort(function (a, b) { return a - b; }); };
+  SDONE.map = SDONE.map || {}; SDONE.map[k] = apply(before); snDrawAll();
+  return new Promise(function (ok, bad) {
+    dLogin(function () {
+      dCustomEdit(function (o) { o.sheetDone[k] = apply(o.sheetDone[k]); if (!o.sheetDone[k].length) delete o.sheetDone[k]; })
+        .then(function (o) { SDONE.map = o.sheetDone || {}; SDONE.at = Date.now(); snDrawAll(); ok(); },
+          function (e) { SDONE.map[k] = before; snDrawAll(); bad(e); });
+    }, function (msg) { SDONE.map[k] = before; snDrawAll(); bad(new Error(msg || '沒連上 Google 雲端')); });
+  });
+}
+ACT.sdtoggle = function (v) {
+  var my = S.pdf; if (!my || !my.sd) return; var pi = +v, d = my.doc;
+  if (sdPages(d).indexOf(pi) >= 0) {
+    if (!confirm('取消 P.' + (pi + 1) + ' 的「綁完」打勾？\n（已經寫進日誌的那一行不會刪）')) return;
+    sdSet(d, [pi], false).catch(function (e) { alert('沒有取消到：' + dlErrText(e)); });
+    return;
+  }
+  var cats = uniq(((S.s && S.s.categories && S.s.categories.length) ? S.s.categories : DEFAULT_CATS).map(canonCat));
+  var t = docTitle(d), cut = d.site + '-';
+  S.modal = { type: 'sdmark', pages: [pi], cats: cats, cat: cats.indexOf('鐵筋工程') >= 0 ? '鐵筋工程' : cats[0],
+    text: (t.indexOf(cut) === 0 ? t.slice(cut.length) : t) + ' P.' + (pi + 1) + ' 綁紮', busy: false, err: '' };
+  renderModal();
+};
+function sdMarkModal(m) {
+  var my = S.pdf, today = todayYmd();
+  return '<h3>✅ ' + esc(docTitle(my.doc)) + ' P.' + m.pages.map(function (p) { return p + 1; }).join('、P.') + ' 綁完了</h3>' +
+    '<div class="label">要不要順便寫進今天（' + esc(rocDate(today)) + '）的施工日誌？選大項：</div><div class="chips">' +
+    m.cats.map(function (c) { return '<button class="chip' + (c === m.cat ? ' on' : '') + '" data-act="sdcat" data-v="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div>' +
+    '<div class="label" style="margin-top:8px">寫這一行</div><input type="text" data-f="m.text" maxlength="60" value="' + esc(m.text) + '">' +
+    (m.err ? '<div class="err" style="margin-top:8px">' + esc(m.err) + '</div>' : '') +
+    '<button class="big" style="margin-top:12px" data-act="sdok" data-v="1"' + (m.busy ? ' disabled' : '') + '>' + (m.busy ? '存到雲端…' : '打勾＋寫進今天日誌') + '</button>' +
+    '<button class="ghost" data-act="sdok" data-v="0"' + (m.busy ? ' disabled' : '') + '>只打勾</button><button class="ghost" data-act="mclose">取消</button>';
+}
+ACT.sdconnect = function () { dLogin(function () { sdLoad(true); }, function (msg) { pdfStatus(msg || '沒連上 Google 雲端'); }); };
+ACT.sdcat = function (v) { var m = S.modal; if (!m || m.type !== 'sdmark' || m.busy) return; m.cat = v; renderModal(); };
+ACT.sdok = function (v) {
+  var m = S.modal, my = S.pdf; if (!m || m.type !== 'sdmark' || m.busy || !my) return;
+  var write = v === '1' && String(m.text || '').trim(), d = my.doc, today = todayYmd();
+  m.busy = true; m.err = ''; renderModal();
+  dLogin(function () {
+    sdSet(d, m.pages, true).then(function () {
+      if (!write) return '';
+      return dlAppendLine(d.site, today, m.cat, String(m.text).trim()).then(function (r) { return r.full ? '「' + m.cat + '」今天已經 3 行了，只打勾，沒寫進日誌' : '已寫進今天日誌：' + m.cat; });
+    }).then(function (msg) { if (S.modal === m) closeModal(); if (msg) pdfStatus(msg); }, function (e) { m.busy = false; m.err = '沒有存到：' + dlErrText(e); if (S.modal === m) renderModal(); });
+  }, function (msg) { m.busy = false; m.err = msg || '沒連上 Google 雲端'; if (S.modal === m) renderModal(); });
+};
+/** 在某一天的日誌某個大項加一行（打勾時用；跟摺疊機 writeDoneLine 一樣：已經 3 行就不加，回傳 {full:true}） */
+function dlAppendLine(site, date, cat, text) {
+  return dlReadDay(site, date).then(function (day) {
+    var before = day.log, after = dlCopy(before), now = dlNow();
+    after.items = after.items || [];
+    var it = after.items.filter(function (i) { return i.category === cat; })[0];
+    if (!it) { it = { category: cat, lines: [] }; after.items.push(it); }
+    var lines = (it.lines || []).filter(function (l) { return String(l.text || '').trim(); });
+    if (lines.length >= 3) return { full: true };
+    it.lines = lines.concat([{ text: text, workers: [] }]);
+    after.items = after.items.filter(dlFilled).map(dlItemOut);
+    var merged = dlMerge(day.id ? before : null, dlStamp(before, after, now));
+    merged.version = merged.version || 1; merged.site = site; merged.date = date; merged.savedAt = now;
+    ['items', 'materials', 'photos'].forEach(function (k) { if (!merged[k]) merged[k] = []; });
+    var blob = new Blob([JSON.stringify(merged, null, 1)], { type: 'application/json' });
+    return (day.id ? dUpdate(day.id, 'application/json', blob) : dPath(['工地App', '日誌', site], true).then(function (f) { return dCreate(f, date + '.json', 'application/json', blob); }))
+      .then(function () { delete LOGCACHE[logKey(site, date)]; delete LOGCACHE[logKey(site, null)]; webPing('log', site); return { full: false }; });
+  });
+}
+
 // 長按名字（約 0.6 秒）＝問要不要從清單拿掉；手指移動（捲畫面）就取消。放開時那一下點擊吃掉，不會順便選到、或點到跳出來的視窗
 var LP = { t: 0, el: null, x: 0, y: 0, fired: false, eatUntil: 0 };
 function lpStop() { clearTimeout(LP.t); if (LP.el) LP.el.classList.remove('lping'); LP.el = null; }
@@ -4868,6 +5150,41 @@ ACT.dlpdel = function () {
   if (!confirm('刪掉這張照片？' + (dl.newPh.some(function (x) { return x.file === p.file; }) ? '' : '\n存到雲端時，雲端那張也會丟到垃圾桶。'))) return;
   dl.e.photos = dl.e.photos.filter(function (x) { return x.file !== p.file; }); dl.newPh = dl.newPh.filter(function (x) { return x.file !== p.file; }); dl.ph = ''; dlTouch(); render();
 };
+// 照片轉 90°（使用者 2026-11-15 巡查 ⑤e，跟摺疊機一樣順時針）：轉好的當成新的一張（新檔名）放回原來的位置，
+// 按「存到雲端」時傳上去、舊的那張丟垃圾桶；摺疊機同步看到檔名換了就抓新的。電腦傳來的不轉（雲端那張是電腦的）
+ACT.dlprot = function () {
+  var dl = S.dl, p = dl && dlCurPhoto(dl); if (!p || dl.busy) return;
+  if (p.src === '電腦') return;
+  var nw = dl.newPh.filter(function (x) { return x.file === p.file; })[0];
+  dl.busy = '轉照片…'; dl.err = ''; render();
+  var blobP = nw ? Promise.resolve(b64Blob(nw.data, 'image/jpeg')) : new Promise(function (ok, bad) {
+    dLogin(function () {
+      dPath(['工地App', '照片', dl.site, dl.date], false).then(function (dir) { if (!dir) throw new Error('雲端找不到這張'); return dFind(dir, p.file, false); })
+        .then(function (f) { if (!f) throw new Error('雲端找不到這張'); return dBlob(f.id); }).then(ok, bad);
+    }, function (msg) { bad(new Error(msg || '沒連上 Google 雲端')); });
+  });
+  blobP.then(rot90).then(function (r) {
+    if (S.dl !== dl) return;
+    var base = p.file.replace(/(_r\d+)?\.jpe?g$/i, ''), name = base + '_r' + (Math.floor(Date.now() / 1000) % 100000) + '.jpg';
+    var rec = dlCopy(p); rec.file = name;
+    dl.e.photos = dl.e.photos.map(function (x) { return x.file === p.file ? rec : x; });
+    dl.newPh = dl.newPh.filter(function (x) { return x.file !== p.file; }).concat([{ file: name, url: r.url, data: r.data }]);
+    dl.ph = name; dl.busy = ''; dlTouch(); render();
+  }).catch(function (e) { if (S.dl !== dl) return; dl.busy = ''; dl.err = '轉不了：' + dlErrText(e); render(); });
+};
+/** 照片順時針轉 90° → {url, data(base64)} */
+function rot90(blob) {
+  return new Promise(function (ok, bad) {
+    var url = URL.createObjectURL(blob), img = new Image();
+    img.onload = function () {
+      var w = img.naturalWidth, h = img.naturalHeight, c = document.createElement('canvas'); c.width = h; c.height = w;
+      var g = c.getContext('2d'); g.translate(h, 0); g.rotate(Math.PI / 2); g.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url); var du = c.toDataURL('image/jpeg', 0.85); ok({ url: du, data: du.split(',')[1] });
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); bad(new Error('這張照片讀不出來')); };
+    img.src = url;
+  });
+}
 ACT.dlac = function (v) { var dl = S.dl; if (!dl) return; dl.add.cat = dl.add.cat === v ? '' : v; dl.add.line = ''; render(); };
 ACT.dlal = function (v) { var dl = S.dl; if (!dl) return; dl.add.line = dl.add.line === v ? '' : v; render(); };
 ACT.dlav = function (v) { var dl = S.dl; if (!dl) return; dl.add.vendor = dl.add.vendor === v ? '' : v; render(); };
@@ -5044,6 +5361,7 @@ setTimeout(webCheck, 20000);   // 打開 20 秒後先看一次（剛打開可能
 // ---------- 開始 ----------
 contractActs();   // 發包的按鈕（開發者改發包，2026-11-14）
 omatActs();   // 老闆、主任填材料／機具（收件服務第 36 版）
+Object.keys(SITE_ACTS).forEach(function (k) { ACT[k] = SITE_ACTS[k]; });   // 開發者新增、改名、刪工地（使用者 2026-11-15 巡查 ⑤c）
 wpActs();   // 🔔 開啟通知（網頁推播，第 33 版）
 // 記住的代碼：顯示鎖住的 ●●●●●●，按「登入」才進去（使用者 2026-11-08）
 S.saved = LS.get('code');
