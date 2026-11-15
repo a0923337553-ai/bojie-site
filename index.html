@@ -398,7 +398,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/15c';
+var WEB_VERSION = '11/15d';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1960,11 +1960,18 @@ function omatModal(m) {
     (m.err ? '<div class="err">' + esc(m.err) + '</div>' : '') +
     '<div class="btns"><button class="dim" data-act="omnodel">取消</button><button class="redb" data-act="omdel2"' + (m.busy ? ' disabled' : '') + '>' + (m.busy ? '刪除中…' : '刪掉') + '</button></div>';
   var h = '<h3>' + (m.o ? '改材料／機具' : '＋ 材料／機具') + '（' + esc(S.site) + ' ' + rocDate(m.date) + '）</h3>';
+  // 「＋ 新增」（收件服務第 37 版，使用者 2026-11-15「要有新增功能阿」）：打名稱 → 加進大家共用的清單（摺疊機同一份），順便選它
+  var addRow = function (kind) {
+    if (m.addKind !== kind) return '<button class="chip small addl" data-act="omaddk" data-v="' + kind + '">＋ 新增</button>';
+    return '</div><div class="row" style="gap:6px;margin-top:6px"><input type="text" id="omaddin" data-f="m.addV" maxlength="' + (kind === 'vendors' ? 30 : 10) + '" placeholder="新的' + (kind === 'vendors' ? '廠商' : '單位') + '" value="' + esc(m.addV || '') + '" enterkeyhint="done" autocomplete="off">' +
+      '<button class="pill" data-act="omaddok"' + (m.addBusy ? ' disabled' : '') + '>' + (m.addBusy ? '加入中…' : '加入') + '</button><button class="link" style="white-space:nowrap" data-act="omaddno">取消</button></div>' +
+      (m.addErr ? '<div class="err" style="margin-top:4px">' + esc(m.addErr) + '</div>' : '') + '<div>';
+  };
   h += '<div class="label">廠商</div><input type="text" data-f="m.vendor" maxlength="30" value="' + esc(m.vendor) + '">' +
-    (vs.length ? '<div class="chips" style="margin-top:6px">' + vs.map(function (v) { return chip('omv', v, v, m.vendor === v, true); }).join('') + '</div>' : '');
+    '<div class="chips" style="margin-top:6px;flex-wrap:wrap">' + vs.map(function (v) { return chip('omv', v, v, m.vendor === v, true); }).join('') + addRow('vendors') + '</div>';
   h += '<div class="row2" style="margin-top:8px"><div><div class="label">數量</div><input type="text" inputmode="decimal" data-f="m.qty" maxlength="12" value="' + esc(m.qty) + '"></div>' +
     '<div><div class="label">單位</div><input type="text" data-f="m.unit" maxlength="10" value="' + esc(m.unit) + '"></div></div>' +
-    (us.length ? '<div class="chips" style="margin-top:6px">' + us.map(function (u) { return chip('omu', u, u, m.unit === u, true); }).join('') + '</div>' : '');
+    '<div class="chips" style="margin-top:6px;flex-wrap:wrap">' + us.map(function (u) { return chip('omu', u, u, m.unit === u, true); }).join('') + addRow('units') + '</div>';
   h += '<div id="mmsg" class="sub" style="margin-top:6px;font-size:13.5px">' + esc(m.err || (modalOk(m) ? '' : '要填廠商或數量')) + '</div>';
   if (m.o) h += '<button class="link red" data-act="omdel">刪掉這筆</button>';
   return h + '<div class="btns"><button class="dim" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button><button id="msave" data-act="omsave"' + (modalOk(m) ? '' : ' disabled') + '>' + (m.busy ? '存檔中…' : '存檔') + '</button></div>';
@@ -1983,6 +1990,19 @@ ACT.omadd = function () { var L = S.log; if (!L || !L.canOmat) return; S.omMsg =
 ACT.omedit = function (id) {
   var L = S.log, o = L && (L.omat || []).filter(function (x) { return x.id === id; })[0]; if (!o) return; S.omMsg = '';
   S.modal = { type: 'omat', o: o, date: L.date, vendor: o.vendor || '', qty: o.qty || '', unit: o.unit || '', busy: false, err: '', ask: false }; renderModal();
+};
+ACT.omaddk = function (k) { var m = S.modal; if (!m) return; m.addKind = k; m.addV = ''; m.addErr = ''; renderModal(); var i = $('omaddin'); if (i) i.focus(); };
+ACT.omaddno = function () { var m = S.modal; if (!m) return; m.addKind = ''; m.addErr = ''; renderModal(); };
+ACT.omaddok = function () {
+  var m = S.modal; if (!m || !m.addKind || m.addBusy) return;
+  var k = m.addKind, v = String(m.addV || '').replace(/\s+/g, ' ').trim();
+  if (!v) { m.addErr = '要打名稱'; renderModal(); return; }
+  var list = (S.s && S.s[k]) || [];
+  var pick = function () { if (k === 'vendors') m.vendor = v; else m.unit = v; m.addKind = ''; m.addBusy = false; m.addErr = ''; renderModal(); var b = $('msave'); if (b) b.disabled = !modalOk(m); };
+  if (list.indexOf(v) >= 0) { pick(); return; }   // 清單已經有：直接選它
+  m.addBusy = true; m.addErr = ''; renderModal();
+  api('omat', { op: 'listadd', kind: k, v: v }).then(function (r) { if (S.s) S.s[k] = (r && r.list) || list.concat([v]); pick(); })
+    .catch(function (e) { m.addBusy = false; var x = failMsg(e); if (x) { m.addErr = '加不進清單：' + x; renderModal(); } });
 };
 ACT.omv = function (v) { var m = S.modal; if (!m) return; m.vendor = v; renderModal(); };
 ACT.omu = function (v) { var m = S.modal; if (!m) return; m.unit = v; renderModal(); };
@@ -4829,6 +4849,7 @@ document.addEventListener('contextmenu', function (ev) {
 });
 document.addEventListener('keydown', function (ev) {
   if (ev.key === 'Enter' && ev.target && ev.target.id === 'dladdin') { ev.preventDefault(); ACT.dladdok(); }
+  if (ev.key === 'Enter' && ev.target && ev.target.id === 'omaddin') { ev.preventDefault(); ACT.omaddok(); }
 });
 ACT.dlph = function (v) { var dl = S.dl; if (!dl) return; dl.ph = dl.ph === v ? '' : v; render(); };
 function dlCurPhoto(dl) { return (dl.e.photos || []).filter(function (p) { return p.file === dl.ph; })[0]; }
