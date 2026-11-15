@@ -398,7 +398,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/15f';
+var WEB_VERSION = '11/15g';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -974,7 +974,7 @@ function renderLogin() {
   }
   h += (S.err ? '<div class="err" style="margin-top:10px">' + esc(S.err) + '</div>' : '') +
     '<button class="big" data-act="login" style="margin-top:12px"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? '登入中…' : '登入') + '</button>';
-  h += S.saved ? '<div class="note">要換人或換代碼，請找管理者。</div>' : '<div class="note">代碼只給你自己用；打錯 3 次這支手機會先鎖 30 分鐘。</div>';
+  h += S.saved ? '<div class="note">要換人或換代碼，請找開發者。</div>' : '<div class="note">代碼只給你自己用；打錯 3 次這支手機會先鎖 30 分鐘。</div>';
   h += '</div>';
   // 開發者：用 Google 登入（iPad、Mac、電腦才顯示；使用者 2026-11-11「讓開發者要登入他的 Google 帳號做驗證比較保險」）
   if (S.gs) {
@@ -3982,7 +3982,7 @@ function personAddModal(m) {
   return '<h3>＋ 新增人員</h3><div class="label">名字（寫在日誌上的叫法，例：吉）</div><input type="text" data-f="m.name" maxlength="10" value="' + esc(m.name) + '">' +
     '<div class="label" style="margin-top:8px">全名（可以不填）</div><input type="text" data-f="m.full" maxlength="30" value="' + esc(m.full) + '">' +
     '<div class="label" style="margin-top:8px">角色</div><div class="chips">' + ROLE_ORDER.map(function (r) { return chip('mprole', r, r, m.role === r, true); }).join('') + '</div>' +
-    (m.role === '管理者' ? '<div class="note" style="color:var(--warn);margin-top:6px">其他管理者可以做每天的工作（補一筆、同意修改、歸檔、匯出）；人員名單只有開發者能改。</div>' : '') +
+    (m.role === '管理者' ? '<div class="note" style="color:var(--warn);margin-top:6px">其他管理者可以做每天的工作（補一筆、同意修改、歸檔）；人員名單只有開發者能改。</div>' : '') +
     (m.err ? '<div class="err" style="margin-top:8px">' + esc(m.err) + '</div>' : '') +
     '<button class="big" style="margin-top:12px" id="msave" data-act="mpadd"' + (m.name.trim() && !m.busy ? '' : ' disabled') + '>' + (m.busy ? '新增中…' : '新增（自動給代碼）') + '</button>' +
     '<button class="ghost" data-act="mclose">取消</button>';
