@@ -398,7 +398,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/15d';
+var WEB_VERSION = '11/15e';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1229,6 +1229,8 @@ function renderWork() {
   // 管理者（第 13 版）：幫施工人員補一筆（跟 App「＋ 幫施工人員補一筆（他忘了寫）」一樣）
   if (isAdmin() && !S.asCode && S.site) h += '<button class="ghost" data-act="addfor">＋ 幫施工人員補一筆（他忘了寫）</button>';
   if (hasFeed() && S.site && S.site !== UNFILED) h += '<button class="ghost" data-act="logsfromwork">📋 看「' + esc(S.site) + '」的施工日誌</button>';
+  // 施工人員看 3D（收件服務第 38 版，使用者 2026-11-15「施工人員只有看3d不能看改哪」）：只能看、量、藏東西；沒有圈的地方
+  if (!isOffice() && S.s && Number(S.s.version) >= 38 && S.site && S.site !== UNFILED) h += '<button class="ghost" data-act="work3d">🏗️ 看「' + esc(S.site) + '」的 3D 模型</button>';
   var groups = {}, order = [];
   S.entries.forEach(function (e) { if (!groups[e.date]) { groups[e.date] = []; order.push(e.date); } groups[e.date].push(e); });
   order.sort().reverse();
@@ -1385,7 +1387,8 @@ function renderSite() {
   h += tile('派工', taskLine(site), '#F28C28', '📋', 'tasks');
   // 3D 結構（使用者 2026-11-10：結構體、點一筆灌漿亮那幾區、點柱或梁看配筋）：開發者、老闆、主任（「3d不提供給公司跟施工人員」）
   // 按鈕不寫「結構」「配筋」（使用者 2026-11-13「不要顯示結構跟配筋」：3D 現在是 SketchUp 模型）
-  if (isLead()) h += tile('3D 模型', 'SketchUp・分樓層・圈要改的', '#4F6BD8', '🏗️', '3d');
+  // 第 38 版（使用者 2026-11-15「3d公司打勾」）：公司也有；施工人員在「我的工作」裡面只能看
+  if (isOffice()) h += tile('3D 模型', 'SketchUp・分樓層・圈要改的', '#4F6BD8', '🏗️', '3d');
   // 管理者（第 13 版，跟摺疊機一樣）：這個工地施工人員傳的、幫補一筆、同意修改
   // 開發者：跟摺疊機一樣放在施工日誌裡面（最下面「👷 施工人員傳的」）
   if (isAdmin() && !S.asCode && !dev) h += tile('施工人員傳的', '幫補一筆・同意修改・改或刪', '#2D9CDB', '👷', 'work');
@@ -3019,8 +3022,8 @@ var ACT = {
       case 'sheet': setSite(n.site); openOffice('sheets'); return;
       case 'contract': setSite(n.site); openOffice('contracts'); return;
       case 'todo': setSite(n.site); openTodo('hub'); return;
-      case 'mark': if (isLead()) { setSite(n.site); open3d(); } return;   // 3D 上圈要改進的地方
-      case 'rebar': if (isLead()) { setSite(n.site); open3d(n.id); } return;   // 鋼筋第 N 批發布：打開 3D 亮那一批
+      case 'mark': if (isOffice()) { setSite(n.site); open3d(); } return;   // 3D 上圈要改進的地方
+      case 'rebar': if (isOffice()) { setSite(n.site); open3d(n.id); } return;   // 鋼筋第 N 批發布：打開 3D 亮那一批
       case 'task': if (isOffice()) { setSite(n.site); openTasks('hub'); } else { loadMyTasks(); render(); } return;   // 派工
       case 'snote': openSheetNote(n); return;   // 施工單記號：打開那份、跳到那一頁
       case 'worker': setSite(n.site); openWork('hub'); return;
@@ -3032,6 +3035,7 @@ var ACT = {
   site: function (v) { S.site = v; LS.set('site', v); S.entries = []; render(); refresh(); prefetchLog(v, null, true); },
   add: function () { openEdit(null); },
   logsfromwork: function () { openLogs('work'); },
+  work3d: function () { open3d(); },
   open: function (id) {
     var e = S.entries.filter(function (x) { return x.id === id; })[0]; if (!e) return;
     if (e.mine) openEdit(e); else { S.view = e; go('view'); }
