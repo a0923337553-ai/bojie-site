@@ -400,7 +400,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/15h';
+var WEB_VERSION = '11/15i';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -775,7 +775,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -4627,6 +4627,7 @@ function renderDlog() {
     '<button class="phrow" data-act="dlview" data-v="photos"><span class="grow"' + (uncls ? ' style="color:var(--red)"' : '') + '>📷 這天的照片 ' + ps.length + ' 張' + (uncls ? '（' + uncls + ' 張還沒分類）' : '') + '</span><b>看照片 ›</b></button></div>';
   if (dl.msg) h += '<div class="box" style="font-size:14.5px">' + esc(dl.msg) + '</div>';
   if (dl.err) h += '<div class="err">' + esc(dl.err) + '</div>';
+  h += lpCard(dl);   // 匯出 PDF（使用者 2026-11-15 巡查 ⑤a）
   var hasPc = (e.items || []).some(function (i) { return i.src === '電腦'; }) || e.materialsSrc === '電腦' || e.discussionSrc === '電腦';
   if (hasPc) h += '<div class="pcnote">🖥 這天有電腦（Excel 施工日誌）傳來的內容，標 🖥 的就是。Excel 那天再改、再傳一次，會以 Excel 為準。</div>';
   // 3. 11 個大項（施工人員傳的放在那個大項下面，藍字）
@@ -5104,6 +5105,463 @@ function dlAppendLine(site, date, cat, text) {
     return (day.id ? dUpdate(day.id, 'application/json', blob) : dPath(['工地App', '日誌', site], true).then(function (f) { return dCreate(f, date + '.json', 'application/json', blob); }))
       .then(function () { delete LOGCACHE[logKey(site, date)]; delete LOGCACHE[logKey(site, null)]; webPing('log', site); return { full: false }; });
   });
+}
+
+// ===================== 施工日誌 PDF（開發者；使用者 2026-11-15 巡查 ⑤a 選 A「iPad 自己做」） =====================
+// 照摺疊機 LogPdf.kt、Cumul.kt、LogPdfAndroid.kt 搬過來：一樣的格子、字的大小、累計、照片頁（一頁 6 張）、單據附頁（一頁 2 張、黑白）。
+// 格子和字畫在畫布上（約 180 dpi）當底圖，照片另外用高解析放進 PDF（跟摺疊機一樣清楚）；存到雲端「工地App/日誌PDF/工地/115.11.15.pdf」，摺疊機看得到
+var LPD = {
+  W: 595, H: 842, PW: 595.28, PH: 841.89, ZX: 0.4266, Z: 0.4245, TOP: 42.52,
+  COLS: [57, 57, 57, 57, 73.88, 73.88, 73.88, 73.88, 73.88, 14.62, 57, 57, 57, 57, 73.88, 73.88, 73.88, 73.88, 73.88, 21.75],
+  THIN: 0.45, THICK: 1.3, BLACK: '#000000', PEACH: '#FCE4D6', PINK: '#FF7070', RED: '#FF1010',
+  RECEIPT: '材料單據', UNCLS: '未分類', HPD: 8, DPI: 180,
+  PHOTO_PX: 1200, PHOTO_Q: 0.7, RECEIPT_PX: 1400, RECEIPT_Q: 0.65, CONTRAST: 1.35,
+  SANS: '"Noto Sans TC","Noto Sans CJK TC","Microsoft JhengHei","PingFang TC","Heiti TC",sans-serif',
+  SERIF: '"Noto Serif TC","Noto Serif CJK TC","PMingLiU","MingLiU","Songti TC","STSong",serif'
+};
+(function () {
+  var sum = LPD.COLS.reduce(function (a, b) { return a + b; }, 0), x = 22.68 + ((LPD.PW - 22.68 - 8.50) - sum * LPD.ZX) / 2;
+  LPD.colX = []; for (var i = 0; i <= LPD.COLS.length; i++) { LPD.colX.push(x); if (i < LPD.COLS.length) x += LPD.COLS[i] * LPD.ZX; }
+  LPD.PAGE1 = [85.88].concat(rep(35.62, 5), [35.25], rep(30, 45));
+  LPD.BLOCK = [17.25].concat(rep(16.12, 21), rep(17.25, 5), [32.25]);
+  function rep(v, n) { var a = []; for (var k = 0; k < n; k++) a.push(v); return a; }
+})();
+function lpGrid(hs) { var y = [], v = LPD.TOP; for (var i = 0; i < hs.length; i++) { y.push(v); v += hs[i] * LPD.Z; } y.push(v); return y; }
+function lpRoc(ymd) { var p = String(ymd).split('-'); return (Number(p[0]) - 1911) + '.' + p[1] + '.' + p[2]; }
+function lpYmd(ymd) { var p = String(ymd).split('-'); return Number(p[0]) + '/' + Number(p[1]) + '/' + Number(p[2]); }
+function lpWeek(ymd) { return '週' + '日一二三四五六'.charAt(new Date(ymd + 'T12:00:00+08:00').getDay()); }
+function lpDays(a, b) { return Math.round((new Date(b + 'T12:00:00+08:00') - new Date(a + 'T12:00:00+08:00')) / 86400000); }
+function lpStamp14(s) { return String(s || '').replace(/\D/g, '').slice(0, 14); }
+/** 跟 Kotlin BigDecimal HALF_UP 一樣四捨五入、去掉尾巴的 0 */
+function lpRound(v, n) { var k = Math.pow(10, n), r = Math.round((Math.abs(v) + 1e-12) * k) / k * (v < 0 ? -1 : 1); return String(Number(r.toFixed(n))); }
+function lpFmt(v) { return v === Math.floor(v) && Math.abs(v) < 1e15 ? String(v) : lpRound(v, 2); }   // Cumul.fmt
+function lpNum(v) { return lpRound(v, 3); }   // numText
+function lpHours(h) { var v = Number(String(h || '').trim()); return String(h || '').trim() && isFinite(v) && v > 0 && v <= 24 ? v : null; }
+/** Cumul.eval：「9*1」「4*0.25+2*1」「=1+0.5」→ 數字；看不懂 null */
+function lpEval(raw) {
+  var s = String(raw || '').replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }).replace(/ /g, '').replace(/^=/, '');
+  if (!s) return null;
+  var i = 0, peek = function () { return i < s.length ? s.charAt(i) : '\0'; };
+  function num() {
+    if (peek() === '(') { i++; var v = expr(); if (peek() !== ')') return null; i++; return v; }
+    if (peek() === '-') { i++; var n = num(); return n == null ? null : -n; }
+    var st = i; while (/[0-9.]/.test(peek())) i++;
+    var t = s.slice(st, i); if (!t || !/^\d*\.?\d+$|^\d+\.$/.test(t)) return null; return Number(t);
+  }
+  function term() {
+    var v = num(); if (v == null) return null;
+    while ('*/×xX'.indexOf(peek()) >= 0 && peek() !== '\0') { var op = peek(); i++; var r = num(); if (r == null) return null; if (op === '/') { if (r === 0) return null; v = v / r; } else v = v * r; }
+    return v;
+  }
+  function expr() { var v = term(); while (v != null && (peek() === '+' || peek() === '-')) { var op = peek(); i++; var r = term(); v = r == null ? null : op === '+' ? v + r : v - r; } return v; }
+  var v = expr(); return i === s.length ? v : null;
+}
+// ---- 日誌的大項（跟 App LogItem 一樣算） ----
+function lpQty(it) { var a = []; if (+it.people > 0) a.push(it.people + '*' + (it.hours || '1')); if (+it.people2 > 0) a.push(it.people2 + '*' + (it.hours2 || '1')); return a.join('+') || String(it.qtyText || ''); }
+function lpFull(it) { return (it.lines || []).map(function (l, i) { var t = String(l.text || '').trim(); if (!t) return ''; var w = l.workers || []; return (i + 1) + '.' + t + (w.length ? '(' + w.join('+') + ')' : ''); }).filter(Boolean); }
+function lpFilled(it) { return +it.people > 0 || +it.people2 > 0 || lpFull(it).length > 0 || !!String(it.qtyText || ''); }
+function lpItem(log, cat) { return (log.items || []).filter(function (x) { return canonCat(x.category) === cat; })[0] || { category: cat, vendor: '柏捷', unit: '工', people: 0, hours: '1', lines: [{ text: '' }] }; }
+function lpMats(a) { return (a || []).map(function (m) { return { vendor: String(m.vendor || ''), qty: String(m.qty || ''), unit: String(m.unit || '') }; }).filter(function (m) { return m.vendor.trim() || m.qty.trim(); }); }
+// ---- 施工人員傳的（收件服務 export；照片在 files） ----
+function lpW(x) {
+  var ok = x.ok === true || (typeof x.ok === 'number' && x.ok !== 0) || (typeof x.ok === 'string' && x.ok.trim() && x.ok !== '0');
+  var e = { id: x.id, date: x.date, site: x.site, name: String(x.name || ''), category: canonCat(x.category || ''), hours: String(x.hours || ''), text: String(x.text || ''),
+    photos: x.files || x.photos || [], receipts: x.receipts || [], receiptLocs: x.receiptLocs || {}, receiptKinds: x.receiptKinds || {}, weather: String(x.weather || ''),
+    materials: lpMats(x.materials), otH: String(x.otH || ''), ok: !!ok, created: String(x.created || ''), modified: String(x.modified || '') };
+  var c = x.conf;   // 管理者確認時改的那一份（WEntry.eff）
+  if (c && typeof c === 'object') { e.category = canonCat(c.category || '') || e.category; e.hours = String(c.hours || '') || e.hours; e.otH = String(c.otH || ''); e.text = String(c.text || ''); e.weather = String(c.weather || '') || e.weather; e.materials = lpMats(c.materials); }
+  return e;
+}
+function lpQtyExpr(es) {
+  var order = [], cnt = {};
+  es.forEach(function (e) { var h = String(e.hours || '').trim(); if (!h || !isFinite(Number(h))) h = '1'; if (!(h in cnt)) { cnt[h] = 0; order.push(h); } cnt[h]++; });
+  return order.map(function (h) { return cnt[h] + '*' + h; }).join('+');
+}
+function lpWithWorkers(a, vendor, unit, qty, ws) {
+  var wids = a.wids || [], fresh = ws.filter(function (w) { return wids.indexOf(w.id) < 0; });
+  if (!String(qty).trim()) return fresh.length ? lpQtyExpr(fresh) : qty;
+  var counted = {}; (a.lines || []).forEach(function (l) { (l.workers || []).forEach(function (n) { counted[String(n).trim()] = 1; }); });
+  var add = fresh.filter(function (w) { return !counted[w.name.trim()]; });
+  if (!add.length || vendor.trim() !== '柏捷' || unit.trim() !== '工') return qty;
+  return qty + '+' + lpQtyExpr(add);
+}
+function lpNorm(s) { return String(s || '').normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, ''); }
+function lpTokens(s) { return lpNorm(s).match(/[a-z0-9]+/g) || []; }
+function lpClash(a, b) { var ta = lpTokens(a), tb = lpTokens(b); if (!ta.length || !tb.length) return false; return !ta.every(function (t) { return tb.indexOf(t) >= 0; }) && !tb.every(function (t) { return ta.indexOf(t) >= 0; }); }
+function lpBig(s) { var o = {}; for (var i = 0; i < s.length - 1; i++) o[s.substr(i, 2)] = 1; return Object.keys(o); }
+function lpSame(a, b) {
+  var na = lpNorm(a), nb = lpNorm(b); if (!na || !nb) return false; if (na === nb) return true; if (lpClash(a, b)) return false;
+  if (na.indexOf(nb) >= 0 || nb.indexOf(na) >= 0) return true;
+  var ga = lpBig(na), gb = lpBig(nb); if (!ga.length || !gb.length) return false;
+  var c = ga.filter(function (g) { return gb.indexOf(g) >= 0; }).length; return 2 * c / (ga.length + gb.length) >= 0.8;
+}
+function lpGroup(es) {
+  var gs = [];
+  es.forEach(function (e) {
+    var t = e.text.trim() || '（沒寫內容）';
+    var hit = gs.filter(function (g) { return g.variants.some(function (v) { return lpSame(t, v); }) && !g.variants.some(function (v) { return lpClash(t, v); }); })[0];
+    if (!hit) { hit = { text: t, variants: [], names: [], ids: [] }; gs.push(hit); }
+    if (hit.variants.indexOf(t) < 0) hit.variants.push(t);
+    if (hit.names.indexOf(e.name) < 0) hit.names.push(e.name);
+    hit.ids.push(e.id);
+    if (lpNorm(t).length > lpNorm(hit.text).length) hit.text = t;
+  });
+  return gs;
+}
+/** 累計（Cumul.Book）：logs＝{日期: 日誌}，byDay＝{日期: [施工人員]} */
+function lpBook(logs, byDay, cats, confirmedOnly) {
+  var rows = {}, ot = {};
+  var dates = uniq(Object.keys(logs).concat(Object.keys(byDay))).filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); }).sort();
+  dates.forEach(function (d) {
+    var log = logs[d] || { items: [] }, ws = (byDay[d] || []).filter(function (w) { return !confirmedOnly || w.ok; });
+    uniq(cats.concat((log.items || []).map(function (x) { return canonCat(x.category); }))).forEach(function (c) {
+      var a = lpItem(log, c), cw = ws.filter(function (w) { return w.category === c; }), filled = lpFilled(a);
+      if (!filled && !cw.length) return;
+      var vendor = filled ? String(a.vendor || '柏捷') : '', unit = filled ? String(a.unit || '工') : '', qty = filled ? lpQty(a) : '';
+      if (cw.length) { if (!vendor.trim()) vendor = '柏捷'; if (!unit.trim()) unit = '工'; qty = lpWithWorkers(a, vendor, unit, qty, cw); }
+      var v = lpEval(qty);
+      if (v != null && vendor.trim()) (rows[c] = rows[c] || []).push({ d: d, vendor: vendor.trim(), unit: unit.trim(), q: v });
+      var o = cw.reduce(function (s, w) { return s + (lpHours(w.otH) || 0); }, 0) / LPD.HPD;
+      if (o > 0) (ot[c] = ot[c] || []).push({ d: d, v: o });
+    });
+  });
+  return {
+    text: function (c, upTo) {
+      var order = [], tot = {}, u = {};
+      (rows[c] || []).filter(function (r) { return r.d <= upTo; }).forEach(function (r) { if (!(r.vendor in tot)) { order.push(r.vendor); tot[r.vendor] = 0; u[r.vendor] = r.unit; } tot[r.vendor] += r.q; });
+      return order.map(function (v) { return lpFmt(tot[v]) + u[v] + '(' + v + ')'; }).join('\n');
+    },
+    otTotal: function (c, upTo) { return (ot[c] || []).filter(function (x) { return x.d <= upTo; }).reduce(function (s, x) { return s + x.v; }, 0); }
+  };
+}
+/** LogPdf.build：一天的日誌＋施工人員 → PDF 的內容。photo(ph)／wphoto(fid) 回傳 Promise(Blob) */
+function lpBuild(log, date, site, company, cats, dayWs, confirmedOnly, book, photo, wphoto) {
+  var ws = dayWs.filter(function (w) { return !confirmedOnly || w.ok; }), lineOf = {};
+  var rows = cats.map(function (cat) {
+    var a = lpItem(log, cat), cw = ws.filter(function (w) { return w.category === cat; });
+    var vendor = '', unit = '', qty = '', lines = [];
+    if (lpFilled(a)) { vendor = String(a.vendor || '柏捷'); unit = String(a.unit || '工'); qty = lpQty(a); lines = lpFull(a); }
+    if (cw.length) {
+      if (!vendor.trim()) vendor = '柏捷'; if (!unit.trim()) unit = '工';
+      qty = lpWithWorkers(a, vendor, unit, qty, cw);
+      lpGroup(cw).forEach(function (g) { var full = (lines.length + 1) + '.' + g.text + '(' + g.names.join('+') + ')'; lines.push(full); g.ids.forEach(function (id) { lineOf[id] = full; }); });
+    }
+    var otWs = cw.filter(function (w) { return lpHours(w.otH) != null; }), ot = '';
+    if (otWs.length) {
+      var sum = otWs.reduce(function (s, w) { return s + lpHours(w.otH); }, 0) / LPD.HPD;
+      ot = '加班：' + otWs.map(function (w) { return w.name + ' ' + lpNum(lpHours(w.otH)) + ' 小時'; }).join('、') + '＝' + lpFmt(sum) + ' 工' + (book ? '（加班累計 ' + lpFmt(book.otTotal(cat, date)) + ' 工）' : '');
+    }
+    var room = ot ? 2 : 3, fit = lines.length <= room ? lines : lines.slice(0, room - 1).concat([lines.slice(room - 1).join('；')]);
+    return { category: cat, vendor: vendor, unit: unit, qty: qty, lines: fit, cum: book ? book.text(cat, date) : '', ot: ot,
+      head: !vendor.trim() ? '' : !qty.trim() ? vendor : vendor + '-' + qty + unit };
+  });
+  var heads = {}; rows.forEach(function (r) { heads[r.category] = r.head; });
+  var seen = {}, mats = lpMats(log.materials).concat([].concat.apply([], ws.map(function (w) { return w.materials; }))).filter(function (m) { var k = m.vendor.trim() + '|' + m.qty.trim() + '|' + m.unit.trim(); if (seen[k]) return false; seen[k] = 1; return true; });
+  var lps = log.photos || [], receipts = lps.filter(function (p) { return p.category === LPD.RECEIPT; });
+  var notes = mats.map(function (m) { var v = m.vendor.trim(); return !v ? '' : uniq(receipts.filter(function (p) { return String(p.vendor || '').trim() === v; }).map(function (p) { return String(p.line || '').trim(); }).filter(Boolean)).join('、'); });
+  function rhead(p) { var v = String(p.vendor || '').trim(); if (!v) return ''; var m = mats.filter(function (x) { return x.vendor.trim() === v; })[0]; return !m ? v : !m.qty.trim() ? v : v + '-' + m.qty + m.unit; }
+  var roc = lpRoc(date), order = cats.concat([LPD.UNCLS]);
+  var oi = function (c) { var i = order.indexOf(c); return i < 0 ? 999 : i; };
+  var photos = lps.slice().sort(function (a, b) { return oi(a.category) - oi(b.category) || (String(a.taken || '') < String(b.taken || '') ? -1 : String(a.taken || '') > String(b.taken || '') ? 1 : 0); }).map(function (p) {
+    return { category: p.category, head: p.category === LPD.RECEIPT ? rhead(p) : heads[p.category] || '', date: roc, text: String(p.line || ''), receipt: p.category === LPD.RECEIPT && p.kind !== 'site', load: function () { return photo(p); }, key: 'd:' + p.file };
+  });
+  var pc = log.pcPhotoCats || {};
+  var byC = ws.slice().sort(function (a, b) { return a.created < b.created ? -1 : a.created > b.created ? 1 : 0; });
+  byC.forEach(function (e) {
+    e.photos.forEach(function (fid) {
+      var o = pc[fid], c = e.category;
+      if (o && String(o.cat || '').trim() && !(lpStamp14(e.modified) > lpStamp14(o.at))) c = canonCat(o.cat);
+      photos.push({ category: c, head: heads[c] || '', date: roc, text: lineOf[e.id] || (e.name + '：' + e.text), receipt: c === LPD.RECEIPT, load: function () { return wphoto(fid); }, key: 'w:' + fid });
+    });
+  });
+  byC.forEach(function (e) {
+    var fm = e.materials.filter(function (m) { return m.vendor.trim() || m.qty.trim(); }), head = fm.length === 1 ? fm[0].vendor + '-' + fm[0].qty + fm[0].unit : e.name;
+    e.receipts.forEach(function (fid) { photos.push({ category: LPD.RECEIPT, head: head, date: roc, text: e.receiptLocs[fid] || '', receipt: e.receiptKinds[fid] !== 'site', load: function () { return wphoto(fid); }, key: 'w:' + fid }); });
+  });
+  var wx = String(log.weather || '') || ((ws.filter(function (w) { return w.weather.trim(); })[0] || {}).weather || '');
+  return { site: site.name, date: date, weather: wx, company: company, start: site.start || '', end: site.end || '', rows: rows, materials: mats, discussion: String(log.discussion || '').trim(), photos: photos, notes: notes };
+}
+// ---- 畫（LogPdf.render）：先記下每一頁要畫的東西，再一頁一頁畫 ----
+function lpRender(L, pages) {
+  var cur = null, P = {
+    begin: function () { cur = []; pages.push(cur); },
+    line: function (x1, y1, x2, y2, w, c) { cur.push({ t: 'l', x1: x1, y1: y1, x2: x2, y2: y2, w: w, c: c }); },
+    fill: function (x, y, w, h, c) { cur.push({ t: 'f', x: x, y: y, w: w, h: h, c: c }); },
+    text: function (s, x, y, w, h, size, bold, kai, align, valign, color) { if (String(s || '').trim()) cur.push({ t: 't', s: String(s), x: x, y: y, w: w, h: h, size: size, bold: bold, kai: kai, align: align, valign: valign, c: color || LPD.BLACK }); },
+    image: function (ph, x, y, w, h, sharp) { cur.push({ t: 'i', ph: ph, x: x, y: y, w: w, h: h, sharp: !!sharp }); }
+  };
+  var X = LPD.colX, Z = LPD.Z, onPages = L.photos.filter(function (p) { return !p.receipt; }), rcpt = L.photos.filter(function (p) { return p.receipt; });
+  var total = 1 + Math.ceil(onPages.length / 6) + Math.ceil(rcpt.length / 2);
+  function footer(n) { P.text('第 ' + n + ' 頁，共 ' + total + ' 頁', 0, LPD.PH - 24, LPD.PW, 10, 6.5, false, false, 1, 1); }
+  function dbl(x1, y1, x2, y2, hor, inw) { var g = 0.9 * inw; P.line(x1, y1, x2, y2, 0.35, LPD.PINK); if (hor) P.line(x1, y1 + g, x2, y2 + g, 0.35, LPD.PINK); else P.line(x1 + g, y1, x2 + g, y2, 0.35, LPD.PINK); }
+  // 第 1 頁
+  P.begin();
+  var g = lpGrid(LPD.PAGE1);
+  function c(r1, c1, r2, c2, text, o) {
+    o = o || {}; var size = o.size || 12, align = o.align == null ? 1 : o.align, valign = o.valign == null ? 1 : o.valign;
+    var x1 = X[c1], x2 = X[c2 + 1], y1 = g[r1], y2 = g[r2 + 1];
+    if (o.fill) P.fill(x1, y1, x2 - x1, y2 - y1, o.fill);
+    if (String(text || '').trim()) { var pad = align === 0 ? 1.4 : 0.8; P.text(text, x1 + pad, y1 + 0.6, x2 - x1 - 2 * pad, y2 - y1 - 1.2, size * Z, !!o.bold, !!o.kai, align, valign, o.color); }
+    if (o.top !== false) P.line(x1, y1, x2, y1, LPD.THIN, LPD.BLACK);
+    if (o.bottom !== false) P.line(x1, y2, x2, y2, LPD.THIN, LPD.BLACK);
+    P.line(x1, y1, x1, y2, LPD.THIN, LPD.BLACK); P.line(x2, y1, x2, y2, LPD.THIN, LPD.BLACK);
+  }
+  c(0, 0, 0, 18, L.site + '工程施工日誌', { size: 48, kai: true });
+  var done = L.start ? lpDays(L.start, L.date) + 1 : '', left = L.end ? lpDays(L.date, L.end) : '';
+  [['承攬廠商', L.company, '天氣', L.weather], ['填報日期', lpYmd(L.date), '填報星期', lpWeek(L.date)], ['開工日期', L.start ? lpYmd(L.start) : '', '竣工日期', L.end ? lpYmd(L.end) : ''],
+    ['已進行日曆天', String(done), '剩餘日曆天', String(left)]].forEach(function (hd, i) { var r = i + 1; c(r, 0, r, 2, hd[0], { bold: true }); c(r, 3, r, 5, hd[1]); c(r, 6, r, 8, hd[2], { bold: true }); c(r, 9, r, 11, hd[3]); });
+  c(5, 0, 5, 2, '實填日報', { bold: true }); c(5, 3, 5, 11, ''); c(1, 12, 5, 18, '');
+  c(6, 0, 6, 2, '本日施工概況', { bold: true, bottom: false });
+  c(6, 3, 6, 3, '大項', { bold: true }); c(6, 4, 6, 5, '廠商', { bold: true }); c(6, 6, 6, 6, '單位', { bold: true });
+  c(6, 7, 6, 7, '數量', { bold: true }); c(6, 8, 6, 8, '累計', { bold: true }); c(6, 9, 6, 18, '今日工作內容/位置', { bold: true });
+  c(7, 0, 51, 2, '', { top: false });
+  L.rows.slice(0, 11).forEach(function (row, k) {
+    var r = 7 + 3 * k;
+    c(r, 3, r + 2, 3, row.category); c(r, 4, r + 2, 5, row.vendor); c(r, 6, r + 2, 6, (row.vendor.trim() || row.qty.trim()) ? row.unit : '');
+    c(r, 7, r + 2, 7, row.qty); c(r, 8, r + 2, 8, row.cum, { size: 10, fill: LPD.PEACH });
+    for (var i = 0; i < 3; i++) { var red = row.ot && i === row.lines.length; c(r + i, 9, r + i, 18, red ? row.ot : (row.lines[i] || ''), { align: 0, color: red ? LPD.RED : null }); }
+  });
+  c(40, 3, 48, 3, '材料/機具');
+  for (var i = 0; i < 9; i++) { var m = L.materials[i], r = 40 + i; c(r, 4, r, 5, m ? m.vendor : ''); c(r, 6, r, 6, m ? m.unit : ''); c(r, 7, r, 8, m ? m.qty : ''); c(r, 9, r, 18, L.notes[i] || '', { align: 0 }); }
+  c(49, 3, 51, 3, '與業主、建築師討論'); c(49, 4, 51, 18, L.discussion, { size: 18, align: 0, valign: 0 });
+  var x1 = X[0], x2 = X[19], y1 = g[0], y2 = g[52];
+  P.line(x1, y1, x2, y1, LPD.THICK, LPD.BLACK); P.line(x1, y2, x2, y2, LPD.THICK, LPD.BLACK); P.line(x1, y1, x1, y2, LPD.THICK, LPD.BLACK); P.line(x2, y1, x2, y2, LPD.THICK, LPD.BLACK);
+  footer(1);
+  // 照片頁：一頁 6 張
+  for (var pi = 0; pi * 6 < onPages.length; pi++) {
+    P.begin();
+    var first = pi === 0, hs = (first ? [70.12, 45] : []).concat(LPD.BLOCK, LPD.BLOCK, LPD.BLOCK), gg = lpGrid(hs), base = first ? 2 : 0;
+    if (first) P.text(L.site + '工程施工照片', X[0], gg[0], X[19] - X[0], gg[1] - gg[0], 48 * Z, true, true, 1, 1);
+    onPages.slice(pi * 6, pi * 6 + 6).forEach(function (ph, i) {
+      var b = base + Math.floor(i / 2) * 28, c1 = i % 2 === 0 ? 0 : 10, c2 = i % 2 === 0 ? 8 : 18;
+      var fx1 = X[c1], fx2 = X[c2 + 1], xm = X[c1 + 2], yTop = gg[b], yCap = gg[b + 23], yMid = gg[b + 25], yEnd = gg[b + 27], ins = 1.4;
+      P.image(ph, fx1 + ins, yTop + ins, fx2 - fx1 - 2 * ins, yCap - yTop - 2 * ins, false);
+      P.text(ph.category, fx1 + 0.6, yCap, xm - fx1 - 1.2, yMid - yCap, 20 * Z, false, true, 1, 1);
+      P.text(ph.head, xm + 0.6, yCap, fx2 - xm - 1.2, yMid - yCap, 14 * Z, true, true, 1, 1);
+      P.text(ph.date, fx1 + 0.6, yMid, xm - fx1 - 1.2, yEnd - yMid, 14 * Z, true, true, 1, 1);
+      P.text(ph.text, xm + 0.6, yMid, fx2 - xm - 1.2, yEnd - yMid, 14 * Z, true, true, 1, 1);
+      dbl(fx1, yTop, fx2, yTop, true, 1); dbl(fx1, yEnd, fx2, yEnd, true, -1); dbl(fx1, yTop, fx1, yEnd, false, 1); dbl(fx2, yTop, fx2, yEnd, false, -1);
+      P.line(fx1, yCap, fx2, yCap, 0.8, LPD.RED); dbl(fx1, yMid, fx2, yMid, true, 1); P.line(xm, yCap, xm, yEnd, 0.45, LPD.PINK);
+    });
+    footer(pi + 2);
+  }
+  // 單據附頁：一頁 2 張（黑白）
+  var before = 1 + Math.ceil(onPages.length / 6);
+  for (var ri = 0; ri * 2 < rcpt.length; ri++) {
+    P.begin();
+    var rx1 = X[0], rx2 = X[19];
+    P.text('材料單據附頁　' + lpRoc(L.date), rx1, LPD.TOP - 6, rx2 - rx1, 30, 18, true, true, 1, 1);
+    var top = LPD.TOP + 30, bottom = LPD.PH - 34, gap = 12, slot = (bottom - top - gap) / 2, capH = 22;
+    rcpt.slice(ri * 2, ri * 2 + 2).forEach(function (ph, i) {
+      var yTop = top + i * (slot + gap), yCap = yTop + slot - capH, yEnd = yTop + slot, ins = 3;
+      P.image(ph, rx1 + ins, yTop + ins, rx2 - rx1 - 2 * ins, yCap - yTop - 2 * ins, true);
+      P.text([ph.head, ph.text].filter(function (s) { return String(s || '').trim(); }).join('　') || ph.category, rx1 + 2, yCap, rx2 - rx1 - 4, capH, 11, true, true, 1, 1);
+      dbl(rx1, yTop, rx2, yTop, true, 1); dbl(rx1, yEnd, rx2, yEnd, true, -1); dbl(rx1, yTop, rx1, yEnd, false, 1); dbl(rx2, yTop, rx2, yEnd, false, -1);
+      P.line(rx1, yCap, rx2, yCap, 0.8, LPD.RED);
+    });
+    footer(before + ri + 1);
+  }
+  return total;
+}
+/** 字放進格子（跟 Android StaticLayout 一樣：自動換行、放不下就縮小到 55%） */
+function lpText(ctx, k, o) {
+  if (o.w <= 1 || o.h <= 1) return;
+  var fam = o.kai ? LPD.SERIF : LPD.SANS, sz = o.size, lines;
+  function wrap(size) {
+    ctx.font = (o.bold ? 'bold ' : '') + (size * k) + 'px ' + fam;
+    var out = [], maxW = o.w * k;
+    String(o.s).split('\n').forEach(function (para) {
+      var line = '';
+      var toks = para.match(/[A-Za-z0-9.\-+*/()%]+|\s+|[\s\S]/g) || [''];
+      toks.forEach(function (t) {
+        if (ctx.measureText(line + t).width <= maxW || !line) {
+          if (!line && ctx.measureText(t).width > maxW && t.length > 1) {   // 一個字太長：一個一個字放
+            for (var i = 0; i < t.length; i++) { var ch = t.charAt(i); if (line && ctx.measureText(line + ch).width > maxW) { out.push(line); line = ''; } line += ch; }
+          } else line += t;
+        } else { out.push(line.replace(/\s+$/, '')); line = /^\s+$/.test(t) ? '' : t; }
+      });
+      out.push(line);
+    });
+    return out;
+  }
+  while (true) { lines = wrap(sz); if (lines.length * sz * 1.17 <= o.h || sz <= o.size * 0.55) break; sz *= 0.9; }
+  var lh = sz * 1.17, th = lines.length * lh, dy = o.valign === 1 ? Math.max(0, (o.h - th) / 2) : 0;
+  ctx.save(); ctx.beginPath(); ctx.rect(o.x * k, o.y * k, o.w * k, o.h * k); ctx.clip();
+  ctx.fillStyle = o.c; ctx.textBaseline = 'alphabetic';
+  lines.forEach(function (ln, i) {
+    var w = ctx.measureText(ln).width, x = o.align === 1 ? o.x * k + (o.w * k - w) / 2 : o.x * k;
+    ctx.fillText(ln, x, (o.y + dy + i * lh + sz * 0.928) * k);
+  });
+  ctx.restore();
+}
+/** 照片：縮到長邊 1200（單據 1400、灰階加對比）→ JPEG。一樣的照片只做一次 */
+function lpEncode(cache, ph, sharp) {
+  var key = ph.key + (sharp ? '|s' : '');
+  if (cache[key]) return cache[key];
+  return cache[key] = Promise.resolve().then(ph.load).then(function (blob) {
+    if (!blob) return null;
+    return new Promise(function (ok) {
+      var url = URL.createObjectURL(blob), img = new Image();
+      img.onload = function () {
+        var max = sharp ? LPD.RECEIPT_PX : LPD.PHOTO_PX, w = img.naturalWidth, h = img.naturalHeight, s = Math.min(1, max / Math.max(w, h));
+        var cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(w * s)); cv.height = Math.max(1, Math.round(h * s));
+        var g = cv.getContext('2d'); g.drawImage(img, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url);
+        if (sharp) {   // 灰階＋拉對比（跟摺疊機一樣 1.35）
+          var d = g.getImageData(0, 0, cv.width, cv.height), a = d.data, kk = LPD.CONTRAST, t = 127.5 * (1 - kk);
+          for (var i = 0; i < a.length; i += 4) { var v = (0.299 * a[i] + 0.587 * a[i + 1] + 0.114 * a[i + 2]) * kk + t; v = v < 0 ? 0 : v > 255 ? 255 : v; a[i] = a[i + 1] = a[i + 2] = v; }
+          g.putImageData(d, 0, 0);
+        }
+        ok({ url: cv.toDataURL('image/jpeg', sharp ? LPD.RECEIPT_Q : LPD.PHOTO_Q), w: cv.width, h: cv.height, alias: key });
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); ok(null); };
+      img.src = url;
+    });
+  }).catch(function () { return null; });
+}
+/** 一頁一頁畫進 jsPDF：格子和字當底圖，照片另外放 */
+function lpPaint(pdf, pages, cache, say) {
+  var k = LPD.DPI / 72, i = 0;
+  function next() {
+    var ops = pages[i++]; if (!ops) return Promise.resolve();
+    if (say) say(i, pages.length);
+    if (pdf.getNumberOfPages() > 1 || pdf.__used) pdf.addPage([LPD.W, LPD.H], 'p'); pdf.__used = true;
+    var cv = document.createElement('canvas'); cv.width = Math.round(LPD.W * k); cv.height = Math.round(LPD.H * k);
+    var g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.lineCap = 'square';
+    ops.forEach(function (o) {
+      if (o.t === 'f') { g.fillStyle = o.c; g.fillRect(o.x * k, o.y * k, o.w * k, o.h * k); }
+      else if (o.t === 'l') { g.strokeStyle = o.c; g.lineWidth = Math.max(0.6, o.w * k); g.beginPath(); g.moveTo(o.x1 * k, o.y1 * k); g.lineTo(o.x2 * k, o.y2 * k); g.stroke(); }
+      else if (o.t === 't') lpText(g, k, o);
+    });
+    pdf.addImage(cv.toDataURL('image/jpeg', 0.85), 'JPEG', 0, 0, LPD.W, LPD.H, undefined, 'FAST');
+    var imgs = ops.filter(function (o) { return o.t === 'i'; });
+    return imgs.reduce(function (p, o) {
+      return p.then(function () { return lpEncode(cache, o.ph, o.sharp); }).then(function (e) {
+        if (!e) return;
+        var s = Math.min(o.w / e.w, o.h / e.h), dw = e.w * s, dh = e.h * s;
+        pdf.addImage(e.url, 'JPEG', o.x + (o.w - dw) / 2, o.y + (o.h - dh) / 2, dw, dh, e.alias, 'NONE');
+      });
+    }, Promise.resolve()).then(next);
+  }
+  return next();
+}
+var JSPDF = null;
+function loadJsPdf() {
+  if (JSPDF) return JSPDF;
+  return JSPDF = new Promise(function (ok, bad) {
+    var sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    sc.onload = function () { window.jspdf && window.jspdf.jsPDF ? ok(window.jspdf.jsPDF) : bad(new Error('PDF 工具載入失敗')); };
+    sc.onerror = function () { JSPDF = null; bad(new Error('PDF 工具載入失敗（網路）')); };
+    document.head.appendChild(sc);
+  });
+}
+/** 這個工地全部的日誌（雲端「日誌/工地」每一天）：{日期: 日誌}；累計要從開工算 */
+function lpAllLogs(site, say) {
+  return dPath(['工地App', '日誌', site], false).then(function (dir) {
+    if (!dir) return {};
+    return dChildren(dir).then(function (fs) {
+      fs = fs.filter(function (f) { return /^\d{4}-\d{2}-\d{2}\.json$/.test(f.name); });
+      var out = {}, i = 0, n = 0;
+      function worker() {
+        var f = fs[i++]; if (!f) return Promise.resolve();
+        return dText(f.id).then(function (t) { try { out[f.name.slice(0, 10)] = JSON.parse(t); } catch (e) { } }, function () { }).then(function () { n++; if (say) say(n, fs.length); return worker(); });
+      }
+      return Promise.all([worker(), worker(), worker(), worker()]).then(function () { return out; });
+    });
+  });
+}
+/** 開發者拍的照片（雲端「照片/工地/日期/檔名」）：一天的資料夾只列一次 */
+function lpDevPhoto(site, date, dirs) {
+  var k = site + '|' + date;
+  if (!dirs[k]) dirs[k] = dPath(['工地App', '照片', site, date], false).then(function (d) { return d ? dChildren(d) : []; }).catch(function () { return []; });
+  return function (p) { return dirs[k].then(function (fs) { var f = fs.filter(function (x) { return x.name === p.file; })[0]; return f ? dBlob(f.id) : (p.driveId ? dBlob(p.driveId) : null); }).catch(function () { return null; }); };
+}
+function lpWorkerPhoto(fid) { return api('photoget', { fileId: fid }).then(function (r) { return b64Blob(r.data, r.mime || 'image/jpeg'); }).catch(function () { return null; }); }
+/** 匯出（dates：一天或很多天；project＝整本）。回傳 { bytes, name, days } */
+function lpExport(site, dates, project, say) {
+  var st = feedSites().filter(function (x) { return x.name === site; })[0] || { name: site };
+  var lists, logs, wsAll, conf = !!(S.s && Number(S.s.version) >= 25), cache = {}, dirs = {};
+  say('讀日誌…');
+  return loadJsPdf().then(function () {
+    return Promise.all([dlLists(), dCustomRead().catch(function () { return null; }), lpAllLogs(site, function (n, t) { say('讀日誌 ' + n + '/' + t + '…'); }),
+      api('export', { since: '2000-01-01' }).then(function (r) { return r.entries || []; })]);
+  }).then(function (r) {
+    lists = r[0]; logs = r[2]; wsAll = r[3].map(lpW).filter(function (w) { return w.site === site && w.name.trim() !== '測試'; });
+    return settingsCompany();
+  }).then(function (company) {
+    var byDay = {}; wsAll.forEach(function (w) { (byDay[w.date] = byDay[w.date] || []).push(w); });
+    var cats = lists.categories, book = lpBook(logs, byDay, cats, conf);
+    if (project) {
+      var has = function (d) { var l = logs[d]; return l && ((l.items || []).some(lpFilled) || lpMats(l.materials).length || String(l.discussion || '').trim() || (l.photos || []).length || (l.staffNotes || []).length); };
+      dates = uniq(Object.keys(logs).filter(has).concat(Object.keys(byDay))).filter(function (d) { return (!dates[0] || d >= dates[0]) && (!dates[1] || d <= dates[1]); }).sort();
+      if (!dates.length) throw new Error('這個範圍沒有日誌');
+    }
+    var jsPDF = window.jspdf.jsPDF, pdf = new jsPDF({ unit: 'pt', format: [LPD.W, LPD.H], compress: true }), di = 0;
+    function day() {
+      var d = dates[di++]; if (!d) return Promise.resolve();
+      var log = logs[d] || dlEmpty(site, d), L = lpBuild(log, d, st, company, cats, byDay[d] || [], conf, book, lpDevPhoto(site, d, dirs), lpWorkerPhoto);
+      var pages = []; lpRender(L, pages);
+      return lpPaint(pdf, pages, cache, function (i, n) { say((dates.length > 1 ? '第 ' + di + '／' + dates.length + ' 天（' + lpRoc(d) + '）' : '畫 PDF') + '：第 ' + i + '/' + n + ' 頁（照片 ' + L.photos.length + ' 張）…'); })
+        .then(function () { if (dates.length > 1) cache = {}; return day(); });   // 整本：一天畫完就放掉那天的照片（iPad 記憶體）
+    }
+    return day().then(function () {
+      var bytes = new Uint8Array(pdf.output('arraybuffer'));
+      return { bytes: bytes, name: project ? site + '-整個專案.pdf' : lpRoc(dates[0]) + '.pdf', days: dates.length };
+    });
+  });
+}
+/** 電腦的工地設定：承攬廠商（摺疊機 Settings.company，預設柏捷營造） */
+function settingsCompany() {
+  return dPath(['工地App', '設定'], false).then(function (dir) { return dir ? dFind(dir, '工地設定.json', false) : null; })
+    .then(function (f) { return f ? dText(f.id).then(function (t) { try { return JSON.parse(t).company || '柏捷營造'; } catch (e) { return '柏捷營造'; } }) : '柏捷營造'; })
+    .catch(function () { return '柏捷營造'; });
+}
+/** 存到雲端「工地App/日誌PDF/工地/名字」（同名就覆蓋，跟摺疊機一樣） */
+function lpUpload(site, name, bytes) {
+  var blob = new Blob([bytes], { type: 'application/pdf' });
+  return dPath(['工地App', '日誌PDF', site], true).then(function (dir) {
+    return dFind(dir, name, false).then(function (f) { return f ? dUpdate(f.id, 'application/pdf', blob) : dCreate(dir, name, 'application/pdf', blob); });
+  });
+}
+ACT.lpday = function () {
+  var dl = S.dl; if (!dl || dl.busy || dl.pdfBusy) return;
+  if (dl.dirty && !confirm('這天還有沒存到雲端的改動，PDF 會用雲端那一份。\n要先按「存到雲端」嗎？按「取消」先去存；按「確定」直接匯出。')) return;
+  lpRun(dl, [dl.date], false);
+};
+ACT.lpproj = function () { var dl = S.dl; if (!dl || dl.busy || dl.pdfBusy) return; S.modal = { type: 'lpproj', from: '', to: '', all: true }; renderModal(); };
+function lpProjModal(m) {
+  return '<h3>📚 整個專案 PDF</h3><div class="chips"><button class="chip' + (m.all ? ' on' : '') + '" data-act="lpall" data-v="1">全部日期</button><button class="chip' + (!m.all ? ' on' : '') + '" data-act="lpall" data-v="0">選從哪天到哪天</button></div>' +
+    (!m.all ? '<div class="row2" style="margin-top:8px"><div><div class="label">從</div><input type="date" data-f="m.from" value="' + esc(m.from) + '"></div><div><div class="label">到</div><input type="date" data-f="m.to" value="' + esc(m.to) + '"></div></div>' : '') +
+    '<div class="note" style="margin-top:8px">跟摺疊機的一樣：每天一段，存到雲端「日誌PDF」的「' + esc(S.dl ? S.dl.site : '') + '-整個專案.pdf」（蓋掉舊的）。天數多會做比較久，做的時候這一頁不要關。</div>' +
+    '<button class="big" style="margin-top:12px" data-act="lpprojok">開始做</button><button class="ghost" data-act="mclose">取消</button>';
+}
+ACT.lpall = function (v) { var m = S.modal; if (!m || m.type !== 'lpproj') return; m.all = v === '1'; renderModal(); };
+ACT.lpprojok = function () { var m = S.modal, dl = S.dl; if (!m || m.type !== 'lpproj' || !dl) return; var r = m.all ? ['', ''] : [m.from || '', m.to || '']; closeModal(); lpRun(dl, r, true); };
+function lpRun(dl, dates, project) {
+  dLogin(function () {
+    dl.pdfBusy = '準備中…'; dl.pdfMsg = ''; dl.pdfErr = ''; render();
+    var say = function (t) { if (S.dl !== dl) return; dl.pdfBusy = t; var b = $('lpstate'); if (b) b.textContent = t; else renderSoft(); };
+    lpExport(dl.site, dates, project, say).then(function (r) {
+      say('存到雲端（' + (r.bytes.length / 1048576).toFixed(1) + ' MB）…');
+      return lpUpload(dl.site, r.name, r.bytes).then(function () { return r; });
+    }).then(function (r) {
+      if (S.dl !== dl) return;
+      dl.pdfBusy = ''; dl.pdfMsg = '✅ 已存到雲端：工地App/日誌PDF/' + dl.site + '/' + r.name + (project ? '（' + r.days + ' 天、' : '（') + (r.bytes.length / 1048576).toFixed(1) + ' MB）';
+      dl.pdfLast = r; render();
+    }).catch(function (e) { if (S.dl !== dl) return; dl.pdfBusy = ''; dl.pdfErr = '沒有做完：' + dlErrText(e); render(); });
+  }, function (msg) { dl.pdfErr = msg || '沒連上 Google 雲端'; render(); });
+}
+ACT.lpopen = function () {
+  var dl = S.dl, r = dl && dl.pdfLast; if (!r) return;
+  var doc = { id: 'lp|' + r.name, name: r.name, site: dl.site, modified: String(Date.now()) };
+  openPdfDoc(doc, { title: r.name.replace(/\.pdf$/, ''), save: r.name, from: 'dlog', load: function () { return Promise.resolve(r.bytes); } });
+};
+function lpCard(dl) {
+  var h = '<div class="card"><div class="ttl" style="font-size:16px">📄 匯出 PDF（跟摺疊機一樣的格式）</div>';
+  if (dl.pdfBusy) h += '<div class="box" id="lpstate" style="margin-top:6px">' + esc(dl.pdfBusy) + '</div>';
+  else h += '<div class="row2" style="margin-top:6px"><button class="ghost" style="margin:0" data-act="lpday">📄 這天的 PDF</button><button class="ghost" style="margin:0" data-act="lpproj">📚 整個專案 PDF</button></div>';
+  if (dl.pdfMsg) h += '<div class="note" style="margin-top:6px;color:var(--green)">' + esc(dl.pdfMsg) + '</div>' + (dl.pdfLast ? '<button class="link" data-act="lpopen">打開看、存檔 ›</button>' : '');
+  if (dl.pdfErr) h += '<div class="err" style="margin-top:6px">' + esc(dl.pdfErr) + '</div>';
+  return h + '</div>';
 }
 
 // 長按名字（約 0.6 秒）＝問要不要從清單拿掉；手指移動（捲畫面）就取消。放開時那一下點擊吃掉，不會順便選到、或點到跳出來的視窗
