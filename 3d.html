@@ -87,6 +87,13 @@ button{font:inherit}
 /* 量尺寸（使用者 2026-11-13「我想先讓3D可以在app上量尺寸」）：藍色，跟紅色的圈分開 */
 #measBtn{position:fixed;z-index:6;border:0;border-radius:18px;padding:6px 12px;font-weight:700;background:#1971C2;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;display:none}
 #measBtn.on{background:#fff;color:#1971C2;border:2px solid #1971C2}
+#hideBtn{position:fixed;z-index:6;border:0;border-radius:18px;padding:6px 12px;font-weight:700;background:#495057;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;display:none}
+#hideBtn.on{background:#fff;color:#495057;border:2px solid #495057}
+#hideBar{position:fixed;z-index:8;transform:translateX(-50%);background:#fff;border:2px solid #495057;border-radius:14px;padding:6px 8px;box-shadow:0 4px 12px rgba(0,0,0,.18);display:none;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;max-width:calc(100vw - 16px)}
+#hideBar .t{flex:1 1 100%;text-align:center;font-size:14px;line-height:1.35}
+#hideBar button{border:1px solid #CBD5DC;background:#fff;border-radius:14px;padding:6px 12px;font:inherit;font-size:14.5px;font-weight:700;cursor:pointer;color:#1F2933}
+#hideBar button.on{background:#495057;border-color:#495057;color:#fff}
+#hideBar button:disabled{opacity:.35;cursor:default}
 #measBar{position:fixed;z-index:8;transform:translateX(-50%);background:#fff;border:2px solid #1971C2;border-radius:14px;padding:6px 8px;box-shadow:0 4px 12px rgba(0,0,0,.18);display:none;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;max-width:calc(100vw - 16px);box-sizing:border-box}
 #measBar .t{flex:1 1 100%;text-align:center;font-size:14px;line-height:1.35}
 #measBar .t b{color:#1971C2;font-size:18px}
@@ -188,6 +195,9 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
 <!-- 量尺寸（使用者 2026-11-13）：點兩點量長度 -->
 <div id="meas"></div>
 <button id="measBtn">📏 量尺寸</button>
+<!-- 隱藏（使用者 2026-11-15「新增可以隱藏元件的功能，有時候會擋住」「名稱就是隱藏」、放在量尺寸旁邊）：按了以後點東西就藏起來 -->
+<button id="hideBtn">🙈 隱藏</button>
+<div id="hideBar"><div class="t" id="hbText"></div><button id="hbHide">🙈 隱藏</button><button id="hbShow">👁 取消隱藏：個別</button><button id="hbAll">全部取消隱藏</button><button id="hbClose">✖ 關閉</button></div>
 <div id="measBar"><div class="t" id="meText"></div><button id="meUndo">↩ 上一步</button><button id="meClear">🗑 清除</button><button id="meEnd">✖ 結束</button></div>
 <!-- 寫要改進什麼：放在畫面最上面（下面那塊會被手機鍵盤蓋住，使用者 2026-11-10「圈起來的功能沒有辦法打字」） -->
 <div id="markForm">
@@ -369,7 +379,7 @@ function floorRank(t) {
   return t === '未加標籤' ? 9999 : 1000;
 }
 function skTags() { const s = new Set(skItems.map(it => it.tag || '未加標籤')); return [...s].sort((a, b) => (floorRank(a) - floorRank(b)) || a.localeCompare(b, 'zh-Hant', { numeric: true })); }
-let SK_SEL_MAT = null;
+let SK_SEL_MAT = null, SK_GHOST_MAT = null;   // 選到的黃色；個別取消隱藏時藏起來的那些淡淡的
 /** 換畫面：'sk'＝SketchUp 模型、'st'＝3D 結構（灌漿區、切樓層） */
 function setView(v) {
   if (v === 'sk' && !SK) v = 'st';
@@ -378,6 +388,9 @@ function setView(v) {
   root.visible = rebarGroup.visible = v === 'st';
   if (SK) SK.visible = v === 'sk';
   st.sel = null; st.skSel = null; st.pour = null; st.rebar = null; st.focus = null; st.bars = false;
+  // 「🙈 隱藏」只有 SketchUp 模型有（3D 結構用上面的種類開關）
+  if (v !== 'sk') { st.hideBar = false; st.hideMode = ''; }
+  document.getElementById('hideBtn').style.display = v === 'sk' ? 'block' : 'none'; hideUi();
   const vb = document.getElementById('viewBtn');
   vb.style.display = SK && hasStruct() && ST_ON ? '' : 'none';
   vb.textContent = v === 'sk' ? '🏗 3D 結構' : '🏠 SketchUp 模型';
@@ -385,13 +398,15 @@ function setView(v) {
   document.getElementById('made').textContent = v === 'sk' ? (SKMETA && SKMETA.modified ? '（' + String(SKMETA.modified).slice(0, 10) + ' 上傳）' : '') : (M.made ? '（' + String(M.made).slice(0, 10) + ' 匯出）' : '');
 }
 function applySk() {
+  if (!SK_GHOST_MAT) SK_GHOST_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color('#8A96A3'), transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide, clippingPlanes: SK_PLANES });
   if (!SK_SEL_MAT) SK_SEL_MAT = new THREE.MeshLambertMaterial({ color: new THREE.Color('#F2C230'), emissive: new THREE.Color('#4a3a00'), side: THREE.DoubleSide, clippingPlanes: SK_PLANES });
   const F = skSlice();
   // 切面：整棟、其他＝不切；名字是樓層的另外看（不切）
   const cut = F && !F.tagOnly && !F.other;
   if (SK_PLANES.length) { SK_PLANES[0].constant = cut ? -F.lo : 1e9; SK_PLANES[1].constant = cut ? F.hi : 1e9; }
   skItems.forEach(it => {
-    let vis = !st.skHide.has(it.tag || '未加標籤');
+    const off = st.skOff.has(it), ghost = off && st.hideMode === 'show';   // 自己藏起來的；個別取消隱藏時淡淡的顯示
+    let vis = !st.skHide.has(it.tag || '未加標籤') && (!off || ghost);   // 標籤關掉的、自己藏起來的
     if (F && SKF.length) {
       if (F.other) vis = vis && !!it.outside;                // 其他：只看建物外面的
       else if (it.isFloor) vis = vis && it.tag === F.n;
@@ -400,7 +415,7 @@ function applySk() {
     }
     it.mesh.visible = vis;
     it.mesh.userData.__floor = !!it.isFloor;
-    it.mesh.material = st.skSel === it ? SK_SEL_MAT : it.mat;
+    it.mesh.material = ghost ? SK_GHOST_MAT : st.skSel === it ? SK_SEL_MAT : it.mat;
   });
   renderChips(); renderSide(); needs = true;
 }
@@ -544,7 +559,62 @@ function stirParse(s) { const m = /(?:(\d+)\s*-\s*)?#\s*(\d+)\s*@\s*([\d.]+)/.ex
 function roc(ymd) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd || ''); if (!m) return ''; const d = new Date(+m[1], +m[2] - 1, +m[3]); return (m[1] - 1911) + '.' + m[2] + '.' + m[3] + '（' + '日一二三四五六'[d.getDay()] + '）'; }
 
 const st = { floor: '全部', kinds: new Set(KIND_ORDER), sel: null, pour: null, rebar: null, bars: false, sideMin: false, rels: new Set(),
-  view: 'st', skHide: new Set(), skSel: null, skFloor: null };   // view：'sk' SketchUp 模型、'st' 3D 結構；skFloor：SketchUp 看哪一層（null＝整棟）
+  view: 'st', skHide: new Set(), skSel: null, skFloor: null,   // view：'sk' SketchUp 模型、'st' 3D 結構；skFloor：SketchUp 看哪一層（null＝整棟）
+  // 自己藏起來的元件（使用者 2026-11-15「新增可以隱藏元件的功能，有時候會擋住」）：右上「🙈 隱藏」打開那條（hideBar），
+  // 選「隱藏」＝點東西藏起來（hideMode 'hide'）；「取消隱藏」有個別（'show'：藏起來的變淡，點一下拿回來）跟全部（使用者「隱藏點開會可以選隱藏或者取消隱藏」「取消隱藏有全部或個別」）
+  skOff: new Set(), hideMode: '', hideBar: false };
+const hideStack = [];   // 一次藏了哪些（個別拿回來時一次拿回那一組）
+// 施工人員（使用者 2026-11-15「施工人員只有看3d不能看改哪」）：只能看 3D、量尺寸；沒有「圈起來」、看不到圈的地方（收件服務也不給）
+const canMark = () => !me || me.role !== '施工人員';
+/** 一個元件＝同一個群組／元件裡的面（SketchUp 轉出來一個群組底下好幾個網格，一個材質一個）；最外層散的面就只有它自己 */
+function skGroupOf(it) {
+  if (!it) return [];
+  const p = it.mesh.parent;
+  const g = p && p !== SK ? skItems.filter(x => x.mesh.parent === p) : [it];
+  return g.length > Math.max(30, skItems.length * 0.2) ? [it] : g;   // 整個模型都掛在同一個底下的（轉檔攤平的）：只藏點到的那個
+}
+/** 一樣的元件（同一個 SketchUp 元件複製出來的，例如花架的每一支木頭）：轉出來共用同一個形狀 */
+function skSameOf(it) { return it ? skItems.filter(x => x.mesh.geometry === it.mesh.geometry) : []; }
+function hideItems(list) {
+  const add = list.filter(x => !st.skOff.has(x));
+  if (!add.length) return;
+  add.forEach(x => st.skOff.add(x)); hideStack.push(add);
+  st.skSel = null; hideUi(); apply();
+}
+/** 個別取消隱藏：點到的那個是哪一次藏的，那一次藏的一起拿回來 */
+function unhideOf(it) {
+  const i = hideStack.findIndex(g => g.includes(it));
+  const g = i >= 0 ? hideStack.splice(i, 1)[0] : [it];
+  g.forEach(x => st.skOff.delete(x));
+  if (!st.skOff.size && st.hideMode === 'show') st.hideMode = '';
+  hideUi(); apply();
+}
+function hideClear() { st.skOff.clear(); hideStack.length = 0; if (st.hideMode === 'show') st.hideMode = ''; hideUi(); apply(); }
+function setHideMode(mode) {
+  st.hideMode = mode;
+  if (mode && meas.on) measEnd();
+  if (mode && (st.draft || st.marking)) cancelDraft();   // 圈到一半的先取消
+  st.skSel = null; hideUi(); apply();
+}
+function openHideBar(open) {
+  st.hideBar = open; st.hideMode = '';
+  if (open && meas.on) measEnd();
+  if (open && (st.draft || st.marking)) cancelDraft();
+  st.skSel = null; hideUi(); apply(); layout();
+}
+/** 右上「🙈 隱藏」按鈕跟那一條的字、按鈕 */
+function hideUi() {
+  const b = document.getElementById('hideBtn'), bar = document.getElementById('hideBar'); if (!b || !bar) return;
+  b.textContent = st.hideBar ? '✖ 關閉隱藏' : '🙈 隱藏'; b.classList.toggle('on', st.hideBar);
+  bar.style.display = st.hideBar ? 'flex' : 'none';
+  const n = hideStack.length;
+  document.getElementById('hbText').innerHTML = st.hideMode === 'hide' ? '點畫面上要藏起來的東西' + (n ? '（藏了 <b>' + n + '</b> 個）' : '')
+    : st.hideMode === 'show' ? '淡淡的就是藏起來的：<b>點一下拿回來</b>'
+    : n ? '藏了 <b>' + n + '</b> 個：可以再藏，或取消隱藏' : '按「🙈 隱藏」，再點畫面上擋住的東西';
+  const hb = document.getElementById('hbHide'), hs = document.getElementById('hbShow'), ha = document.getElementById('hbAll');
+  hb.classList.toggle('on', st.hideMode === 'hide'); hs.classList.toggle('on', st.hideMode === 'show');
+  hs.disabled = ha.disabled = !st.skOff.size;
+}
 const WIDE = () => innerWidth >= 900;
 
 let THREE, renderer, scene, camera, root, rebarGroup, el;
@@ -577,9 +647,15 @@ function start() {
   build();
   if (SK) { scene.add(SK); skReady(); skClipSetup(); }
   // 測試用：看分樓層的結果（主控台打 __skDebug()）
+  window.__skHidden = () => [...st.skOff].map(it => [it.name || '(無名)', it.mesh.parent && it.mesh.parent.name, (it.mesh.geometry.index ? it.mesh.geometry.index.count : 0) / 3]);   // 測試用：藏了哪些
   window.__skDebug = () => ({ dz: SK_DZ, floors: SKF.map(f => [f.n, Math.round(f.lo), Math.round(f.hi), f.tagOnly ? 'tag' : f.other ? 'other' : '']),
     outside: skItems.filter(it => it.outside).map(it => [it.name || '(無名)', (it.mesh.geometry.index ? it.mesh.geometry.index.count : 0) / 3]) });
-  bindInput(); bindMarking(); bindMeasure();
+  bindInput(); if (canMark()) bindMarking(); bindMeasure();   // 施工人員沒有「圈起來」
+  document.getElementById('hideBtn').onclick = () => openHideBar(!st.hideBar);
+  document.getElementById('hbHide').onclick = () => setHideMode(st.hideMode === 'hide' ? '' : 'hide');
+  document.getElementById('hbShow').onclick = () => setHideMode(st.hideMode === 'show' ? '' : 'show');
+  document.getElementById('hbAll').onclick = hideClear;
+  document.getElementById('hbClose').onclick = () => openHideBar(false);
   // 打開先看 SketchUp 模型（使用者選 A）；要看灌漿區、切樓層按「🏗 3D 結構」
   setView(SK ? 'sk' : 'st');
   document.getElementById('viewBtn').onclick = () => { setView(st.view === 'sk' ? 'st' : 'sk'); apply(); fitTo(visibleObjs(), false); };
@@ -803,6 +879,12 @@ function pick(x, y) {
   ray.r.setFromCamera(new THREE.Vector2((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1), camera);
   if (st.view === 'sk') {   // SketchUp 模型：點到的群組、元件名稱和標籤（切掉的部分不算）
     const h = skHit(ray.r.intersectObjects(skVisible(), false));
+    // 「🙈 點了就隱藏」：點到的那個群組／元件直接藏起來
+    if (st.hideMode === 'hide') { const it = h ? skItems.find(x => x.mesh === h.object) : null; if (it && !st.skOff.has(it)) hideItems(skGroupOf(it)); return; }
+    if (st.hideMode === 'show') {   // 個別取消隱藏：只看淡淡的（藏起來的）那些
+      const g = skHit(ray.r.intersectObjects(skItems.filter(x => st.skOff.has(x) && x.mesh.visible).map(x => x.mesh), false));
+      const it = g ? skItems.find(x => x.mesh === g.object) : null; if (it) unhideOf(it); return;
+    }
     st.skSel = h ? skItems.find(it => it.mesh === h.object) || null : null;
     if (st.skSel) st.sideMin = false;
     apply(); return;
@@ -856,6 +938,7 @@ function bindMarking() {
   b.onclick = () => {
     if (st.draft || st.marking) { cancelDraft(); return; }
     if (meas.on) measEnd();   // 量尺寸跟圈起來一次只做一個
+    if (st.hideBar) openHideBar(false);   // 隱藏那條也先關掉
     // 手機：下面那塊先收起來，3D 畫面大一點才好轉、好圈（取消、送出後放回來）
     st.markSel = null; st.sel = null; st.sideWas = st.sideMin; if (!WIDE()) st.sideMin = true;
     setMarking('move'); renderSide(); layout(); hideHint();
@@ -1104,6 +1187,7 @@ function measUi(miss) {
 }
 function measStart() {
   if (st.draft || st.marking) cancelDraft();   // 圈到一半的先取消
+  if (st.hideBar) { st.hideBar = false; st.hideMode = ''; hideUi(); }   // 隱藏那條先關掉（openHideBar 會叫 measEnd，這裡不用）
   meas.on = true; meas.a = null; meas.last = null;
   st.sideWasM = st.sideMin; if (!WIDE()) st.sideMin = true;   // 手機：下面那塊先收起來，3D 大一點好點
   renderSide(); measUi(); layout(); hideHint();
@@ -1235,6 +1319,7 @@ async function reloadMarks() {
   try { const r = await api('mark3d', { op: 'list', site: SITE }); marks = r.marks || []; me = r.me || me; } catch (e) { }
 }
 function markSection() {
+  if (!canMark()) return '';   // 施工人員看不到圈的地方
   const head = '<div style="font-weight:700;margin:2px 0 6px">📍 要改進的地方' + (marks.length ? '（待處理 ' + marks.filter(m => !m.done).length + '）' : '') + '</div>';
   if (!marks.length) return head + '<div class="muted" style="margin:0 0 10px">還沒有人圈。按畫面右上角「✏️ 圈起來」，用手指圈出要改進的地方。</div>';
   // 有 SketchUp 模型時：別的畫面圈的寫一下是哪個（點了會換過去）
@@ -1557,6 +1642,11 @@ function chip(text, on, cls, fn, color) {
   const b = document.createElement('span'); b.className = 'chip ' + (on ? 'on' : cls || '');
   b.innerHTML = (color ? '<i style="background:' + color + '"></i>' : '') + esc(text); b.onclick = fn; return b;
 }
+/** 隱藏元件（使用者 2026-11-15「有時候會擋住」）：點了就隱藏、顯示上一個、全部顯示 */
+function hideChips(K) {
+  // 「🙈 隱藏」按鈕在右上角（量尺寸旁邊）；藏了東西才在這裡出現拿回來的按鈕
+  if (st.skOff.size && !st.hideBar) K.appendChild(chip('🙈 藏了 ' + hideStack.length + ' 個（按這裡取消隱藏）', false, '', () => openHideBar(true)));
+}
 function renderChips() {
   const F = document.getElementById('floors'), K = document.getElementById('kinds');
   F.innerHTML = ''; K.innerHTML = '';
@@ -1568,6 +1658,7 @@ function renderChips() {
     skTags().filter(t => floorRank(t) >= 1000 && t !== '未加標籤').forEach(t => K.appendChild(chip(t, false, st.skHide.has(t) ? 'off' : '', () => {
       st.skHide.has(t) ? st.skHide.delete(t) : st.skHide.add(t); st.skSel = null; apply();
     })));
+    hideChips(K);
     layout(); return;
   }
   if (st.view === 'sk') {   // SketchUp 模型（沒有樓層）：標籤一個一個開關，跟 SketchUp 的「標籤」一樣
@@ -1579,6 +1670,7 @@ function renderChips() {
       if (st.skHide.size >= tags.length) st.skHide.clear();   // 全部關掉＝全部打開
       st.skSel = null; apply();
     })));
+    hideChips(K);
     layout(); return;
   }
   ['全部', ...floorsList()].forEach(f => F.appendChild(chip(f === '全部' ? '整棟' : f, st.floor === f && !st.pour, '', () => { st.floor = f; st.sel = null; st.pour = null; st.rebar = null; apply(); fitTo(visibleObjs(), true); })));
@@ -1866,7 +1958,7 @@ function renderSide() {
     h += '<div class="card">' + (st.draft.member ? '<div class="muted">圈的地方：' + esc(st.draft.member) + '</div>' : '')
       + (st.editMark ? '<div>在畫面<b>最上面的框</b>改字，按「送出」；要換位置按「⭕ 重圈」；不改了按「取消圈」。</div>'
         : '<div>在畫面<b>最上面的框</b>寫要改進什麼，按「送出」；不要了按「取消圈」。可以先轉動看清楚，圈會黏在模型上。</div>')
-      + '<div class="muted" style="margin-top:6px">送出後老闆、主任、公司、開發者都看得到；開發者、老闆、主任會收到通知，開發者改好會按「已改好」。</div></div>';
+      + '<div class="muted" style="margin-top:6px">送出後老闆、主任、公司、開發者都看得到、會收到通知（施工人員看不到）；開發者改好會按「已改好」。</div></div>';
   } else if (mk) {
     const dev = me && me.role === '管理者', mine = me && me.name === mk.by, away = markAway(mk);
     const awayFl = away && mk.cam && mk.cam.v && mk.cam.v.f && mk.cam.v.f !== '全部' ? mk.cam.v.f : '';
@@ -1885,7 +1977,10 @@ function renderSide() {
     T.textContent = 'SketchUp 模型';
     h += '<div class="card"><div class="t">' + esc(it.name || '（沒有名稱的面）') + '</div>'
       + table([['標籤', it.tag || '未加標籤']])
-      + '<div class="row"><button class="btn ghost" id="skUnsel">取消</button></div></div>' + markSection();
+      + '<div class="row"><button class="btn" id="skHideOne">🙈 隱藏這個</button>'
+      + (skSameOf(it).length > 1 ? '<button class="btn" id="skHideSame">🙈 一樣的全部隱藏（' + skSameOf(it).length + ' 個）</button>' : '')
+      + '<button class="btn ghost" id="skUnsel">取消</button></div>'
+      + '<div class="muted" style="margin-top:4px">擋住後面的東西就藏起來；要拿回來按右上「🙈 隱藏」→「取消隱藏」（個別或全部）。</div></div>' + markSection();
   } else if (st.view === 'sk') {
     T.textContent = '🏠 SketchUp 模型';
     h += (hasStruct() && ST_ON ? '<div class="tip">🚚 <b>' + (SKF.length ? '灌漿區' : '灌漿區、切樓層') + '</b>：按上面「🏗 3D 結構」</div>' : '')
@@ -1974,6 +2069,8 @@ function renderSide() {
   on('showRebar', () => { st.rebar = st.sel; st.focus = focusOf(st.rebar); st.sel = null; apply(); cam.theta = -0.75; cam.phi = 1.2; fitTo([...rebarGroup.children], true); });
   on('unsel', () => { st.sel = null; apply(); });
   on('skUnsel', () => { st.skSel = null; apply(); });
+  on('skHideOne', () => { if (st.skSel) hideItems(skGroupOf(st.skSel)); });
+  on('skHideSame', () => { if (st.skSel) hideItems(skSameOf(st.skSel)); });
   on('barsOff', () => { st.bars = false; apply(); });
   // 灌漿區可以點好幾區一起亮（使用者 2026-11-11「我可以點選多個群組讓他們亮起來，剛剛看是只能點一個」）：再點一次取消那一區
   B.querySelectorAll('.pour:not(.relc)').forEach(p => p.onclick = () => {
@@ -2028,7 +2125,11 @@ function pourList(tip) {
 document.getElementById('tog').onclick = () => { st.sideMin = !st.sideMin; renderSide(); layout(); };
 document.getElementById('reset').onclick = () => {
   if (!M) return;
-  if (st.view === 'sk') { st.skHide.clear(); st.skSel = null; st.skFloor = null; apply(); fitTo(visibleObjs(), false); return; }
+  if (st.view === 'sk') {
+    st.skHide.clear(); st.skSel = null; st.skFloor = null; st.skOff.clear(); hideStack.length = 0;   // 「整棟」也把藏起來的拿回來
+    st.hideBar = false; st.hideMode = ''; hideUi();   // 隱藏那條也關掉
+    apply(); fitTo(visibleObjs(), false); return;
+  }
   st.floor = '全部'; st.sel = null; st.pour = null; st.rebar = null; st.bars = false; KIND_ORDER.forEach(k => st.kinds.add(k)); apply(); fitTo(visibleObjs(), false);
 };
 
@@ -2056,14 +2157,18 @@ function layout() {
   const mb = document.getElementById('markBtn'); mb.style.top = (vr.top + 10) + 'px'; mb.style.right = (innerWidth - vr.right + 12) + 'px';
   // 圈的時候那條放在畫面上方中間、按鈕下面（窄的手機放在按鈕下面一點，不會擋到按鈕）
   // 量尺寸：按鈕在「圈起來」左邊；那條跟圈的那條同一個位置（一次只會有一個）
-  const me = document.getElementById('measBtn'); me.style.top = mb.style.top; me.style.right = (innerWidth - vr.right + 12 + (mb.offsetWidth || 0) + 8) + 'px';
-  // 右上角兩顆按鈕佔掉的寬度要讓開（使用者 2026-11-14 截圖：量的那條蓋住「結束量」）；左邊放不下 330 px 就放到按鈕下面
-  const btnW = 12 + (mb.offsetWidth || 0) + 8 + (me.offsetWidth ? me.offsetWidth + 8 : 0), room = vr.width - btnW - 8;
+  // 施工人員沒有「圈起來」：量尺寸就靠右邊（mb.offsetWidth＝0）
+  const me = document.getElementById('measBtn'); me.style.top = mb.style.top; me.style.right = (innerWidth - vr.right + 12 + (mb.offsetWidth ? mb.offsetWidth + 8 : 0)) + 'px';
+  // 隱藏：在量尺寸左邊
+  const hb = document.getElementById('hideBtn'); hb.style.top = mb.style.top; hb.style.right = (parseFloat(me.style.right) + (me.offsetWidth || 0) + 8) + 'px';
+  // 右上角的按鈕佔掉的寬度要讓開（使用者 2026-11-14 截圖：量的那條蓋住「結束量」）；左邊放不下 330 px 就放到按鈕下面
+  const btnW = 12 + (mb.offsetWidth ? mb.offsetWidth + 8 : 0) + (me.offsetWidth ? me.offsetWidth + 8 : 0) + (hb.offsetWidth ? hb.offsetWidth + 8 : 0), room = vr.width - btnW - 8;
   const mt = document.getElementById('markBar'), narrow = room < 330;
   mt.style.top = (vr.top + (narrow ? 50 : 10)) + 'px';
   mt.style.left = (vr.left + (narrow ? vr.width / 2 : 8 + room / 2)) + 'px';
   mt.style.width = Math.min(narrow ? vr.width - 16 : room, 520) + 'px';
   const mz = document.getElementById('measBar'); mz.style.top = mt.style.top; mz.style.left = mt.style.left; mz.style.width = mt.style.width;
+  const hz = document.getElementById('hideBar'); hz.style.top = mt.style.top; hz.style.left = mt.style.left; hz.style.width = mt.style.width;
   needs = true;
 }
 function frame() { if (needs) { needs = false; renderer.render(scene, camera); updatePins(); updateLapLabels(); measDraw(); } requestAnimationFrame(frame); }
