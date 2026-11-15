@@ -400,7 +400,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/15i';
+var WEB_VERSION = '11/15j';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -775,7 +775,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -1543,10 +1543,55 @@ function renderSite() {
   return h + '</div>';
 }
 
+// ---------- 混凝土灌漿數量：開發者改名稱、灌漿日期、m³，或刪掉（收件服務第 41 版；使用者 2026-11-15「不管是電腦版還是手機板還是蘋果都要支援可以編輯刪除的功能（只有開發者」）----------
+// 開發者＝Google 登入或開發者自己的代碼（iPhone 用代碼也算；收件服務 login 給 dev）；切換成別人時不算
+function pourDev() { return !!S.s && !S.asCode && (S.s.dev === true || isOwner()) && Number(S.s.version) >= 41; }
+SITE_ACTS.pouredit = function (id) {
+  var d = ((S.office && S.office.pours) || []).filter(function (x) { return x.id === id; })[0]; if (!d || !pourDev()) return;
+  var p = pourOf(d);
+  S.modal = { type: 'pouredit', id: id, name: d.name, part: p.part || docTitle(d), date: dateOf(p.pourDate) ? p.pourDate : '', m3: p.m3 || '', busy: '', err: '', ask: false };
+  renderModal();
+};
+function pourEditProblem(m) {
+  if (!String(m.part || '').trim()) return '名稱不能空白';
+  if (!dateOf(m.date)) return '要選灌漿日期';
+  var v = String(m.m3 == null ? '' : m.m3).trim();
+  if (!v || !isFinite(Number(v)) || Number(v) < 0) return 'm³ 要打數字';
+  return '';
+}
+function pourEditNote(m) { var p = pourEditProblem(m); if (p) return p; var v = Number(m.m3); return '約 ' + Math.ceil(Math.round(v * 1e6) / 1e6 / 9) + ' 車（一車 9 m³）。只改手機上顯示的名稱、日期、m³，PDF 內容不變；要改 PDF 請在 BricsCAD 重新發布。'; }
+function pourEditModal(m) {
+  if (m.ask) return '<h3>刪掉這份灌漿數量？</h3><div style="font-size:15.5px;line-height:24px;margin:4px 0 12px">「' + esc(m.part) + '」（' + esc(m.name) + '）會丟到雲端垃圾桶（30 天內救得回來），手機、網頁都不會再列出來。</div>' +
+    (m.err ? '<div class="err">' + esc(m.err) + '</div>' : '') +
+    '<button class="big" style="background:var(--red)" data-act="pourdelok"' + (m.busy ? ' disabled' : '') + '>' + esc(m.busy || '刪除') + '</button><button class="ghost" data-act="pourdelno"' + (m.busy ? ' disabled' : '') + '>不要刪</button>';
+  return '<h3>編輯灌漿數量</h3><div class="sub" style="margin:-4px 0 8px;font-size:13px">' + esc(m.name) + '</div>' +
+    '<div class="label">名稱（手機上顯示的標題）</div><input type="text" data-f="m.part" maxlength="60" value="' + esc(m.part) + '">' +
+    '<div class="row2" style="margin-top:8px"><div><div class="label">灌漿日期</div><input type="date" data-f="m.date" value="' + esc(m.date) + '"></div>' +
+    '<div><div class="label">合計 m³</div><input type="text" inputmode="decimal" data-f="m.m3" value="' + esc(m.m3) + '"></div></div>' +
+    '<div class="note" id="mmsg" style="margin-top:6px">' + esc(m.err || pourEditNote(m)) + '</div>' +
+    '<button class="big" style="margin-top:12px" id="msave" data-act="pourok"' + (pourEditProblem(m) || m.busy ? ' disabled' : '') + '>' + esc(m.busy || '存檔') + '</button>' +
+    '<button class="ghost red" data-act="pourdelask"' + (m.busy ? ' disabled' : '') + '>刪除這份</button><button class="ghost" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button>';
+}
+function pourDone(m, msg) { if (S.modal === m) closeModal(); S.pourMsg = msg; S.feedStale = true; loadOffice(); }
+function pourFail(m, e) { m.busy = ''; m.err = '沒有存到：' + (failMsg(e) || errText(e)); if (S.modal === m) renderModal(); }
+SITE_ACTS.pourok = function () {
+  var m = S.modal; if (!m || m.type !== 'pouredit' || m.busy || pourEditProblem(m)) return;
+  m.busy = '存到雲端…'; m.err = ''; renderModal();
+  api('pour', { op: 'edit', id: m.id, part: String(m.part).trim(), pourDate: m.date, m3: String(m.m3).trim() })
+    .then(function () { pourDone(m, '✅ 已改好「' + String(m.part).trim() + '」（手機重新整理後就是新的）'); }, function (e) { pourFail(m, e); });
+};
+SITE_ACTS.pourdelask = function () { var m = S.modal; if (!m || m.type !== 'pouredit' || m.busy) return; m.ask = true; m.err = ''; renderModal(); };
+SITE_ACTS.pourdelno = function () { var m = S.modal; if (!m || m.busy) return; m.ask = false; renderModal(); };
+SITE_ACTS.pourdelok = function () {
+  var m = S.modal; if (!m || m.type !== 'pouredit' || m.busy) return;
+  m.busy = '刪除中…'; m.err = ''; renderModal();
+  api('pour', { op: 'del', id: m.id }).then(function () { pourDone(m, '已刪掉「' + m.part + '」（在雲端垃圾桶，30 天內救得回來）'); }, function (e) { pourFail(m, e); });
+};
 function renderPours() {
   var site = S.site, o = S.office, t = todayYmd();
   var h = topBar('混凝土灌漿數量', 'site', S.officeBusy ? '更新中…' : '⟳ 更新', 'officereload') + '<div class="wrap"><div class="label">' + esc(site) + ' ・ 一次灌漿一份（裡面有這次灌漿的各部位及米數）</div>';
   if (S.officeErr) h += '<div class="err">' + esc(S.officeErr) + '</div>';
+  if (S.pourMsg) h += '<div class="box">' + esc(S.pourMsg) + '</div>';
   if (!o) return h + '<div class="sub">讀取中…</div></div>';
   var list = pourOrder((o.pours || []).filter(function (d) { return d.site === site; }));
   if (!list.length) h += '<div class="card sub" style="font-size:15px">這個工地還沒有灌漿數量。</div>';
@@ -1556,13 +1601,16 @@ function renderPours() {
       : day > t ? '灌漿日 ' + rocDate(day) + '（' + weekday(day) + '）・ ' + daysBetween(t, day) + ' 天後' : '灌漿日 ' + rocDate(day) + '（' + weekday(day) + '）・ 已過';
     var col = day === t ? 'var(--warn)' : day > t ? 'var(--navy)' : 'var(--muted)';
     var re = d.created && d.modified && (new Date(d.modified) - new Date(d.created)) >= 60000;
-    h += '<button class="item" data-act="pdfopen" data-v="' + esc(d.id) + '"' + (day === t ? ' style="border:2px solid var(--orange)"' : '') + '><span class="pdfph">PDF</span><span class="grow">' +
+    var dv = pourDev();
+    if (dv) h += '<div style="display:flex;align-items:center;gap:6px">';
+    h += '<button class="item" data-act="pdfopen" data-v="' + esc(d.id) + '"' + (dv ? ' style="flex:1' + (day === t ? ';border:2px solid var(--orange)' : '') + '"' : day === t ? ' style="border:2px solid var(--orange)"' : '') + '><span class="pdfph">PDF</span><span class="grow">' +
       '<b style="font-size:17px;display:block">' + esc(p.part || docTitle(d)) + '</b>' +
       '<span style="display:block;font-size:14px;color:' + col + ';' + (day && day >= t ? 'font-weight:bold' : '') + '">' + esc(dt) + '</span>' +
       (p.m3 ? '<span style="display:block;font-size:14px">合計 ' + esc(p.m3) + ' m³' + (p.trucks ? ' ・ ' + esc(p.trucks) + ' 車' : '') + '</span>' : '') +
       '<span class="sub" style="display:block;font-size:12.5px">上傳 ' + esc(shortTime(d.modified) || '─') + (re ? ' ・ 第一次 ' + esc(shortTime(d.created)) : '') + '</span></span><span class="arrow">›</span></button>';
+    if (dv) h += '<button class="key" style="flex:none;margin:0 0 8px" data-act="pouredit" data-v="' + esc(d.id) + '">✎ 編輯</button></div>';
   });
-  return h + '<div class="note" style="margin-top:4px">同一份重新上傳會自動換成新的，第一次上傳的時間也會留著。</div></div>';
+  return h + '<div class="note" style="margin-top:4px">同一份重新上傳會自動換成新的，第一次上傳的時間也會留著。' + (pourDev() ? '開發者：「✎ 編輯」可以改名稱、灌漿日期、m³，或刪掉這份。' : '') + '</div></div>';
 }
 
 /** 施工單在工地裡認的名字：「資料夾/檔名」（沒有資料夾就是檔名；施工單記號用，收件服務第 26 版） */
@@ -2364,6 +2412,7 @@ function modalOk(m) {
   if (m.type === 'omat') return !m.busy && !!(String(m.vendor || '').trim() || String(m.qty || '').trim());
   if (m.type === 'contract') return !m.busy && !contractProblem(m);
   if (m.type === 'siteedit') return !m.busy && !siteEditProblem(m);
+  if (m.type === 'pouredit') return !m.busy && !pourEditProblem(m);
   return true;
 }
 
@@ -3480,6 +3529,7 @@ document.addEventListener('input', function (ev) {
     var mm = $('mmsg'); if (mm && m.type === 'cal') mm.textContent = m.err || calProblem(m);
     if (mm && m.type === 'dladd') mm.textContent = dlAddNote(m);
     if (mm && m.type === 'siteedit') { m.err = ''; mm.textContent = siteEditNote(m); }
+    if (mm && m.type === 'pouredit') { m.err = ''; mm.textContent = pourEditNote(m); }
     if (mm && m.type === 'omat') mm.textContent = modalOk(m) ? '' : '要填廠商或數量';
     return;
   }
