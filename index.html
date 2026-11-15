@@ -50,6 +50,9 @@ button { font-family:inherit; cursor:pointer; color:inherit; }
 .chip.on { background:var(--teal); border-color:var(--teal); color:#fff; font-weight:bold; }
 .chip.small { padding:5px 11px; font-size:14.5px; }
 .chip.add { background:var(--todo); border-color:var(--todo); color:#fff; font-weight:bold; }
+.chip.addl { background:#eef3fa; border-color:#b9c8de; color:var(--navy); font-weight:bold; }
+.chip[data-lp] { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
+.chip.lping { transform:scale(.94); border-color:var(--red); }
 .big { display:block; width:100%; border:0; border-radius:14px; background:var(--grad); color:#fff; font-size:18px; font-weight:bold; padding:14px; margin:4px 0 10px; }
 .big:disabled { background:#cbd5dc; }
 .ghost { display:block; width:100%; border:2px solid var(--navy); background:#fff; color:var(--navy); border-radius:12px; font-size:16.5px; font-weight:bold; padding:11px; margin-bottom:10px; }
@@ -390,7 +393,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/14m';
+var WEB_VERSION = '11/15a';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -765,7 +768,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -2106,6 +2109,7 @@ function modalOk(m) {
   if (m.type === 'todoedit') return !!m.text.trim();
   if (m.type === 'task') return !m.busy && !!m.text.trim() && m.to.length > 0;
   if (m.type === 'padd') return !m.busy && !!m.name.trim();
+  if (m.type === 'dladd') return dlAddOk(m);
   if (m.type === 'contract') return !m.busy && !contractProblem(m);
   return true;
 }
@@ -3191,6 +3195,7 @@ document.addEventListener('input', function (ev) {
     if (k === 'm.day') { renderModal(); return; }   // 選了日子：下面的「📅 11/12（四）」跟著換
     var b = $('msave'); if (b) b.disabled = !modalOk(m) || !!m.busy;
     var mm = $('mmsg'); if (mm && m.type === 'cal') mm.textContent = m.err || calProblem(m);
+    if (mm && m.type === 'dladd') mm.textContent = dlAddNote(m);
     return;
   }
   var d = S.d; if (!d) return;
@@ -4421,19 +4426,21 @@ function dlItemPage(dl) {
 }
 function dlItemEditor(dl, c) {
   var it = dl.cur, L = dl.lists;
-  var h = '<div class="card dled">';
-  h += '<div class="label">廠商</div><input type="text" data-df="iv" value="' + esc(it.vendor) + '" maxlength="30"><div class="chips" style="margin-top:6px">' + L.vendors.map(function (v) { return chip('dliv', v, v, it.vendor === v, true); }).join('') + '</div>';
-  h += '<div class="label" style="margin-top:10px">單位</div><div class="chips">' + L.units.map(function (u) { return chip('dliu', u, u, it.unit === u, true); }).join('') + '</div>';
+  // 工時那排：現在填的不在清單裡（拿掉了、電腦傳來的）也照樣顯示（跟摺疊機一樣）
+  var hrs = function (cur) { cur = String(cur || ''); return cur && L.hours.indexOf(cur) < 0 ? L.hours.concat([cur]) : L.hours; };
+  var h = '<div class="card dled">' + dlListErr(dl);
+  h += '<div class="label">廠商</div><input type="text" data-df="iv" value="' + esc(it.vendor) + '" maxlength="30"><div class="chips" style="margin-top:6px">' + L.vendors.map(function (v) { return dlChip('dliv', v, v, it.vendor === v, 'vendors'); }).join('') + dlAddChip('vendors', 'iv') + '</div>';
+  h += '<div class="label" style="margin-top:10px">單位</div><div class="chips">' + L.units.map(function (u) { return dlChip('dliu', u, u, it.unit === u, 'units'); }).join('') + dlAddChip('units', 'iu') + '</div>';
   h += '<div class="label" style="margin-top:10px">人數 × 工時</div><div class="row" style="gap:6px;flex-wrap:wrap"><input type="number" inputmode="numeric" min="0" max="99" data-df="ip" value="' + (+it.people || '') + '" placeholder="人數" style="max-width:90px"><span>×</span>' +
-    L.hours.map(function (x) { return chip('dlih', x, x, String(it.hours) === x, true); }).join('') + '</div>';
+    hrs(it.hours).map(function (x) { return dlChip('dlih', x, x, String(it.hours) === x, 'hours'); }).join('') + dlAddChip('hours', 'ih') + '</div>';
   if (dl.two || +it.people2 > 0) h += '<div class="label" style="margin-top:8px">第二組（有人沒一起到場）</div><div class="row" style="gap:6px;flex-wrap:wrap"><input type="number" inputmode="numeric" min="0" max="99" data-df="ip2" value="' + (+it.people2 || '') + '" placeholder="人數" style="max-width:90px"><span>×</span>' +
-    L.hours.map(function (x) { return chip('dlih2', x, x, String(it.hours2 || '1') === x, true); }).join('') + '</div>';
+    hrs(it.hours2 || '1').map(function (x) { return dlChip('dlih2', x, x, String(it.hours2 || '1') === x, 'hours'); }).join('') + dlAddChip('hours', 'ih2') + '</div>';
   else h += '<button class="link" data-act="dltwo">＋ 加第二組人數×工時</button>';
   if (it.qtyText && !(+it.people > 0)) h += '<div class="note">數量：' + esc(it.qtyText) + '（電腦傳來的；填人數就換掉）</div>';
   h += '<div class="label" style="margin-top:10px">工作內容（最多 3 行；點名字＝誰做的）</div>';
   it.lines.forEach(function (l, k) {
     h += '<div style="margin:6px 0 10px"><input type="text" data-df="il.' + k + '" value="' + esc(l.text) + '" placeholder="' + (k + 1) + '. 例：地梁綁紮（A 區）" maxlength="80">' +
-      '<div class="chips" style="margin-top:4px">' + L.workers.map(function (w) { return chip('dliw', k + '|' + w, w, (l.workers || []).indexOf(w) >= 0, true); }).join('') + '</div></div>';
+      '<div class="chips" style="margin-top:4px">' + L.workers.map(function (w) { return dlChip('dliw', k + '|' + w, w, (l.workers || []).indexOf(w) >= 0, 'workers'); }).join('') + dlAddChip('workers', 'iw.' + k) + '</div></div>';
   });
   h += '<div class="row2"><button class="ghost" style="margin:0" data-act="dlback">完成</button><button class="ghost red" style="margin:0" data-act="dlclear">清空這個大項</button></div></div>';
   return h;
@@ -4442,13 +4449,13 @@ function dlItemEditor(dl, c) {
 function dlMatsPage(dl) {
   var e = dl.e, L = dl.lists, mats = e.materials || [];
   var h = dlHead(dl, '材料/機具、討論', true) + '<div class="wrap form">';
-  h += '<div class="card"><div class="label">材料／機具（最多 9 筆）' + (e.materialsSrc === '電腦' ? PC_TAG : '') + '</div>';
+  h += '<div class="card">' + dlListErr(dl) + '<div class="label">材料／機具（最多 9 筆）' + (e.materialsSrc === '電腦' ? PC_TAG : '') + '</div>';
   mats.forEach(function (m, i) {
     h += '<div class="mat"><input type="text" style="flex:1.5" data-df="mat.' + i + '.vendor" value="' + esc(m.vendor) + '" placeholder="廠商">' +
       '<input type="text" style="flex:.8" inputmode="decimal" data-df="mat.' + i + '.qty" value="' + esc(m.qty) + '" placeholder="數量">' +
       '<input type="text" style="flex:.7" data-df="mat.' + i + '.unit" value="' + esc(m.unit) + '" placeholder="單位"></div>' +
-      '<div class="chips" style="margin-bottom:4px">' + L.vendors.map(function (v) { return chip('dlmv', i + '|' + v, v, m.vendor === v, true); }).join('') + '</div>' +
-      '<div class="chips">' + L.units.map(function (u) { return chip('dlmu', i + '|' + u, u, m.unit === u, true); }).join('') + '</div>' +
+      '<div class="chips" style="margin-bottom:4px">' + L.vendors.map(function (v) { return dlChip('dlmv', i + '|' + v, v, m.vendor === v, 'vendors'); }).join('') + dlAddChip('vendors', 'mv.' + i) + '</div>' +
+      '<div class="chips">' + L.units.map(function (u) { return dlChip('dlmu', i + '|' + u, u, m.unit === u, 'units'); }).join('') + dlAddChip('units', 'mu.' + i) + '</div>' +
       '<button class="link red" data-act="dlmdel" data-v="' + i + '">刪掉這筆</button>';
   });
   if (mats.length < 9) h += '<button class="link" data-act="dlmadd">' + (mats.length ? '＋ 再加一筆' : '＋ 新增材料／機具') + '</button>';
@@ -4590,6 +4597,132 @@ ACT.dlmadd = function () { var dl = S.dl; if (!dl) return; dl.e.materials = (dl.
 ACT.dlmdel = function (v) { var dl = S.dl; if (!dl) return; dl.e.materials.splice(+v, 1); dlTouch(); render(); };
 ACT.dlmv = function (v) { var dl = S.dl, p = v.split('|'); if (!dl) return; dl.e.materials[+p[0]].vendor = p[1]; dlTouch(); render(); };
 ACT.dlmu = function (v) { var dl = S.dl, p = v.split('|'); if (!dl) return; dl.e.materials[+p[0]].unit = p[1]; dlTouch(); render(); };
+
+// ---------- 清單自己加減（跟摺疊機一樣；使用者 2026-11-15「iPad 跟網頁都要有新增的功能」）----------
+// 廠商、單位、工時、工人那幾排：最後一顆「＋ 新增」；長按名字（電腦也可以按右鍵）＝從清單拿掉。
+// 存在雲端 工地App/設定/手機新增.json（摺疊機同一份：added 加、hidden 拿掉，寫法跟 App CustomLists.add／remove 一樣），存好叫醒摺疊機同步
+var DL_KINDS = { vendors: '廠商', units: '單位', hours: '工時', workers: '工人' };
+function dlChip(act, v, label, on, kind) {
+  return '<button class="chip small' + (on ? ' on' : '') + '" data-act="' + act + '" data-v="' + esc(v) + '" data-lp="' + kind + '" data-lv="' + esc(label) + '">' + esc(label) + '</button>';
+}
+function dlAddChip(kind, ctx) { return '<button class="chip small addl" data-act="dladd" data-v="' + kind + '|' + ctx + '">＋ 新增</button>'; }
+function dlListErr(dl) { return dl && dl.lerr ? '<div class="err" style="margin:0 0 8px">' + esc(dl.lerr) + '</div>' : ''; }
+function dlAddOk(m) { var t = String(m.name || '').trim(); return !!t && !m.busy && (m.kind !== 'hours' || (/^\d*\.?\d+$/.test(t) && +t > 0 && +t <= 24)); }
+function dlAddNote(m) {
+  var num = m.kind === 'hours', t = String(m.name || '').trim(), dup = t && S.dl && S.dl.lists && (S.dl.lists[m.kind] || []).indexOf(num ? String(+t) : t) >= 0;
+  if (num && t && !dlAddOk(m)) return '工時要打數字，例如 0.25、1.5';
+  return dup ? '清單已經有了，按「加入」就是選它。' : '加了以後每一天、每個工地都會出現；摺疊機同步後也會有。不要的：長按那個名字' + (IOS ? '' : '（電腦也可以按右鍵）') + '就能拿掉。';
+}
+function dlAddModal(m) {
+  var num = m.kind === 'hours';
+  return '<h3>新增' + DL_KINDS[m.kind] + '</h3>' +
+    '<input type="text" id="dladdin" data-f="m.name" maxlength="' + (m.kind === 'vendors' ? 30 : 12) + '"' + (num ? ' inputmode="decimal"' : '') + ' enterkeyhint="done" autocomplete="off" placeholder="' + (num ? '例如 0.25、1.5' : '輸入名稱') + '" value="' + esc(m.name) + '">' +
+    '<div class="note" id="mmsg" style="margin-top:6px">' + esc(dlAddNote(m)) + '</div>' +
+    '<button class="big" style="margin-top:12px" id="msave" data-act="dladdok"' + (dlAddOk(m) ? '' : ' disabled') + '>加入</button><button class="ghost" data-act="mclose">取消</button>';
+}
+function dlRmModal(m) {
+  return '<h3>從清單拿掉「' + esc(m.name) + '」？</h3><div style="font-size:15.5px;line-height:23px;margin:4px 0 14px">已經寫進日誌的不會改，只是以後這排不再出現。要再用時按「＋ 新增」加回來就好。</div>' +
+    '<button class="ghost red" data-act="dlrmok">拿掉</button><button class="ghost" data-act="mclose">不要</button>';
+}
+ACT.dladd = function (v) {
+  var dl = S.dl; if (!dl || !dl.lists) return; var p = String(v || '').split('|');
+  if (!DL_KINDS[p[0]]) return;
+  S.modal = { type: 'dladd', kind: p[0], ctx: p[1] || '', name: '' }; renderModal();
+  var i = $('dladdin'); if (i) i.focus();   // 在按的這一下 focus，iPad 才會跳出鍵盤
+};
+ACT.dladdok = function () {
+  var m = S.modal, dl = S.dl; if (!m || m.type !== 'dladd' || !dl || !dl.lists || !dlAddOk(m)) return;
+  var v = m.name.trim(); if (m.kind === 'hours') v = String(+v);   // 「.5」「0.50」→「0.5」
+  var list = dl.lists[m.kind] || (dl.lists[m.kind] = []), isNew = list.indexOf(v) < 0;
+  if (isNew) list.push(v);
+  dlPickAdded(dl, m.ctx, v);   // 加了就順便選它（跟摺疊機一樣）
+  closeModal(); render();
+  if (isNew) dlListSave(m.kind, v, true);
+};
+function dlPickAdded(dl, ctx, v) {
+  var p = String(ctx || '').split('.'), it = dl.cur, mats = (dl.e && dl.e.materials) || [];
+  if (p[0] === 'iv' && it) it.vendor = v;
+  else if (p[0] === 'iu' && it) it.unit = v;
+  else if (p[0] === 'ih' && it) it.hours = v;
+  else if (p[0] === 'ih2' && it) it.hours2 = v;
+  else if (p[0] === 'iw' && it) { var l = it.lines[+p[1]]; if (!l) return; if (l.workers.indexOf(v) < 0) l.workers.push(v); }
+  else if ((p[0] === 'mv' || p[0] === 'mu') && mats[+p[1]]) mats[+p[1]][p[0] === 'mv' ? 'vendor' : 'unit'] = v;
+  else return;
+  dlTouch();
+}
+function dlListRemoveAsk(kind, name) {
+  var dl = S.dl; if (!dl || !dl.lists || !DL_KINDS[kind] || !name || S.modal) return;
+  S.modal = { type: 'dlrm', kind: kind, name: name }; renderModal();
+}
+ACT.dlrmok = function () {
+  var m = S.modal, dl = S.dl; if (!m || m.type !== 'dlrm' || !dl || !dl.lists) return;
+  dl.lists[m.kind] = (dl.lists[m.kind] || []).filter(function (x) { return x !== m.name; });   // 已經選的不動（跟摺疊機一樣）
+  closeModal(); render();
+  dlListSave(m.kind, m.name, false);
+};
+/** 改雲端的 手機新增.json：讀最新的 → 只改這一個名字 → 存回去（其他欄位：工地、打勾、位置…原樣留著） */
+var DLL = { q: Promise.resolve() };
+function dlListSave(kind, v, add) {
+  var dl = S.dl; if (dl) dl.lerr = '';
+  var fail = function (x) {
+    var d = S.dl; if (!d) return;
+    d.lerr = '「' + v + '」' + (add ? '這次可以用，但沒加進雲端的清單' : '這台拿掉了，但雲端的清單沒改到') + '（' + x + '）。等一下再' + (add ? '加' : '拿掉') + '一次';
+    renderSoft();
+  };
+  dLogin(function () {
+    DLL.q = DLL.q.then(function () {
+      return dPath(['工地App', '設定'], true).then(function (dir) {
+        if (!dir) throw new Error('找不到雲端的工地App資料夾');
+        return dFind(dir, '手機新增.json', false).then(function (f) {
+          return (f ? dText(f.id) : Promise.resolve('')).then(function (t) {
+            var o;
+            try { o = t ? JSON.parse(t) : { version: 1, added: {}, hidden: [], sites: [], sheetDone: {}, siteGeo: {} }; } catch (e) { throw new Error('雲端的清單檔讀不懂，沒有動它'); }
+            if (!o || typeof o !== 'object') throw new Error('雲端的清單檔讀不懂，沒有動它');
+            var a = o.added && typeof o.added === 'object' ? o.added : (o.added = {}), h = Array.isArray(o.hidden) ? o.hidden : [], key = kind + ':' + v;
+            var cur = Array.isArray(a[kind]) ? a[kind].slice() : [];
+            if (add) { if (cur.indexOf(v) < 0) cur.push(v); h = h.filter(function (x) { return x !== key; }); }
+            else { cur = cur.filter(function (x) { return x !== v; }); if (h.indexOf(key) < 0) h = h.concat([key]); }
+            a[kind] = cur; o.hidden = h;
+            var blob = new Blob([JSON.stringify(o, null, 1)], { type: 'application/json' });
+            return f ? dUpdate(f.id, 'application/json', blob) : dCreate(dir, '手機新增.json', 'application/json', blob);
+          });
+        });
+      }).then(function () { webPing('lists'); }, function (e) { fail((e && e.message) || String(e)); });
+    });
+  }, function (msg) { fail(msg || '沒連上 Google 雲端'); });
+}
+// 長按名字（約 0.6 秒）＝問要不要從清單拿掉；手指移動（捲畫面）就取消。放開時那一下點擊吃掉，不會順便選到、或點到跳出來的視窗
+var LP = { t: 0, el: null, x: 0, y: 0, fired: false, eatUntil: 0 };
+function lpStop() { clearTimeout(LP.t); if (LP.el) LP.el.classList.remove('lping'); LP.el = null; }
+document.addEventListener('pointerdown', function (ev) {
+  lpStop(); LP.fired = false;
+  var el = ev.target.closest ? ev.target.closest('[data-lp]') : null;
+  if (!el || ev.button) return;
+  LP.el = el; LP.x = ev.clientX; LP.y = ev.clientY;
+  LP.t = setTimeout(function () {
+    var e = LP.el; lpStop(); if (!e || !document.body.contains(e)) return;
+    LP.fired = true; dlListRemoveAsk(e.getAttribute('data-lp'), e.getAttribute('data-lv'));
+  }, 600);
+  setTimeout(function () { if (LP.el === el) el.classList.add('lping'); }, 250);
+});
+document.addEventListener('pointermove', function (ev) { if (LP.el && (Math.abs(ev.clientX - LP.x) > 10 || Math.abs(ev.clientY - LP.y) > 10)) lpStop(); });
+// 長按跳出視窗以後放開手指：接著來的那一下點擊（會點在視窗的灰色底上＝關掉）吃掉
+function lpUp() { lpStop(); if (LP.fired) { LP.fired = false; LP.eatUntil = Date.now() + 600; } }
+document.addEventListener('pointerup', lpUp);
+document.addEventListener('pointercancel', lpUp);
+document.addEventListener('click', function (ev) {
+  if (LP.eatUntil && Date.now() < LP.eatUntil) { LP.eatUntil = 0; ev.stopPropagation(); ev.preventDefault(); }
+}, true);
+document.addEventListener('contextmenu', function (ev) {
+  var el = ev.target.closest ? ev.target.closest('[data-lp]') : null; if (!el) return;
+  ev.preventDefault();
+  if (LP.fired || S.modal) return;   // 長按已經問過了（有的手機長按也會跳這個）
+  lpStop(); if (ev.button !== 2) LP.fired = true;   // 手指長按：放開時那一下要吃掉；滑鼠右鍵不用
+  dlListRemoveAsk(el.getAttribute('data-lp'), el.getAttribute('data-lv'));
+});
+document.addEventListener('keydown', function (ev) {
+  if (ev.key === 'Enter' && ev.target && ev.target.id === 'dladdin') { ev.preventDefault(); ACT.dladdok(); }
+});
 ACT.dlph = function (v) { var dl = S.dl; if (!dl) return; dl.ph = dl.ph === v ? '' : v; render(); };
 function dlCurPhoto(dl) { return (dl.e.photos || []).filter(function (p) { return p.file === dl.ph; })[0]; }
 ACT.dlpc = function (v) { var dl = S.dl, p = dl && dlCurPhoto(dl); if (!p) return; if (p.category !== v) { p.category = v; p.line = ''; if (v !== DL_RECEIPT) { delete p.vendor; delete p.kind; } } dlTouch(); render(); };
