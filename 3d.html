@@ -89,6 +89,17 @@ button{font:inherit}
 #measBtn.on{background:#fff;color:#1971C2;border:2px solid #1971C2}
 #hideBtn{position:fixed;z-index:6;border:0;border-radius:18px;padding:6px 12px;font-weight:700;background:#495057;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;display:none}
 #hideBtn.on{background:#fff;color:#495057;border:2px solid #495057}
+/* 樓層收進「🏢 整棟 ▾」、功能可以收起（使用者 2026-11-16「整棟移下來然後每個樓層做成可以在整棟裡面展開跟收起」「整個功能也可以做展開收起」） */
+#floorBtn,#toolsBtn{position:fixed;z-index:6;border:0;border-radius:18px;padding:6px 12px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;display:none;font:inherit;font-weight:700}
+#floorBtn{background:#0F766E;color:#fff}
+#toolsBtn{background:#fff;color:#1F2933;border:1.5px solid #CBD5DC}
+#floorPanel{position:fixed;z-index:9;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.22);padding:6px;display:none;flex-direction:column;gap:4px;min-width:130px;overflow-y:auto}
+#floorPanel button{border:0;background:#F4F6F8;border-radius:10px;padding:9px 16px;font:inherit;font-size:16px;font-weight:700;color:#1F2933;text-align:left;cursor:pointer}
+#floorPanel button.on{background:#0F766E;color:#fff}
+body.tools-off #markBtn,body.tools-off #measBtn,body.tools-off #hideBtn{display:none!important}
+#markBtn,#measBtn,#hideBtn,#floorBtn,#toolsBtn{white-space:nowrap}
+@media (max-width:430px){ #markBtn,#measBtn,#hideBtn,#floorBtn,#toolsBtn{padding:6px 9px} }
+#reset{display:none}
 #hideBar{position:fixed;z-index:8;transform:translateX(-50%);background:#fff;border:2px solid #495057;border-radius:14px;padding:6px 8px;box-shadow:0 4px 12px rgba(0,0,0,.18);display:none;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;max-width:calc(100vw - 16px)}
 #hideBar .t{flex:1 1 100%;text-align:center;font-size:14px;line-height:1.35}
 #hideBar button{border:1px solid #CBD5DC;background:#fff;border-radius:14px;padding:6px 12px;font:inherit;font-size:14.5px;font-weight:700;cursor:pointer;color:#1F2933}
@@ -197,6 +208,9 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
 <button id="measBtn">📏 量尺寸</button>
 <!-- 隱藏（使用者 2026-11-15「新增可以隱藏元件的功能，有時候會擋住」「名稱就是隱藏」、放在量尺寸旁邊）：按了以後點東西就藏起來 -->
 <button id="hideBtn">🙈 隱藏</button>
+<button id="toolsBtn">🛠 收起</button>
+<button id="floorBtn">🏢 整棟 ▾</button>
+<div id="floorPanel"></div>
 <div id="hideBar"><div class="t" id="hbText"></div><button id="hbHide">🙈 隱藏</button><button id="hbShow">👁 取消隱藏：個別</button><button id="hbAll">全部取消隱藏</button><button id="hbClose">✖ 關閉</button></div>
 <div id="measBar"><div class="t" id="meText"></div><button id="meUndo">↩ 上一步</button><button id="meClear">🗑 清除</button><button id="meEnd">✖ 結束</button></div>
 <!-- 寫要改進什麼：放在畫面最上面（下面那塊會被手機鍵盤蓋住，使用者 2026-11-10「圈起來的功能沒有辦法打字」） -->
@@ -1647,14 +1661,64 @@ function hideChips(K) {
   // 「🙈 隱藏」按鈕在右上角（量尺寸旁邊）；藏了東西才在這裡出現拿回來的按鈕
   if (st.skOff.size && !st.hideBar) K.appendChild(chip('🙈 藏了 ' + hideStack.length + ' 個（按這裡取消隱藏）', false, '', () => openHideBar(true)));
 }
+// ---------- 樓層：「🏢 整棟 ▾」點開選一層、再點收起（使用者 2026-11-16「整棟移下來然後每個樓層做成可以在整棟裡面展開跟收起」）----------
+// 以前上面一排「整棟 1F 2F…」＋右上「整棟」：都收進模型左上角這一顆；選「整棟」＝以前右上的「整棟」（全部拿回來、看整棟）
+var floorOpen = false;   // var：載入時 layout() 可能比這裡早跑
+function floorItems() {
+  if (!M) return null;
+  if (st.view === 'sk') return SKF.length ? [{ v: '', t: '整棟' }].concat(SKF.map(f => ({ v: f.n, t: f.n }))) : null;
+  const fl = floorsList(); return fl.length ? [{ v: '全部', t: '整棟' }].concat(fl.map(f => ({ v: f, t: f }))) : null;
+}
+function renderFloorBtn() {
+  const b = document.getElementById('floorBtn'), p = document.getElementById('floorPanel'), items = floorItems();
+  if (!items) { b.style.display = 'none'; p.style.display = 'none'; floorOpen = false; return; }
+  const cur = st.view === 'sk' ? (st.skFloor || '') : (st.pour ? null : st.floor), hit = items.find(i => i.v === cur);
+  b.style.display = 'block'; b.textContent = '🏢 ' + (hit ? hit.t : '整棟') + (floorOpen ? ' ▴' : ' ▾');
+  p.innerHTML = '';
+  items.forEach(i => { const x = document.createElement('button'); x.textContent = i.t; if (hit && i.v === cur) x.className = 'on'; x.onclick = () => pickFloor(i.v); p.appendChild(x); });
+  p.style.display = floorOpen ? 'flex' : 'none';
+}
+function pickFloor(v) {
+  floorOpen = false;
+  if (v === '' || v === '全部') { doReset(); }
+  else if (st.view === 'sk') { st.skFloor = v; st.skSel = null; apply(); fitTo(skSliceBox(), true); }
+  else { st.floor = v; st.sel = null; st.pour = null; st.rebar = null; apply(); fitTo(visibleObjs(), true); }
+  renderChips();
+}
+document.getElementById('floorBtn').onclick = () => { floorOpen = !floorOpen; renderFloorBtn(); layout(); };
+// 點別的地方就收起來
+document.addEventListener('pointerdown', e => {
+  if (floorOpen && !(e.target.closest && e.target.closest('#floorPanel,#floorBtn'))) { floorOpen = false; renderFloorBtn(); }
+}, true);
+// 功能（隱藏、量尺寸、圈起來）整排可以收起來，這台記住（使用者 2026-11-16「整個功能也可以做展開收起」）
+var toolsOpen;   // undefined＝還沒讀這台記的
+function toolsIsOpen() {
+  if (toolsOpen === undefined) { toolsOpen = true; try { toolsOpen = localStorage.getItem('bojie.3dtools') !== '0'; } catch (e) { } }
+  return toolsOpen;
+}
+function renderToolsBtn() {
+  const t = document.getElementById('toolsBtn');
+  const any = ['markBtn', 'measBtn', 'hideBtn'].some(id => document.getElementById(id).style.display === 'block');
+  t.style.display = any ? 'block' : 'none';
+  // 窄的手機：打開的時候只放「▸」，四顆才排得下
+  t.textContent = toolsIsOpen() ? (innerWidth < 430 ? '▸' : '🛠 收起 ▸') : '🛠 功能 ◂';
+  t.title = toolsIsOpen() ? '收起功能' : '打開功能（隱藏、量尺寸、圈起來）';
+  document.body.classList.toggle('tools-off', !toolsIsOpen());
+}
+document.getElementById('toolsBtn').onclick = () => {
+  toolsOpen = !toolsIsOpen(); try { localStorage.setItem('bojie.3dtools', toolsOpen ? '1' : '0'); } catch (e) { }
+  renderToolsBtn(); layout();
+};
 function renderChips() {
   const F = document.getElementById('floors'), K = document.getElementById('kinds');
+  renderChipsIn(F, K);
+  // 空的那排不佔位置（樓層搬到模型左上角以後，上面通常只剩標籤那排）
+  F.style.display = F.children.length ? '' : 'none'; K.style.display = K.children.length ? '' : 'none';
+  renderFloorBtn(); layout();
+}
+function renderChipsIn(F, K) {
   F.innerHTML = ''; K.innerHTML = '';
-  if (st.view === 'sk' && SKF.length) {   // SketchUp 模型分樓層：整棟／基礎／1F…（一次看一層，跟 3D 結構一樣）；其他標籤在第二排開關
-    ['', ...SKF.map(f => f.n)].forEach(n => F.appendChild(chip(n || '整棟', (st.skFloor || '') === n, '', () => {
-      st.skFloor = n || null; st.skSel = null; apply();
-      fitTo(n ? skSliceBox() : visibleObjs(), true);
-    })));
+  if (st.view === 'sk' && SKF.length) {   // SketchUp 模型分樓層：樓層在模型左上角「🏢 整棟 ▾」；其他標籤在第二排開關
     skTags().filter(t => floorRank(t) >= 1000 && t !== '未加標籤').forEach(t => K.appendChild(chip(t, false, st.skHide.has(t) ? 'off' : '', () => {
       st.skHide.has(t) ? st.skHide.delete(t) : st.skHide.add(t); st.skSel = null; apply();
     })));
@@ -1673,7 +1737,7 @@ function renderChips() {
     hideChips(K);
     layout(); return;
   }
-  ['全部', ...floorsList()].forEach(f => F.appendChild(chip(f === '全部' ? '整棟' : f, st.floor === f && !st.pour, '', () => { st.floor = f; st.sel = null; st.pour = null; st.rebar = null; apply(); fitTo(visibleObjs(), true); })));
+  // 3D 結構的樓層也在模型左上角「🏢 整棟 ▾」（2026-11-16）
   const present = KIND_ORDER.filter(k => (M.m || []).some(m => m.k === k));
   // 整層鋼筋（使用者 2026-11-10「加整層鋼筋」）：整棟時先跳到第一個有配筋的樓層，比較轉得動
   if (REBAR_ON && ((M.rb && Object.keys(M.rb).length) || (M.rj || []).length)) {
@@ -1985,7 +2049,7 @@ function renderSide() {
     T.textContent = '🏠 SketchUp 模型';
     h += (hasStruct() && ST_ON ? '<div class="tip">🚚 <b>' + (SKF.length ? '灌漿區' : '灌漿區、切樓層') + '</b>：按上面「🏗 3D 結構」</div>' : '')
       + markSection()
-      + '<div class="muted" style="margin:4px 0 8px">' + (SKF.length ? '上面點一層只看那一層（照樓層高度切；有標「1F」「2F」的群組、元件、標籤就照名字）' + (SKF.some(f => f.other) ? '；建物外面的（圍牆、院子、樹…）在「其他」' : '') + '；'
+      + '<div class="muted" style="margin:4px 0 8px">' + (SKF.length ? '模型左上角「🏢 整棟 ▾」點開選一層只看那一層、再點一次收起（照樓層高度切；有標「1F」「2F」的群組、元件、標籤就照名字）' + (SKF.some(f => f.other) ? '；建物外面的（圍牆、院子、樹…）在「其他」' : '') + '；'
         : skTags().length > 1 ? '上面的標籤可以一個一個關掉、打開（跟 SketchUp 的「標籤」一樣）；' : '') + '點模型看它是哪個群組、元件。</div>';
   } else if (st.rebar) {
     const m = st.rebar;
@@ -2123,7 +2187,9 @@ function pourList(tip) {
   return h;
 }
 document.getElementById('tog').onclick = () => { st.sideMin = !st.sideMin; renderSide(); layout(); };
-document.getElementById('reset').onclick = () => {
+document.getElementById('reset').onclick = () => doReset();
+/** 看整棟：全部拿回來（以前右上角的「整棟」，2026-11-16 起在「🏢 整棟 ▾」裡面選「整棟」） */
+function doReset() {
   if (!M) return;
   if (st.view === 'sk') {
     st.skHide.clear(); st.skSel = null; st.skFloor = null; st.skOff.clear(); hideStack.length = 0;   // 「整棟」也把藏起來的拿回來
@@ -2154,18 +2220,28 @@ function layout() {
   const vr = view.getBoundingClientRect();
   ['pins', 'draw', 'laps', 'meas'].forEach(id => { const e = document.getElementById(id); e.style.left = vr.left + 'px'; e.style.top = vr.top + 'px'; e.style.width = vr.width + 'px'; e.style.height = vr.height + 'px'; });
   const dr = document.getElementById('draw'); dr.setAttribute('width', vr.width); dr.setAttribute('height', vr.height);
-  const mb = document.getElementById('markBtn'); mb.style.top = (vr.top + 10) + 'px'; mb.style.right = (innerWidth - vr.right + 12) + 'px';
+  // 最右邊「🛠 收起／功能」（2026-11-16），收起來的時候隱藏、量尺寸、圈起來都不顯示（body.tools-off）
+  renderToolsBtn();
+  const tb = document.getElementById('toolsBtn'); tb.style.top = (vr.top + 10) + 'px'; tb.style.right = (innerWidth - vr.right + 12) + 'px';
+  const base = innerWidth - vr.right + 12 + (tb.offsetWidth ? tb.offsetWidth + 8 : 0);
+  const mb = document.getElementById('markBtn'); mb.style.top = (vr.top + 10) + 'px'; mb.style.right = base + 'px';
   // 圈的時候那條放在畫面上方中間、按鈕下面（窄的手機放在按鈕下面一點，不會擋到按鈕）
   // 量尺寸：按鈕在「圈起來」左邊；那條跟圈的那條同一個位置（一次只會有一個）
   // 施工人員沒有「圈起來」：量尺寸就靠右邊（mb.offsetWidth＝0）
-  const me = document.getElementById('measBtn'); me.style.top = mb.style.top; me.style.right = (innerWidth - vr.right + 12 + (mb.offsetWidth ? mb.offsetWidth + 8 : 0)) + 'px';
+  const me = document.getElementById('measBtn'); me.style.top = mb.style.top; me.style.right = (base + (mb.offsetWidth ? mb.offsetWidth + 8 : 0)) + 'px';
   // 隱藏：在量尺寸左邊
-  const hb = document.getElementById('hideBtn'); hb.style.top = mb.style.top; hb.style.right = (parseFloat(me.style.right) + (me.offsetWidth || 0) + 8) + 'px';
+  const hb = document.getElementById('hideBtn'); hb.style.top = mb.style.top; hb.style.right = (parseFloat(me.style.right) + (me.offsetWidth ? me.offsetWidth + 8 : 0)) + 'px';
   // 右上角的按鈕佔掉的寬度要讓開（使用者 2026-11-14 截圖：量的那條蓋住「結束量」）；左邊放不下 330 px 就放到按鈕下面
-  const btnW = 12 + (mb.offsetWidth ? mb.offsetWidth + 8 : 0) + (me.offsetWidth ? me.offsetWidth + 8 : 0) + (hb.offsetWidth ? hb.offsetWidth + 8 : 0), room = vr.width - btnW - 8;
+  const btnW = 12 + (tb.offsetWidth ? tb.offsetWidth + 8 : 0) + (mb.offsetWidth ? mb.offsetWidth + 8 : 0) + (me.offsetWidth ? me.offsetWidth + 8 : 0) + (hb.offsetWidth ? hb.offsetWidth + 8 : 0);
+  // 左上角「🏢 整棟 ▾」：跟右邊的按鈕擠在一起就放到下一排
+  const fb = document.getElementById('floorBtn'), fw = fb.offsetWidth ? fb.offsetWidth + 18 : 0, wrap = fw && fw + btnW > vr.width;
+  fb.style.left = (vr.left + 10) + 'px'; fb.style.top = (vr.top + (wrap ? 50 : 10)) + 'px';
+  const fp = document.getElementById('floorPanel'), fpTop = parseFloat(fb.style.top) + (fb.offsetHeight || 34) + 6;
+  fp.style.left = fb.style.left; fp.style.top = fpTop + 'px'; fp.style.maxHeight = Math.max(120, vr.bottom - fpTop - 10) + 'px';
+  const leftUsed = wrap ? 0 : fw, room = vr.width - btnW - 8 - leftUsed;
   const mt = document.getElementById('markBar'), narrow = room < 330;
-  mt.style.top = (vr.top + (narrow ? 50 : 10)) + 'px';
-  mt.style.left = (vr.left + (narrow ? vr.width / 2 : 8 + room / 2)) + 'px';
+  mt.style.top = (vr.top + (narrow ? (wrap ? 90 : 50) : 10)) + 'px';
+  mt.style.left = (vr.left + (narrow ? vr.width / 2 : leftUsed + 8 + room / 2)) + 'px';
   mt.style.width = Math.min(narrow ? vr.width - 16 : room, 520) + 'px';
   const mz = document.getElementById('measBar'); mz.style.top = mt.style.top; mz.style.left = mt.style.left; mz.style.width = mt.style.width;
   const hz = document.getElementById('hideBar'); hz.style.top = mt.style.top; hz.style.left = mt.style.left; hz.style.width = mt.style.width;
