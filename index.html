@@ -366,7 +366,8 @@ img[data-cap] { cursor:zoom-in; }
 .dlcols > div { min-width:0; }
 .cmark { flex:none; border:1.5px solid var(--orange); color:var(--orange); background:#fff; border-radius:8px; padding:4px 9px; font-size:13.5px; font-weight:bold; }
 /* 發包的報價單、合約檔案（只有開發者，2026-11-14） */
-.cfs { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.cfs { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:center; }
+.cflab { font-size:13px; font-weight:bold; color:var(--muted); margin-right:2px; }   /* 💰 報價單／📐 圖說（第 43 版） */
 .cf { border:0; background:#FDECEC; color:#B42318; border-radius:8px; padding:4px 9px; font-size:13.5px; font-weight:bold; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .cf.img { background:#E8F1FB; color:#1C5D99; }
 .cfup { border:1.5px dashed #1C5D99; background:#fff; color:#1C5D99; border-radius:8px; padding:3px 9px; font-size:13.5px; font-weight:bold; }
@@ -404,7 +405,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/16a';
+var WEB_VERSION = '11/16b';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1513,6 +1514,8 @@ function contractBook(items) {
     done: live.filter(function (c) { return c.done; }).sort(function (a, b) { return cmp(b.date || '', a.date || '') || ((a.order || 0) - (b.order || 0)); }) };
 }
 function money(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+/** 單價、數量：350、350.5、1,200（跟摺疊機 Contract.num 一樣，最多兩位小數） */
+function cNum(v) { var n = Number(v); if (!isFinite(n)) return ''; var r = Math.round(n * 100) / 100, i = Math.trunc(r), f = Math.abs(r - i); return money(i) + (f ? String(f.toFixed(2)).replace(/^0/, '').replace(/0+$/, '') : ''); }
 
 function renderSite() {
   var o = S.office, site = S.site, t = todayYmd();
@@ -1692,7 +1695,7 @@ function renderContracts() {
   if (S.contractTab === 0) {
     if (!b.todo.length) h += '<div class="card sub" style="font-size:15px">' + (b.done.length ? '全部都發包了。' : '還沒有發包資料。') + (ed ? '要加工項按右上「＋ 新增工項」。' : '') + '</div>';
     b.todo.forEach(function (c) {
-      var inner = '<span class="grow">' + esc(c.name) + (c.note ? '<span class="sub" style="display:block">' + esc(c.note) + '</span>' : '') + (ed ? cfChips(c) : '') + '</span>';
+      var inner = '<span class="grow">' + esc(c.name) + (c.note ? '<span class="sub" style="display:block">' + esc(c.note) + '</span>' : '') + (ed ? cfChips(c) : cfViewChips(c)) + '</span>';
       if (!ed) { h += '<div class="item">' + inner + '</div>'; return; }
       h += '<div class="item" style="cursor:pointer" data-act="cedit" data-v="' + esc(c.id) + '" data-cid="' + esc(c.id) + '">' + inner +
         '<button class="cmark" data-act="cmark" data-v="' + esc(c.id) + '">標成已發包</button></div>';
@@ -1701,20 +1704,27 @@ function renderContracts() {
   } else {
     if (!b.done.length) h += '<div class="card sub" style="font-size:15px">還沒有已發包的工項。</div>';
     else if (showMoney) {
-      var total = 0, noAmt = 0; b.done.forEach(function (c) { if (c.amount != null) total += Number(c.amount) || 0; else noAmt++; });
+      // 單價還沒填數量的先不算（第 43 版，使用者 2026-11-16 選「單價＋數量自動算」）
+      var total = 0, noAmt = 0, unitNo = 0;
+      b.done.forEach(function (c) { if (c.amount != null) total += Number(c.amount) || 0; else if (c.unitPrice != null) unitNo++; else noAmt++; });
       h += '<div class="card" style="background:#F3ECFA"><div class="row"><span class="grow" style="font-size:15px">已發包合計</span><b style="font-size:19px;color:var(--purple)">NT$ ' + money(total) + '</b></div>' +
+        (unitNo ? '<div class="sub" style="font-size:12.5px">其中 ' + unitNo + ' 項是單價、還沒填數量（先不算）</div>' : '') +
         (noAmt ? '<div class="sub" style="font-size:12.5px">其中 ' + noAmt + ' 項還沒填金額</div>' : '') + '</div>';
     }
     b.done.forEach(function (c) {
+      var unitLine = showMoney && c.unitPrice != null ? '<span style="display:block;font-size:13.5px;color:var(--purple)">單價 NT$ ' + cNum(c.unitPrice) + ' / ' + esc(c.unit || '單位') +
+          (c.qty != null ? ' × ' + cNum(c.qty) + ' ' + esc(c.unit || '') : '（數量未填）') + '</span>'
+        : (!showMoney && c.qty != null ? '<span style="display:block;font-size:13.5px">數量 ' + cNum(c.qty) + ' ' + esc(c.unit || '') + '</span>' : '');
       h += '<div class="item"' + (ed ? ' style="cursor:pointer" data-act="cedit" data-v="' + esc(c.id) + '" data-cid="' + esc(c.id) + '"' : '') + '><span class="grow"><b style="display:block"><span style="color:var(--green)">✓ </span>' + esc(c.name) + '</b>' +
-        '<span style="display:block;font-size:14px">' + esc([c.vendor || '（沒填廠商）', dateOf(c.date) ? rocDate(c.date) : ''].filter(Boolean).join(' ・ ')) + '</span>' +
-        (c.note ? '<span class="sub" style="display:block">' + esc(c.note) + '</span>' : '') + (ed ? cfChips(c) : '') + '</span>' +
-        (showMoney ? (c.amount != null ? '<b style="color:var(--purple);font-size:15px;white-space:nowrap">NT$ ' + money(c.amount) + '</b>' : '<span class="sub">金額未填</span>') : '') +
+        '<span style="display:block;font-size:14px">' + esc([c.vendor || '（沒填廠商）', dateOf(c.date) ? rocDate(c.date) : ''].filter(Boolean).join(' ・ ')) + '</span>' + unitLine +
+        (c.note ? '<span class="sub" style="display:block">' + esc(c.note) + '</span>' : '') + (ed ? cfChips(c) : cfViewChips(c)) + '</span>' +
+        (showMoney ? (c.amount != null ? '<b style="color:var(--purple);font-size:15px;white-space:nowrap">NT$ ' + money(c.amount) + '</b>' : '<span class="sub">' + (c.unitPrice != null ? '數量未填' : '金額未填') + '</span>') : '') +
         (ed ? '<span class="arrow">›</span>' : '') + '</div>';
     });
-    if (ed && b.done.length) h += '<div class="note" style="margin-top:4px">點工項可以改廠商、日期' + (o.money ? '、金額' : '') + '，或退回未發包。' + cfNote() + '</div>';
+    if (ed && b.done.length) h += '<div class="note" style="margin-top:4px">點工項可以改廠商、日期' + (o.money ? '、金額（總價或單價）' : '') + '，或退回未發包。' + cfNote() + '</div>';
   }
-  return h + (ed ? '' : '<div class="note" style="margin-top:4px">只有開發者可以修改發包。</div>') + '</div>';
+  var hasView = !ed && o.cfiles && (o.cfiles[site] || []).length;
+  return h + (ed ? '' : '<div class="note" style="margin-top:4px">' + (hasView ? '📎 工項下面的檔案點了打開看。' : '') + '只有開發者可以修改發包。</div>') + '</div>';
 }
 
 // ---------- 發包：開發者在 iPad／電腦也能改（使用者 2026-11-14「Ipad是開發者權限為何不能編輯」） ----------
@@ -1822,8 +1832,23 @@ function contractProblem(m) {
   if (!String(m.name || '').trim()) return '請輸入工項名稱';
   if (m.isNew && m.names.indexOf(String(m.name).trim()) >= 0) return '已經有「' + String(m.name).trim() + '」了';
   if (m.done && !parseRoc(m.date)) return '發包日期看不懂，請寫成 115.11.09';
-  if (m.money && /[^\d,\s]/.test(String(m.amount || ''))) return '金額只能打數字';
+  if (m.money && !m.unitMode && /[^\d,\s]/.test(String(m.amount || ''))) return '金額只能打數字';
+  if (m.money && m.done && m.unitMode) {
+    var pr = cDbl(m.price), q = cDbl(m.qty);
+    if (String(m.price || '').trim() && (pr == null || pr < 0)) return '單價只能打數字';
+    if (String(m.qty || '').trim() && (q == null || q < 0)) return '數量只能打數字';
+    if (pr != null && !String(m.unit || '').trim()) return '請填單位（例如 m²）';
+  }
   return '';
+}
+// 單價（第 43 版，使用者 2026-11-16「這裡的金額有些是報每單位多少錢」→「單價＋數量自動算」；跟摺疊機一樣）
+var C_UNITS = ['m²', 'm³', '才', '坪', 'm', '式', '組', '個', '支', '噸', '車', '工'];
+function cDbl(s) { var t = String(s == null ? '' : s).replace(/[,\s]/g, ''); if (!t) return null; var n = Number(t); return isFinite(n) ? n : null; }
+function cUnitNote(m) {
+  var pr = cDbl(m.price), q = cDbl(m.qty);
+  if (pr == null) return '單價只有你和老闆看得到；主任看不到';
+  if (q != null) return '＝ NT$ ' + money(Math.round(pr * q)) + '（算進已發包合計）';
+  return '數量還沒填：先不算進已發包合計';
 }
 function contractModal(m) {
   var err = m.err ? '<div style="color:var(--red);font-size:14px;margin-top:6px">' + esc(m.err) + '</div>' : '';
@@ -1839,8 +1864,16 @@ function contractModal(m) {
     var vs = uniq(((S.s && S.s.vendors) || []).concat(((S.office && S.office.books && S.office.books[S.site]) || []).map(function (x) { return x.vendor; })).filter(Boolean)).slice(0, 12);
     if (vs.length) h += '<div class="chips" style="margin-top:6px">' + vs.map(function (v) { return chip('mcvendor', v, v, m.vendor === v, true); }).join('') + '</div>';
     h += '<div class="label" style="margin-top:10px">發包日期（民國，例：115.11.14）</div><input type="text" inputmode="decimal" data-f="m.date" value="' + esc(m.date) + '">';
-    if (m.money) h += '<div class="label" style="margin-top:10px">發包金額（元，可以先空著）</div><input type="text" inputmode="numeric" data-f="m.amount" value="' + esc(m.amount) + '">' +
-      '<div class="sub" style="font-size:12.5px">只有你和老闆看得到；主任看不到</div>';
+    if (m.money) {
+      h += '<div class="chips" style="margin-top:10px">' + chip('mcunit', '0', '總價', !m.unitMode) + chip('mcunit', '1', '單價（每單位）', m.unitMode) + '</div>';
+      if (!m.unitMode) h += '<div class="label" style="margin-top:8px">發包金額（元，可以先空著）</div><input type="text" inputmode="numeric" data-f="m.amount" value="' + esc(m.amount) + '">' +
+        '<div class="sub" style="font-size:12.5px">只有你和老闆看得到；主任看不到</div>';
+      else h += '<div class="row2" style="margin-top:8px"><div><div class="label">單價（元／每單位）</div><input type="text" inputmode="decimal" data-f="m.price" value="' + esc(m.price) + '"></div>' +
+        '<div><div class="label">單位</div><input type="text" data-f="m.unit" maxlength="8" value="' + esc(m.unit) + '"></div></div>' +
+        '<div class="chips" style="margin-top:6px">' + C_UNITS.map(function (u) { return chip('mcunitpick', u, u, m.unit === u, true); }).join('') + '</div>' +
+        '<div class="label" style="margin-top:8px">數量（可以先空著）</div><input type="text" inputmode="decimal" data-f="m.qty" value="' + esc(m.qty) + '">' +
+        '<div id="mcunitnote" style="font-size:14px;margin-top:6px;color:var(--purple);font-weight:bold">' + esc(cUnitNote(m)) + '</div>';
+    }
   }
   h += '<div class="label" style="margin-top:10px">備註（可以空著）</div><textarea data-f="m.note" maxlength="200">' + esc(m.note) + '</textarea>';
   var p = contractProblem(m);
@@ -1853,7 +1886,8 @@ function cOpen(c, isNew, done) {
   var o = S.office, live = contractBook(o && o.books ? o.books[S.site] : []);
   // site：打開的時候是哪個工地就存哪個（不要用按「確定」那時候的 S.site：背景登入回來可能換了工地）
   S.modal = { type: 'contract', site: S.site, c: c, isNew: isNew, name: c.name || '', done: done, vendor: c.vendor || '',
-    date: rocDate(dateOf(c.date) ? c.date : todayYmd()), amount: c.amount != null ? money(c.amount) : '', note: c.note || '',
+    date: rocDate(dateOf(c.date) ? c.date : todayYmd()), amount: c.amount != null && c.unitPrice == null ? money(c.amount) : '', note: c.note || '',
+    unitMode: c.unitPrice != null, price: c.unitPrice != null ? cNum(c.unitPrice) : '', unit: c.unit || '', qty: c.qty != null ? cNum(c.qty) : '',
     money: !!(o && o.money), names: live.todo.concat(live.done).map(function (x) { return x.name; }), busy: false, err: '', ask: false };
   renderModal();
 }
@@ -1868,6 +1902,8 @@ ACT.cedit = function (id) { var c = cFind(id); if (c) cOpen(c, false, !!c.done);
 ACT.cmark = function (id) { var c = cFind(id); if (c) cOpen(c, false, true); };   // 標成已發包：直接打開填廠商、日期
 ACT.mcdone = function (v) { var m = S.modal; if (!m) return; m.done = v === '1'; renderModal(); };
 ACT.mcvendor = function (v) { var m = S.modal; if (!m) return; m.vendor = v; renderModal(); };
+ACT.mcunit = function (v) { var m = S.modal; if (!m) return; m.unitMode = v === '1'; renderModal(); };
+ACT.mcunitpick = function (v) { var m = S.modal; if (!m) return; m.unit = v; renderModal(); };
 ACT.mcask = function () { var m = S.modal; if (!m) return; m.ask = true; m.err = ''; renderModal(); };
 ACT.mcnodel = function () { var m = S.modal; if (!m) return; m.ask = false; renderModal(); };
 function cCommit(item, okMsg, after) {
@@ -1891,6 +1927,13 @@ ACT.mcsave = function () {
   var item = m.isNew ? { id: cNewId(), name: name, done: false, vendor: '', date: '', note: String(m.note || '').trim(), order: c.order || 0 }
     : Object.assign({}, c, { name: name, done: m.done, vendor: m.done ? String(m.vendor || '').trim() : (c.vendor || ''), date: m.done ? parseRoc(m.date) : (c.date || ''),
       note: String(m.note || '').trim(), amount: m.done && m.money ? (amt ? Number(amt) : null) : (c.amount != null ? c.amount : null) });
+  // 單價（第 43 版）：有數量就算總價（四捨五入到元）；沒填單價＝跟沒填金額一樣
+  if (!m.isNew && m.done && m.money) {
+    var pr = m.unitMode ? cDbl(m.price) : null, q = cDbl(m.qty);
+    delete item.unitPrice; delete item.unit; delete item.qty;
+    if (pr != null) { item.unitPrice = pr; item.unit = String(m.unit || '').trim(); if (q != null) item.qty = q; item.amount = q != null ? Math.round(pr * q) : null; }
+    else if (m.unitMode) item.amount = null;
+  }
   if (item.done && !c.done && !m.isNew) S.contractTab = 1;
   cCommit(item, '✅ 已存到雲端：' + name + (item.done ? '（已發包）' : '') + '。摺疊機同步後就看得到。');
 };
@@ -1910,21 +1953,38 @@ cfActs();
 // 老闆、主任、其他管理者在任何畫面都看不到。每個檔案用 appProperties.cid 記是哪個工項（發包那份 json 不動）。
 // 電腦、iPad：工項下面「＋ 檔案」選 PDF 或照片；電腦也可以把檔案直接拖到工項上。點 📄 打開（兩指放大）；刪除在工項的編輯視窗裡。
 var CF_MAX = 40 * 1024 * 1024;
+// 第 43 版（使用者 2026-11-16「發包上傳的資料夾分成報價單跟圖說兩個，報價單只有老闆開發者看得到」→ 圖說看得到發包的都可以）
+var CF_FOLDER_KIND = { '報價單': 'quote', '圖說': 'drawing' };
+function cfFolder(kind) { return kind === 'drawing' ? '圖說' : '報價單'; }
 S.cfile = { site: '', list: null, busy: '', err: '', need: false, loading: false };
-function cfIsImg(f) { return /^image\//.test(f.mimeType || '') || /\.(jpe?g|png|webp|gif)$/i.test(f.name || ''); }
+function cfIsImg(f) { return /^image\//.test(f.mimeType || f.mime || '') || /\.(jpe?g|png|webp|gif)$/i.test(f.name || ''); }
 function cfOf(cid) { var st = S.cfile; return st.site === S.site && st.list ? st.list.filter(function (f) { return f.cid === cid; }) : []; }
 function cfBase(n) { return String(n || '').replace(/\.(pdf|jpe?g|png|webp|gif)$/i, ''); }
-function cfChips(c) {
-  var st = S.cfile, h = '<span class="cfs">';
-  cfOf(c.id).forEach(function (f) {
+/** 一組（💰 報價單／📐 圖說）：標籤＋檔案＋「＋ 報價單／圖說」（add＝開發者才有） */
+function cfGroup(label, fs, act, add) {
+  if (!fs.length && !add) return '';
+  var h = '<span class="cfs"><span class="cflab">' + label + '</span>';
+  fs.forEach(function (f) {
     var img = cfIsImg(f);
-    h += '<button class="cf' + (img ? ' img' : '') + '" data-act="cfopen" data-v="' + esc(f.id) + '" title="' + esc(f.name) + '">' + (img ? '🖼 ' : '📄 ') + esc(cfBase(f.name).slice(0, 24)) + '</button>';
+    h += '<button class="cf' + (img ? ' img' : '') + '" data-act="' + act + '" data-v="' + esc(f.id) + '" title="' + esc(f.name) + '">' + (img ? '🖼 ' : '📄 ') + esc(cfBase(f.name).slice(0, 24)) + '</button>';
   });
-  if (st.site === S.site && st.list) h += '<button class="cfup" data-act="cfadd" data-v="' + esc(c.id) + '">＋ 檔案</button>';
-  return h + '</span>';
+  return h + (add || '') + '</span>';
+}
+function cfChips(c) {
+  var st = S.cfile, ready = st.site === S.site && !!st.list, fs = cfOf(c.id);
+  var add = function (kind) { return ready ? '<button class="cfup" data-act="cfadd" data-v="' + esc(c.id + '|' + kind) + '">＋ ' + cfFolder(kind) + '</button>' : ''; };
+  return cfGroup('💰 報價單', fs.filter(function (f) { return f.kind !== 'drawing'; }), 'cfopen', add('quote')) +
+    cfGroup('📐 圖說', fs.filter(function (f) { return f.kind === 'drawing'; }), 'cfopen', add('drawing'));
+}
+/** 老闆、主任、公司：收件服務給的（報價單只有老闆拿得到），點了打開看 */
+function cfViewOf(cid) { var o = S.office, m = o && o.cfiles; return m && m[S.site] ? m[S.site].filter(function (f) { return f.cid === cid; }) : []; }
+function cfViewChips(c) {
+  var fs = cfViewOf(c.id);
+  return cfGroup('💰 報價單', fs.filter(function (f) { return f.kind !== 'drawing'; }), 'cfview') + cfGroup('📐 圖說', fs.filter(function (f) { return f.kind === 'drawing'; }), 'cfview');
 }
 function cfNote() {
-  return '<br>📎「＋ 檔案」放報價單、合約（PDF 或照片）' + (matchMedia('(hover:hover)').matches ? '，也可以把檔案直接拖到工項上' : '') + '；只有你看得到，老闆、主任看不到。';
+  return '<br>📎「＋ 報價單」「＋ 圖說」放 PDF 或照片' + (matchMedia('(hover:hover)').matches ? '（也可以把檔案直接拖到工項上，先放報價單）' : '') +
+    '；點工項可以把檔案搬到另一個資料夾或刪掉。報價單只有你和老闆看得到；圖說老闆、主任、公司都看得到。';
 }
 /** 讀這個工地的檔案清單（要雲端鑰匙：先跟收件服務拿摺疊機交的，沒有才要按「連上」） */
 function cfLoad(force) {
@@ -1937,14 +1997,26 @@ function cfLoad(force) {
     if (S.cfile !== st) return;
     if (!dHasToken()) { st.loading = false; st.need = true; renderSoft(); return; }
     st.need = false;
+    // 第 43 版：<工地>/報價單｜圖說/ 兩個資料夾；直接放在 <工地>/ 的（分資料夾以前的）＝報價單
     dPath(['工地App', '發包檔案', cSafe(site)], false).then(function (dir) {
       if (!dir) return [];
-      var q = "'" + dq(dir) + "' in parents and trashed = false and mimeType != '" + DFOLDER + "'";
-      return dJSON('GET', '/drive/v3/files?pageSize=300&orderBy=createdTime&fields=files(id,name,mimeType,modifiedTime,size,appProperties)&q=' + encodeURIComponent(q))
-        .then(function (o) { return o.files || []; });
+      var F = 'files(id,name,mimeType,modifiedTime,createdTime,size,appProperties,properties,parents)';
+      var q = "'" + dq(dir) + "' in parents and trashed = false";
+      return dJSON('GET', '/drive/v3/files?pageSize=300&orderBy=createdTime&fields=' + F + '&q=' + encodeURIComponent(q)).then(function (o) {
+        var all = o.files || [], subs = {};
+        all.forEach(function (f) { if (f.mimeType === DFOLDER && CF_FOLDER_KIND[f.name]) subs[f.id] = CF_FOLDER_KIND[f.name]; });
+        var top = all.filter(function (f) { return f.mimeType !== DFOLDER; }).map(function (f) { f._kind = 'quote'; f._parent = dir; return f; });
+        var ids = Object.keys(subs); if (!ids.length) return top;
+        var q2 = '(' + ids.map(function (id) { return "'" + dq(id) + "' in parents"; }).join(' or ') + ") and trashed = false and mimeType != '" + DFOLDER + "'";
+        return dJSON('GET', '/drive/v3/files?pageSize=500&orderBy=createdTime&fields=' + F + '&q=' + encodeURIComponent(q2)).then(function (o2) {
+          return top.concat((o2.files || []).map(function (f) { var p = (f.parents || [])[0]; f._kind = subs[p] || 'quote'; f._parent = p; return f; }));
+        });
+      });
     }).then(function (files) {
       st.loading = false; if (S.cfile !== st) return;
-      st.list = files.map(function (f) { return { id: f.id, name: f.name, mimeType: f.mimeType, modifiedTime: f.modifiedTime, size: +f.size || 0, cid: (f.appProperties || {}).cid || '' }; });
+      files.sort(function (a, b) { return cmp(a.createdTime || '', b.createdTime || ''); });
+      st.list = files.map(function (f) { return { id: f.id, name: f.name, mimeType: f.mimeType, modifiedTime: f.modifiedTime, size: +f.size || 0,
+        cid: (f.properties || {}).cid || (f.appProperties || {}).cid || '', kind: f._kind, parent: f._parent }; });
       st.err = ''; renderSoft(); if (S.modal && S.modal.type === 'contract') renderModal();
     }).catch(function (e) {
       st.loading = false; if (S.cfile !== st) return;
@@ -1966,7 +2038,8 @@ function cfName(f, item, i, kind) {
   var ext = /png/i.test(f.type || f.name) ? '.png' : /webp/i.test(f.type || f.name) ? '.webp' : /gif/i.test(f.type || f.name) ? '.gif' : '.jpg';
   return cSafe(item ? item.name : '發包') + '_' + (d.getFullYear() - 1911) + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds()) + (i ? '_' + (i + 1) : '') + ext;
 }
-function cfUpload(site, cid, files) {
+function cfUpload(site, cid, files, kind) {
+  kind = kind === 'drawing' ? 'drawing' : 'quote';
   var st = S.cfile; if (st.busy || st.site !== site) return;
   var item = ((S.office && S.office.books && S.office.books[site]) || []).filter(function (x) { return x.id === cid; })[0];
   var ok = files.filter(function (f) { return cfKind(f) && f.size <= CF_MAX; }), bad = files.length - ok.length;
@@ -1974,20 +2047,23 @@ function cfUpload(site, cid, files) {
   if (!dHasToken()) { S.contractMsg = '要先連上 Google 雲端：按一次工項下面的「＋ 檔案」。'; render(); return; }
   var done = 0;
   st.busy = '上傳中 1/' + ok.length + '…'; S.contractMsg = ''; render();
-  dPath(['工地App', '發包檔案', cSafe(site)], true).then(function (dir) {
+  dPath(['工地App', '發包檔案', cSafe(site), cfFolder(kind)], true).then(function (dir) {
     if (!dir) throw { error: 'DRIVE', message: '找不到雲端的「工地App」資料夾（Google 帳號對嗎？）' };
     var chain = Promise.resolve();
     ok.forEach(function (f, i) {
       chain = chain.then(function () {
         st.busy = '上傳中 ' + (i + 1) + '/' + ok.length + '：' + f.name; renderSoft();
-        var kind = cfKind(f), mime = kind === 'pdf' ? 'application/pdf' : (f.type || 'image/jpeg');
-        return dCreate(dir, cfName(f, item, i, kind), mime, f, { appProperties: { cid: cid } }).then(function () { done++; });
+        var fk = cfKind(f), mime = fk === 'pdf' ? 'application/pdf' : (f.type || 'image/jpeg');
+        // cid、kind 也寫在 properties：收件服務才知道是哪個工項（老闆、主任看的時候）
+        return dCreate(dir, cfName(f, item, i, fk), mime, f, { appProperties: { cid: cid }, properties: { cid: cid, kind: kind } }).then(function () { done++; });
       });
     });
     return chain;
   }).then(function () {
     st.busy = '';
-    S.contractMsg = '✅ 傳好了 ' + done + ' 個檔案' + (item ? '（' + item.name + '）' : '') + (bad ? '；' + bad + ' 個不是 PDF／照片或超過 40 MB，沒有傳' : '') + '。只有你看得到。';
+    S.contractMsg = '✅ 傳好了 ' + done + ' 個到「' + cfFolder(kind) + '」' + (item ? '（' + item.name + '）' : '') + (bad ? '；' + bad + ' 個不是 PDF／照片或超過 40 MB，沒有傳' : '') + '。' +
+      (kind === 'drawing' ? '老闆、主任、公司都看得到。' : '只有你和老闆看得到。');
+    webPing('cfile', site);
     cfLoad(true); render();
   }).catch(function (e) {
     st.busy = ''; S.contractMsg = '沒有傳完：' + dlErrText(e) + (done ? '（已經傳了 ' + done + ' 個）' : '') + '。再傳一次。';
@@ -1997,14 +2073,16 @@ function cfUpload(site, cid, files) {
 /** 編輯工項的視窗：這個工項的檔案，可以刪 */
 function cfModalList(m) {
   var fs = cfOf(m.c.id), st = S.cfile;
-  var h = '<div class="label" style="margin-top:12px">📎 報價單、合約（只有你看得到）</div>';
+  var h = '<div class="label" style="margin-top:12px">📎 報價單（只有你和老闆看得到）、圖說（老闆、主任、公司都看得到）</div>';
   if (!st.list) return h + '<div class="sub" style="font-size:13.5px">' + (st.need ? '要先在發包清單按「連上」' : '讀取中…') + '</div>';
-  if (!fs.length) h += '<div class="sub" style="font-size:13.5px">還沒有檔案。關掉這個視窗，按工項下面的「＋ 檔案」加。</div>';
+  if (!fs.length) h += '<div class="sub" style="font-size:13.5px">還沒有檔案。關掉這個視窗，按工項下面的「＋ 報價單」「＋ 圖說」加。</div>';
   fs.forEach(function (f) {
-    var nm = (cfIsImg(f) ? '🖼 ' : '📄 ') + esc(f.name);
+    var nm = (f.kind === 'drawing' ? '📐 ' : '💰 ') + (cfIsImg(f) ? '🖼 ' : '📄 ') + esc(f.name);
     if (m.cfAsk === f.id) h += '<div class="cfrow" style="background:#FFF4F2"><span class="grow">刪掉 ' + nm + '？</span>' +
       '<button style="background:#EEF1F4" data-act="mcfno"' + (m.cfBusy ? ' disabled' : '') + '>不要</button><button style="background:var(--red);color:#fff" data-act="mcfyes" data-v="' + esc(f.id) + '"' + (m.cfBusy ? ' disabled' : '') + '>' + (m.cfBusy ? '刪除中…' : '刪除') + '</button></div>';
-    else h += '<div class="cfrow"><span class="grow">' + nm + '</span><button style="background:none;color:var(--red)" data-act="mcfdel" data-v="' + esc(f.id) + '">刪除</button></div>';
+    else h += '<div class="cfrow"><span class="grow">' + nm + '</span>' +
+      '<button style="background:none;color:var(--navy)" data-act="mcfmove" data-v="' + esc(f.id) + '"' + (m.cfBusy ? ' disabled' : '') + '>搬到' + cfFolder(f.kind === 'drawing' ? 'quote' : 'drawing') + '</button>' +
+      '<button style="background:none;color:var(--red)" data-act="mcfdel" data-v="' + esc(f.id) + '">刪除</button></div>';
   });
   if (m.cfMsg) h += '<div class="sub" style="font-size:13px;color:var(--green)">' + esc(m.cfMsg) + '</div>';
   return h;
@@ -2012,12 +2090,48 @@ function cfModalList(m) {
 function cfActs() {
   ACT.pdfsave = pdfSave;
   ACT.cflogin = function () { dLogin(function () { cfLoad(true); render(); }, function (msg) { S.contractMsg = msg; render(); }); };
-  ACT.cfadd = function (cid) {
+  ACT.cfadd = function (v) {
     if (S.cfile.busy) return;
-    S.cfFor = cid; S.cfSite = S.site;
+    var p = String(v || '').split('|');   // 「工項 id|quote 或 drawing」（第 43 版）
+    S.cfFor = p[0]; S.cfKind = p[1] === 'drawing' ? 'drawing' : 'quote'; S.cfSite = S.site;
     // 要在按的當下直接打開選檔案（iPad 才會出來）；還沒有雲端鑰匙就先連上，再按一次
-    if (!dHasToken()) { dLogin(function () { S.contractMsg = '已連上雲端，再按一次「＋ 檔案」選檔案。'; cfLoad(true); render(); }, function (msg) { S.contractMsg = msg; render(); }); return; }
+    if (!dHasToken()) { dLogin(function () { S.contractMsg = '已連上雲端，再按一次「＋ ' + cfFolder(S.cfKind) + '」選檔案。'; cfLoad(true); render(); }, function (msg) { S.contractMsg = msg; render(); }); return; }
     var el = $('cfpick'); el.value = ''; el.click();
+  };
+  // 老闆、主任、公司打開（收件服務第 43 版 cfile，一段 4 MB 接起來）
+  ACT.cfview = function (id) {
+    var o = S.office, f = ((o && o.cfiles && o.cfiles[S.site]) || []).filter(function (x) { return x.id === id; })[0]; if (!f) return;
+    openPdfDoc({ id: 'cf:' + f.id, modified: f.modified, site: S.site, name: f.name }, { title: cfBase(f.name), save: f.name, img: cfIsImg(f) ? (f.mime || 'image/jpeg') : '',
+      load: function () {
+        var parts = [], total = 1;
+        function one(i) {
+          return api('cfile', { id: f.id, part: i }).then(function (r) { parts.push(b64ToBytes(r.data)); total = r.parts || 1; return i + 1 < total ? one(i + 1) : null; });
+        }
+        return one(0).then(function () {
+          var n = parts.reduce(function (a, b) { return a + b.length; }, 0), out = new Uint8Array(n), at = 0;
+          parts.forEach(function (b) { out.set(b, at); at += b.length; }); return out;
+        });
+      } });
+  };
+  // 報價單 ⇄ 圖說（開發者在工項視窗按「搬到…」）：搬資料夾，properties 的 kind、cid 一起改
+  ACT.mcfmove = function (id) {
+    var m = S.modal; if (!m || m.cfBusy) return;
+    var f = (S.cfile.list || []).filter(function (x) { return x.id === id; })[0]; if (!f) return;
+    var to = f.kind === 'drawing' ? 'quote' : 'drawing', site = S.cfile.site;
+    m.cfBusy = true; m.cfMsg = ''; renderModal();
+    var fail = function (msg) { if (S.modal !== m) return; m.cfBusy = false; m.err = msg; renderModal(); };
+    dLogin(function () {
+      dPath(['工地App', '發包檔案', cSafe(site), cfFolder(to)], true).then(function (dir) {
+        if (!dir) throw { error: 'DRIVE', message: '找不到雲端的「工地App」資料夾' };
+        return dJSON('PATCH', '/drive/v3/files/' + encodeURIComponent(id) + '?fields=id&addParents=' + encodeURIComponent(dir) + '&removeParents=' + encodeURIComponent(f.parent || ''),
+          JSON.stringify({ properties: { cid: f.cid, kind: to } }), 'application/json; charset=UTF-8').then(function () { f.kind = to; f.parent = dir; });
+      }).then(function () {
+        webPing('cfile', site);
+        if (S.modal !== m) return;
+        m.cfBusy = false; m.err = ''; m.cfMsg = '「' + f.name + '」搬到「' + cfFolder(to) + '」了' + (to === 'drawing' ? '（老闆、主任、公司看得到）' : '（只有你和老闆看得到）');
+        renderModal(); render();
+      }).catch(function (e) { fail(dlErrText(e) + '。再按一次。'); });
+    }, fail);
   };
   ACT.cfopen = function (id) {
     var f = (S.cfile.list || []).filter(function (x) { return x.id === id; })[0]; if (!f) return;
@@ -2037,6 +2151,7 @@ function cfActs() {
     dLogin(function () {
       dTrash(id).then(function () {
         var st = S.cfile; if (st.list) st.list = st.list.filter(function (x) { return x.id !== id; });
+        webPing('cfile', st.site);
         if (S.modal !== m) return;
         m.cfBusy = false; m.cfAsk = null; m.err = ''; m.cfMsg = '已刪掉「' + (f ? f.name : '') + '」（雲端垃圾桶 30 天內救得回來）';
         renderModal(); render();
@@ -2045,7 +2160,7 @@ function cfActs() {
   };
   $('cfpick').addEventListener('change', function () {
     var fs = Array.prototype.slice.call(this.files || []);
-    if (fs.length && S.cfFor && S.cfSite === S.site) cfUpload(S.cfSite, S.cfFor, fs);
+    if (fs.length && S.cfFor && S.cfSite === S.site) cfUpload(S.cfSite, S.cfFor, fs, S.cfKind);
   });
   // 電腦：把檔案拖到工項上就上傳（拖到別的地方不會把檔案打開）
   function onItem(ev) { return ev.target && ev.target.closest ? ev.target.closest('[data-cid]') : null; }
@@ -3547,6 +3662,7 @@ document.addEventListener('input', function (ev) {
     if (mm && m.type === 'dladd') mm.textContent = dlAddNote(m);
     if (mm && m.type === 'siteedit') { m.err = ''; mm.textContent = siteEditNote(m); }
     if (mm && m.type === 'pouredit') { m.err = ''; mm.textContent = pourEditNote(m); }
+    var un = $('mcunitnote'); if (un && m.type === 'contract') un.textContent = cUnitNote(m);   // 單價×數量（第 43 版）
     if (mm && m.type === 'omat') mm.textContent = modalOk(m) ? '' : '要填廠商或數量';
     return;
   }
