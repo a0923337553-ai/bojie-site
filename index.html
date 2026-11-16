@@ -355,6 +355,10 @@ img[data-cap] { cursor:zoom-in; }
 .dlgrid .gph, .dlgrid .ph { position:relative; display:block; width:100%; padding:0; border:0; border-radius:8px; overflow:hidden; background:#DDE5EA; }
 .dlgrid img { display:block; width:100%; aspect-ratio:4/3; object-fit:cover; }
 .dlgrid .new { position:absolute; top:6px; left:6px; background:var(--warn); color:#fff; font-size:11px; border-radius:6px; padding:1px 5px; }
+/* 照片右上角 ✕ 直接刪（使用者 2026-11-16「能否在這裡直接有打叉功能，不然刪除照片很不直覺」）：深色圓底白叉，外圈 44px 都算按到 */
+.dlgrid .gx { position:absolute; top:0; right:0; width:44px; height:44px; margin:0; padding:0; border:0; background:transparent; cursor:pointer; z-index:2;
+  isolation:isolate; color:#fff; font-size:16px; font-weight:bold; line-height:44px; text-align:center; }
+.dlgrid .gx::before { content:''; position:absolute; inset:7px; z-index:-1; border-radius:50%; background:rgba(31,41,51,.8); border:1.5px solid #fff; box-sizing:border-box; }
 .dlgrid .gc { font-size:14px; font-weight:bold; margin-top:4px; }
 .dlgrid .gl { font-size:13px; line-height:17px; white-space:pre-wrap; }
 /* iPad、電腦：撐滿畫面（使用者 2026-11-14「這兩張是ipad上的畫面 能否優化成它的大小」：640 寬在 iPad 上中間一窄條、兩邊空太多）
@@ -400,7 +404,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/15j';
+var WEB_VERSION = '11/16a';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1549,7 +1553,7 @@ function pourDev() { return !!S.s && !S.asCode && (S.s.dev === true || isOwner()
 SITE_ACTS.pouredit = function (id) {
   var d = ((S.office && S.office.pours) || []).filter(function (x) { return x.id === id; })[0]; if (!d || !pourDev()) return;
   var p = pourOf(d);
-  S.modal = { type: 'pouredit', id: id, name: d.name, part: p.part || docTitle(d), date: dateOf(p.pourDate) ? p.pourDate : '', m3: p.m3 || '', busy: '', err: '', ask: false };
+  S.modal = { type: 'pouredit', id: id, name: d.name, part: p.part || docTitle(d), date: dateOf(p.pourDate) ? p.pourDate : '', m3: p.m3 || '', actual: p.actual || '', busy: '', err: '', ask: false };
   renderModal();
 };
 function pourEditProblem(m) {
@@ -1557,9 +1561,18 @@ function pourEditProblem(m) {
   if (!dateOf(m.date)) return '要選灌漿日期';
   var v = String(m.m3 == null ? '' : m.m3).trim();
   if (!v || !isFinite(Number(v)) || Number(v) < 0) return 'm³ 要打數字';
+  var a = String(m.actual == null ? '' : m.actual).trim();
+  if (a && (!isFinite(Number(a)) || Number(a) < 0)) return '實際數量要打數字（還沒灌就空白）';
   return '';
 }
-function pourEditNote(m) { var p = pourEditProblem(m); if (p) return p; var v = Number(m.m3); return '約 ' + Math.ceil(Math.round(v * 1e6) / 1e6 / 9) + ' 車（一車 9 m³）。只改手機上顯示的名稱、日期、m³，PDF 內容不變；要改 PDF 請在 BricsCAD 重新發布。'; }
+// 實際數量（收件服務第 42 版，使用者 2026-11-16「幫我新增可以填入實際數量 並顯示」）：比合計多／少（跟摺疊機 SheetDoc.actualNote 一樣）
+function pourActualNote(m3, actual) {
+  var a = String(actual == null ? '' : actual).trim(), c = String(m3 == null ? '' : m3).trim();
+  if (!a || !c || !isFinite(Number(a)) || !isFinite(Number(c))) return '';
+  var d = Math.round((Number(a) - Number(c)) * 100) / 100;
+  return d > 0 ? '多 ' + d.toFixed(2) : d < 0 ? '少 ' + (-d).toFixed(2) : '一樣';
+}
+function pourEditNote(m) { var p = pourEditProblem(m); if (p) return p; var v = Number(m.m3), an = pourActualNote(m.m3, m.actual); return (an === '一樣' ? '實際跟合計一樣。' : an ? '實際比合計' + an + ' m³。' : '') + '約 ' + Math.ceil(Math.round(v * 1e6) / 1e6 / 9) + ' 車（一車 9 m³）。只改手機上顯示的名稱、日期、m³、實際數量，PDF 內容不變；要改 PDF 請在 BricsCAD 重新發布。'; }
 function pourEditModal(m) {
   if (m.ask) return '<h3>刪掉這份灌漿數量？</h3><div style="font-size:15.5px;line-height:24px;margin:4px 0 12px">「' + esc(m.part) + '」（' + esc(m.name) + '）會丟到雲端垃圾桶（30 天內救得回來），手機、網頁都不會再列出來。</div>' +
     (m.err ? '<div class="err">' + esc(m.err) + '</div>' : '') +
@@ -1567,7 +1580,8 @@ function pourEditModal(m) {
   return '<h3>編輯灌漿數量</h3><div class="sub" style="margin:-4px 0 8px;font-size:13px">' + esc(m.name) + '</div>' +
     '<div class="label">名稱（手機上顯示的標題）</div><input type="text" data-f="m.part" maxlength="60" value="' + esc(m.part) + '">' +
     '<div class="row2" style="margin-top:8px"><div><div class="label">灌漿日期</div><input type="date" data-f="m.date" value="' + esc(m.date) + '"></div>' +
-    '<div><div class="label">合計 m³</div><input type="text" inputmode="decimal" data-f="m.m3" value="' + esc(m.m3) + '"></div></div>' +
+    '<div><div class="label">合計 m³（計算的）</div><input type="text" inputmode="decimal" data-f="m.m3" value="' + esc(m.m3) + '"></div></div>' +
+    '<div class="label" style="margin-top:8px">實際數量 m³（灌完填，還沒灌就空白）</div><input type="text" inputmode="decimal" data-f="m.actual" value="' + esc(m.actual) + '" style="font-weight:bold;color:#15804F">' +
     '<div class="note" id="mmsg" style="margin-top:6px">' + esc(m.err || pourEditNote(m)) + '</div>' +
     '<button class="big" style="margin-top:12px" id="msave" data-act="pourok"' + (pourEditProblem(m) || m.busy ? ' disabled' : '') + '>' + esc(m.busy || '存檔') + '</button>' +
     '<button class="ghost red" data-act="pourdelask"' + (m.busy ? ' disabled' : '') + '>刪除這份</button><button class="ghost" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button>';
@@ -1577,7 +1591,7 @@ function pourFail(m, e) { m.busy = ''; m.err = '沒有存到：' + (failMsg(e) |
 SITE_ACTS.pourok = function () {
   var m = S.modal; if (!m || m.type !== 'pouredit' || m.busy || pourEditProblem(m)) return;
   m.busy = '存到雲端…'; m.err = ''; renderModal();
-  api('pour', { op: 'edit', id: m.id, part: String(m.part).trim(), pourDate: m.date, m3: String(m.m3).trim() })
+  api('pour', { op: 'edit', id: m.id, part: String(m.part).trim(), pourDate: m.date, m3: String(m.m3).trim(), actual: String(m.actual == null ? '' : m.actual).trim() })
     .then(function () { pourDone(m, '✅ 已改好「' + String(m.part).trim() + '」（手機重新整理後就是新的）'); }, function (e) { pourFail(m, e); });
 };
 SITE_ACTS.pourdelask = function () { var m = S.modal; if (!m || m.type !== 'pouredit' || m.busy) return; m.ask = true; m.err = ''; renderModal(); };
@@ -1607,10 +1621,13 @@ function renderPours() {
       '<b style="font-size:17px;display:block">' + esc(p.part || docTitle(d)) + '</b>' +
       '<span style="display:block;font-size:14px;color:' + col + ';' + (day && day >= t ? 'font-weight:bold' : '') + '">' + esc(dt) + '</span>' +
       (p.m3 ? '<span style="display:block;font-size:14px">合計 ' + esc(p.m3) + ' m³' + (p.trucks ? ' ・ ' + esc(p.trucks) + ' 車' : '') + '</span>' : '') +
+      // 實際數量（開發者灌完填，收件服務第 42 版）：綠色粗體＋比合計多／少
+      (p.actual ? '<span style="display:block;font-size:15px"><b style="color:#15804F">實際 ' + esc(p.actual) + ' m³</b>' +
+        (pourActualNote(p.m3, p.actual) ? '<span style="font-size:13.5px;color:' + (Number(p.actual) > Number(p.m3) ? 'var(--warn)' : 'var(--muted)') + '">（' + esc(pourActualNote(p.m3, p.actual)) + '）</span>' : '') + '</span>' : '') +
       '<span class="sub" style="display:block;font-size:12.5px">上傳 ' + esc(shortTime(d.modified) || '─') + (re ? ' ・ 第一次 ' + esc(shortTime(d.created)) : '') + '</span></span><span class="arrow">›</span></button>';
     if (dv) h += '<button class="key" style="flex:none;margin:0 0 8px" data-act="pouredit" data-v="' + esc(d.id) + '">✎ 編輯</button></div>';
   });
-  return h + '<div class="note" style="margin-top:4px">同一份重新上傳會自動換成新的，第一次上傳的時間也會留著。' + (pourDev() ? '開發者：「✎ 編輯」可以改名稱、灌漿日期、m³，或刪掉這份。' : '') + '</div></div>';
+  return h + '<div class="note" style="margin-top:4px">同一份重新上傳會自動換成新的，第一次上傳的時間也會留著。' + (pourDev() ? '開發者：「✎ 編輯」可以改名稱、灌漿日期、m³、填實際數量，或刪掉這份。' : '') + '</div></div>';
 }
 
 /** 施工單在工地裡認的名字：「資料夾/檔名」（沒有資料夾就是檔名；施工單記號用，收件服務第 26 版） */
@@ -2117,13 +2134,13 @@ function dayPhotos(log, ws, cats, date) {
     });
     ws.forEach(function (e) {
       var first = String(e.text || '').split('\n').filter(function (x) { return x.trim(); })[0];
-      (e.photos || []).forEach(function (id) { if (wPhotoCat(log, id, e) === c) out.push({ id: id, w: 1, cat: c, line: '👷 ' + e.name + (first ? '：' + first : ''), date: roc }); });
+      (e.photos || []).forEach(function (id) { if (wPhotoCat(log, id, e) === c) out.push({ id: id, w: 1, e: e.id, cat: c, line: '👷 ' + e.name + (first ? '：' + first : ''), date: roc }); });
     });
   });
   ws.forEach(function (e) { (e.receipts || []).forEach(function (id) {
     var loc = (e.receiptLocs || {})[id];   // 單據的施作位置（收件服務第 18 版）
     var site = (e.receiptKinds || {})[id] === 'site' ? '材料現場・' : '';   // 第 29 版
-    out.push({ id: id, w: 1, cat: '材料單據', line: '👷 ' + site + e.name + '（' + e.category + '）' + (loc ? '\n📍 ' + loc : ''), date: roc });
+    out.push({ id: id, w: 1, e: e.id, cat: '材料單據', line: '👷 ' + site + e.name + '（' + e.category + '）' + (loc ? '\n📍 ' + loc : ''), date: roc });
   }); });
   return out;
 }
@@ -4737,16 +4754,18 @@ function dlGridCard(dl, cats) {
       var isNew = dl.newPh.some(function (x) { return x.file === p.file; });
       var cat = c === DL_RECEIPT ? (p.kind === 'site' ? '📍 材料現場' : '🧾 單據') + (p.vendor ? '・' + p.vendor : '') : c;
       var line = [c === DL_RECEIPT ? '' : vq, c === DL_RECEIPT && p.line ? '📍 ' + p.line : p.line].filter(Boolean).join('\n');
-      list.push('<div><button class="gph" data-act="dlgph" data-v="' + esc(p.file) + '"><img data-dlf="' + esc(p.file) + '" src="' + esc(dlSrcOf(dl, p)) + '" alt="">' + (isNew ? '<span class="new">未上傳</span>' : '') + '</button>' +
+      list.push('<div style="position:relative"><button class="gph" data-act="dlgph" data-v="' + esc(p.file) + '"><img data-dlf="' + esc(p.file) + '" src="' + esc(dlSrcOf(dl, p)) + '" alt="">' + (isNew ? '<span class="new">未上傳</span>' : '') + '</button>' +
+        '<button class="gx" data-act="dlgx" data-v="' + esc(p.file) + '" title="刪掉這張" aria-label="刪掉這張">✕</button>' +
         '<div class="gc">' + esc(cat) + '</div>' + (line ? '<div class="gl">' + esc(line) + '</div>' : '') + '<div class="sub" style="font-size:12px">' + roc + '</div></div>');
     });
   });
   var wps = dl.day ? dayPhotos(dl.day.log, dl.day.workers || [], cats, dl.date).filter(function (p) { return p.w; }) : [];
   wps.forEach(function (p) {
-    list.push('<div><div class="ph"><img data-pid="' + esc(p.id) + '" data-cap="' + esc([p.cat, p.line, p.date].filter(Boolean).join('\n')) + '" alt=""></div><div class="gc">' + esc(p.cat) + '</div>' +
+    list.push('<div style="position:relative"><div class="ph"><img data-pid="' + esc(p.id) + '" data-cap="' + esc([p.cat, p.line, p.date].filter(Boolean).join('\n')) + '" alt=""></div>' +
+      (p.e ? '<button class="gx" data-act="dlgwx" data-v="' + esc(p.id) + '" title="刪掉這張" aria-label="刪掉這張">✕</button>' : '') + '<div class="gc">' + esc(p.cat) + '</div>' +
       (p.line ? '<div class="gl">' + esc(p.line) + '</div>' : '') + '<div class="sub" style="font-size:12px">' + esc(p.date) + '</div></div>');
   });
-  return '<div class="card"><div class="ttl">📷 這天的照片（' + list.length + ' 張）</div><div class="sub" style="font-size:12.5px">開發者拍的、施工人員傳的都在這裡（跟匯出的 PDF 一樣一排兩張）；點開發者拍的可以改大項、刪掉</div>' +
+  return '<div class="card"><div class="ttl">📷 這天的照片（' + list.length + ' 張）</div><div class="sub" style="font-size:12.5px">開發者拍的、施工人員傳的都在這裡（跟匯出的 PDF 一樣一排兩張）；點開發者拍的可以改大項，右上角 ✕ 直接刪</div>' +
     (list.length ? '<div class="dlgrid">' + list.join('') + '</div>' : '<div class="sub" style="padding:8px 0;font-size:14.5px">這天沒有照片</div>') + '</div>';
 }
 /** 點一個大項：另外一頁填（跟摺疊機一樣） */
@@ -5653,6 +5672,28 @@ ACT.dlpc = function (v) { var dl = S.dl, p = dl && dlCurPhoto(dl); if (!p) retur
 ACT.dlpl = function (v) { var dl = S.dl, p = dl && dlCurPhoto(dl); if (!p) return; p.line = p.line === v ? '' : v; dlTouch(); render(); };
 ACT.dlpv = function (v) { var dl = S.dl, p = dl && dlCurPhoto(dl); if (!p) return; p.vendor = p.vendor === v ? '' : v; if (!p.vendor) delete p.vendor; dlTouch(); render(); };
 ACT.dlpk = function (v) { var dl = S.dl, p = dl && dlCurPhoto(dl); if (!p) return; if (v) p.kind = v; else delete p.kind; dlTouch(); render(); };
+// 照片右上角 ✕（使用者 2026-11-16「能否在這裡直接有打叉功能」，跟摺疊機一樣問一次）：開發者拍的＝跟「刪掉這張」一樣（存到雲端時雲端那張丟垃圾桶）
+ACT.dlgx = function (file) {
+  var dl = S.dl; if (!dl || dl.busy) return;
+  var p = (dl.e.photos || []).filter(function (x) { return x.file === file; })[0]; if (!p) return;
+  var isNew = dl.newPh.some(function (x) { return x.file === p.file; });
+  if (!confirm('刪掉這張照片？\n' + [p.category, p.line].filter(Boolean).join('：') + (isNew ? '\n（還沒上傳，刪了就沒有了）' : '\n按「存到雲端」時，雲端那張會丟到垃圾桶（30 天內救得回來）。'))) return;
+  dl.e.photos = dl.e.photos.filter(function (x) { return x.file !== p.file; }); dl.newPh = dl.newPh.filter(function (x) { return x.file !== p.file; });
+  if (dl.ph === p.file) dl.ph = '';
+  dlTouch(); render();
+};
+// 施工人員傳的：叫收件服務刪（delphoto，管理者可以；雲端丟垃圾桶），馬上從這天拿掉
+ACT.dlgwx = function (id) {
+  var dl = S.dl, ws = dl && dl.day && dl.day.workers || [];
+  var e = ws.filter(function (x) { return (x.photos || []).indexOf(id) >= 0 || (x.receipts || []).indexOf(id) >= 0; })[0]; if (!e || dl.busy) return;
+  if (!confirm('刪掉這張照片？\n這是 ' + e.name + ' 傳的，刪了他那一筆也會少這張（雲端的丟到垃圾桶，30 天內救得回來）。')) return;
+  dl.busy = '刪除中…'; render();
+  api('delphoto', { id: e.id, fileId: id }).then(function () {
+    e.photos = (e.photos || []).filter(function (x) { return x !== id; }); e.receipts = (e.receipts || []).filter(function (x) { return x !== id; });
+    delete LOGCACHE[logKey(dl.site, dl.date)]; delete LOGCACHE[logKey(dl.site, null)];
+    dl.busy = ''; render();
+  }, function (x) { dl.busy = ''; render(); alert('沒有刪掉：' + (failMsg(x) || errText(x))); });
+};
 ACT.dlpdel = function () {
   var dl = S.dl, p = dl && dlCurPhoto(dl); if (!p) return;
   if (!confirm('刪掉這張照片？' + (dl.newPh.some(function (x) { return x.file === p.file; }) ? '' : '\n存到雲端時，雲端那張也會丟到垃圾桶。'))) return;
