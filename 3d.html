@@ -129,6 +129,7 @@ body.measuring #hint{display:none}   /* 量的時候「點一下看構件」不�
 .st{font-size:11px;border-radius:5px;padding:0 5px;margin-left:4px}.st.o{background:#FFE3E3;color:#C92A2A}.st.d{background:#E6F4F1;color:#0F766E}
 textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10px;padding:8px;font:inherit;resize:vertical}
 #hint{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:4;background:rgba(31,41,51,.78);color:#fff;border-radius:12px;padding:7px 14px;font-size:13px;pointer-events:none;transition:opacity .6s;white-space:nowrap}
+#hint:empty{display:none}   /* 模型沒載入（方案還沒確定、沒有模型）時是空的：不要剩一顆黑點 */
 #side{position:fixed;z-index:6;background:#fff;box-shadow:0 -4px 18px rgba(0,0,0,.12)}
 #side .hd{display:flex;align-items:center;gap:8px;padding:10px 14px 6px;font-weight:700}
 #side .hd span{flex:1}
