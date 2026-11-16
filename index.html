@@ -405,7 +405,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/16c';
+var WEB_VERSION = '11/17a';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -759,7 +759,7 @@ function render() {
     '<button class="ghost dim" data-act="tologin" style="margin-top:14px">回登入畫面</button></div>';
   else h = ({ hub: renderHub, work: renderWork, edit: renderEdit, view: renderView, site: renderSite, pours: renderPours, sheets: renderSheets,
     pdf: renderPdf, contracts: renderContracts, todo: renderTodo, logs: renderLogs, calendar: renderCal, tasks: renderTasks,
-    people: renderPeople, adminq: renderAdminQ, dlog: renderDlog }[S.route] || renderHub)();
+    people: renderPeople, adminq: renderAdminQ, dlog: renderDlog, staff: renderStaff }[S.route] || renderHub)();
   if (S.asCode && S.route !== 'login') h = asBar() + h;   // 開發者切換成別人測試中
   $('app').innerHTML = h;
   if ($('gbtn')) mountGis();
@@ -1023,6 +1023,8 @@ function renderHub() {
   var cWeek = week ? '<div class="a-week">' + weekCalCard(f.cal) + '</div>' : '';
   var cNews = '<div class="a-news">' + newsCard(news) + '</div>';
   var cWx = S.fc && S.fc.days && S.fc.days.length ? '<div class="a-wx">' + weekWeather(S.fc) + '</div>' : '';
+  // 👷 工作狀況（所有工地；開發者、老闆、主任，收件服務第 46 版）：放在天氣那欄
+  if (staffSees()) { if (!S.staff && !S.staffBusy) setTimeout(function () { staffLoad(false); }, 0); cWx = '<div class="a-staff">' + staffCard() + '</div>' + cWx; }
   var h = renderHero() + '<div class="wrap hub' + (week ? ' has-week' : '') + '">';
   // 管理者（第 13 版）：人員管理、施工人員待處理（等你同意、未分組）
   if (isAdmin() && !S.asCode) h += adminCard();
@@ -1727,12 +1729,12 @@ function renderContracts() {
       var total = 0, noAmt = 0, unitNo = 0;
       b.done.forEach(function (c) { if (c.amount != null) total += Number(c.amount) || 0; else if (c.unitPrice != null) unitNo++; else noAmt++; });
       h += '<div class="card" style="background:#F3ECFA"><div class="row"><span class="grow" style="font-size:15px">已發包合計</span><b style="font-size:19px;color:var(--purple)">NT$ ' + money(total) + '</b></div>' +
-        (unitNo ? '<div class="sub" style="font-size:12.5px">其中 ' + unitNo + ' 項是單價、還沒填數量（先不算）</div>' : '') +
+        (unitNo ? '<div class="sub" style="font-size:12.5px">其中 ' + unitNo + ' 項實作實算、還沒填數量（先不算）</div>' : '') +
         (noAmt ? '<div class="sub" style="font-size:12.5px">其中 ' + noAmt + ' 項還沒填金額</div>' : '') + '</div>';
     }
     b.done.forEach(function (c) {
       var unitLine = showMoney && c.unitPrice != null ? '<span style="display:block;font-size:13.5px;color:var(--purple)">單價 NT$ ' + cNum(c.unitPrice) + ' / ' + esc(c.unit || '單位') +
-          (c.qty != null ? ' × ' + cNum(c.qty) + ' ' + esc(c.unit || '') : '（數量未填）') + '</span>'
+          (c.qty != null ? ' × ' + cNum(c.qty) + ' ' + esc(c.unit || '') : '（實作數量還沒填）') + '</span>'
         : (!showMoney && c.qty != null ? '<span style="display:block;font-size:13.5px">數量 ' + cNum(c.qty) + ' ' + esc(c.unit || '') + '</span>' : '');
       h += '<div class="item"' + (ed ? ' style="cursor:pointer" data-act="cedit" data-v="' + esc(c.id) + '" data-cid="' + esc(c.id) + '"' : '') + '><span class="grow"><b style="display:block"><span style="color:var(--green)">✓ </span>' + esc(c.name) + '</b>' +
         '<span style="display:block;font-size:14px">' + esc([c.vendor || '（沒填廠商）', dateOf(c.date) ? rocDate(c.date) : ''].filter(Boolean).join(' ・ ')) + '</span>' + unitLine +
@@ -1867,7 +1869,7 @@ function cUnitNote(m) {
   var pr = cDbl(m.price), q = cDbl(m.qty);
   if (pr == null) return '單價只有你和老闆看得到；主任看不到';
   if (q != null) return '＝ NT$ ' + money(Math.round(pr * q)) + '（算進已發包合計）';
-  return '數量還沒填：先不算進已發包合計';
+  return '實作數量還沒填：先不算進已發包合計';
 }
 function contractModal(m) {
   var err = m.err ? '<div style="color:var(--red);font-size:14px;margin-top:6px">' + esc(m.err) + '</div>' : '';
@@ -1884,13 +1886,13 @@ function contractModal(m) {
     if (vs.length) h += '<div class="chips" style="margin-top:6px">' + vs.map(function (v) { return chip('mcvendor', v, v, m.vendor === v, true); }).join('') + '</div>';
     h += '<div class="label" style="margin-top:10px">發包日期（民國，例：115.11.14）</div><input type="text" inputmode="decimal" data-f="m.date" value="' + esc(m.date) + '">';
     if (m.money) {
-      h += '<div class="chips" style="margin-top:10px">' + chip('mcunit', '0', '總價', !m.unitMode) + chip('mcunit', '1', '單價（每單位）', m.unitMode) + '</div>';
+      h += '<div class="chips" style="margin-top:10px">' + chip('mcunit', '0', '總價', !m.unitMode) + chip('mcunit', '1', '單價（實作實算）', m.unitMode) + '</div>';
       if (!m.unitMode) h += '<div class="label" style="margin-top:8px">發包金額（元，可以先空著）</div><input type="text" inputmode="numeric" data-f="m.amount" value="' + esc(m.amount) + '">' +
         '<div class="sub" style="font-size:12.5px">只有你和老闆看得到；主任看不到</div>';
       else h += '<div class="row2" style="margin-top:8px"><div><div class="label">單價（元／每單位）</div><input type="text" inputmode="decimal" data-f="m.price" value="' + esc(m.price) + '"></div>' +
         '<div><div class="label">單位</div><input type="text" data-f="m.unit" maxlength="8" value="' + esc(m.unit) + '"></div></div>' +
         '<div class="chips" style="margin-top:6px">' + C_UNITS.map(function (u) { return chip('mcunitpick', u, u, m.unit === u, true); }).join('') + '</div>' +
-        '<div class="label" style="margin-top:8px">數量（可以先空著）</div><input type="text" inputmode="decimal" data-f="m.qty" value="' + esc(m.qty) + '">' +
+        '<div class="label" style="margin-top:8px">實作數量（做完再填）</div><input type="text" inputmode="decimal" data-f="m.qty" value="' + esc(m.qty) + '">' +
         '<div id="mcunitnote" style="font-size:14px;margin-top:6px;color:var(--purple);font-weight:bold">' + esc(cUnitNote(m)) + '</div>';
     }
   }
@@ -3725,6 +3727,104 @@ document.addEventListener('visibilitychange', function () {
 
 // ===================== 第 15 版：派工、施工單記號、3D 只給開發者老闆主任（使用者 2026-11-10） =====================
 function isLead() { return !!S.s && ['管理者', '老闆', '主任'].indexOf(S.s.role) >= 0; }
+
+// ===================== 👷 工作狀況（所有工地；收件服務第 46 版） =====================
+// 使用者 2026-11-16「這個紅點能否在首頁看到所有的內容（所有工地」→「依照年度，時間愈晚的放愈後面，然後點進去後會有每個年度，然後每個年度都可以匯出成pdf」
+S.staff = null; S.staffBusy = false; S.staffErr = ''; S.staffMsg = ''; S.staffOpen = null;
+function staffSees() { return !!S.s && (isLead() || isOwner()) && Number(S.s.version) >= 46; }
+function staffLoad(fresh) {
+  if (!staffSees() || S.staffBusy) return;
+  S.staffBusy = true;
+  api('staffall', { fresh: !!fresh }).then(function (r) { S.staff = r.items || []; S.staffErr = ''; S.staffBusy = false; renderSoft(); },
+    function (e) { S.staffBusy = false; if (!S.staff) S.staffErr = '讀不到：' + (failMsg(e) || errText(e)); renderSoft(); });
+}
+function staffYear(d) { return Number(String(d).slice(0, 4)) - 1911; }
+function staffMd(d) { var p = String(d).split('-'); return p.length === 3 ? Number(p[1]) + '/' + Number(p[2]) + '（' + weekday(d).replace('週', '') + '）' : d; }
+function staffRow(x, compact) {
+  return '<div style="display:flex;gap:10px;padding:' + (compact ? 4 : 7) + 'px 0;border-top:1px solid #EAF0F4"><div style="flex:none;width:' + (compact ? 92 : 108) + 'px"><b style="font-size:14px">' + esc(staffMd(x.date)) + '</b>' +
+    '<div class="sub" style="font-size:12.5px">' + esc(x.site) + '</div></div><div style="flex:1;color:#C62828;font-size:14.5px;line-height:20px">' + esc((x.who ? x.who + '：' : '') + x.text) + '</div></div>';
+}
+function staffCard() {
+  var L = S.staff, h = '<div class="card"><div class="row"><span class="ttl grow">👷 工作狀況</span><button class="pill" data-act="staffopen">全部 ›</button></div>' +
+    '<div class="sub" style="font-size:12.5px">所有工地記的（提早下班、請假…），舊的在上、新的在下；按「全部」看每個年度、匯出 PDF</div>';
+  if (!L) return h + '<div class="sub" style="padding:6px 0">' + esc(S.staffErr || '讀取中…') + '</div></div>';
+  if (!L.length) return h + '<div class="sub" style="padding:6px 0">還沒有記工作狀況</div></div>';
+  var y = String(L[L.length - 1].date).slice(0, 4), mine = L.filter(function (x) { return String(x.date).slice(0, 4) === y; }), recent = mine.slice(-5);
+  h += '<div class="sub" style="font-size:13px;margin-top:6px">' + (Number(y) - 1911) + ' 年 ' + mine.length + ' 筆，最近 ' + recent.length + ' 筆：</div>';
+  return h + recent.map(function (x) { return staffRow(x, true); }).join('') + '</div>';
+}
+function renderStaff() {
+  var L = S.staff, h = topBar('👷 工作狀況', 'hub', S.staffBusy ? '更新中…' : '⟳ 更新', 'staffreload') + '<div class="wrap">' +
+    '<div class="label">所有工地 ・ 每個年度一段，舊的在前、新的在後；只有開發者、老闆、主任看得到</div>';
+  if (S.staffMsg) h += '<div class="box">' + esc(S.staffMsg) + '</div>';
+  if (!L) return h + '<div class="card sub">' + esc(S.staffErr || '讀取中…') + '</div></div>';
+  if (!L.length) return h + '<div class="card sub" style="font-size:15px">還沒有記工作狀況。開發者在施工日誌「🔒 工作狀況」記了以後，這裡就會有。</div></div>';
+  var by = {}; L.forEach(function (x) { var y = staffYear(x.date); (by[y] = by[y] || []).push(x); });
+  var years = Object.keys(by).map(Number).sort(function (a, b) { return b - a; });
+  if (!S.staffOpen) { S.staffOpen = {}; S.staffOpen[years[0]] = true; }
+  years.forEach(function (y) {
+    var open = !!S.staffOpen[y];
+    h += '<div class="card"><div class="row"><b style="font-size:19px">' + y + ' 年</b><span class="sub grow">　' + by[y].length + ' 筆</span>' +
+      '<button class="key" style="flex:none;margin:0" data-act="staffpdf" data-v="' + y + '">📄 匯出 PDF</button>' +
+      '<button class="link" style="flex:none;font-size:18px" data-act="stafftog" data-v="' + y + '">' + (open ? '▴' : '▾') + '</button></div>' +
+      (open ? by[y].map(function (x) { return staffRow(x, false); }).join('') : '<div class="sub" style="font-size:13px">按 ▾ 打開</div>') + '</div>';
+  });
+  return h + '</div>';
+}
+/** 一個年度的 PDF：A4 直式，畫在畫布上（中文字才不會變方塊）再放進 jsPDF，跟手機那份一樣的表格 */
+function staffPdf(y) {
+  var rows = (S.staff || []).filter(function (x) { return staffYear(x.date) === y; });
+  var W = 1240, Hh = 1754, M = 75, cols = [214, 178, 166], scale = W / 595;   // 150 dpi；日期那欄要放得下「115.11.11（三）」
+  var xs = [M, M + cols[0], M + cols[0] + cols[1], M + cols[0] + cols[1] + cols[2], W - M];
+  var pages = [], cv, g, yy, pageNo = 0, printed = rocDate(todayYmd());
+  function wrap(t, w, font) {
+    g.font = font; var out = [], line = '';
+    String(t).split('').forEach(function (ch) { if (ch === '\n') { out.push(line); line = ''; return; } if (g.measureText(line + ch).width > w && line) { out.push(line); line = ch; } else line += ch; });
+    out.push(line); return out;
+  }
+  function newPage() {
+    cv = document.createElement('canvas'); cv.width = W; cv.height = Hh; g = cv.getContext('2d'); pages.push(cv); pageNo++;
+    g.fillStyle = '#fff'; g.fillRect(0, 0, W, Hh); g.fillStyle = '#1F2933';
+    g.font = 'bold 36px sans-serif'; g.fillText('柏捷營造　施工人員工作狀況　' + y + ' 年', M, M + 34);
+    g.font = '19px sans-serif'; g.fillStyle = '#5D7486'; g.fillText('所有工地，舊的在前（共 ' + rows.length + ' 筆）　列印 ' + printed + '　第 ' + pageNo + ' 頁', M, M + 68);
+    yy = M + 88; var hh = 42;
+    g.fillStyle = '#EEF3F6'; g.fillRect(xs[0], yy, xs[4] - xs[0], hh); g.fillStyle = '#1F2933'; g.font = 'bold 22px sans-serif';
+    ['日期', '工地', '人員', '狀況'].forEach(function (t, i) { g.fillText(t, xs[i] + 8, yy + 29); });
+    g.strokeStyle = '#9AA5B1'; g.lineWidth = 1.2; g.strokeRect(xs[0], yy, xs[4] - xs[0], hh); for (var i = 1; i < 4; i++) { g.beginPath(); g.moveTo(xs[i], yy); g.lineTo(xs[i], yy + hh); g.stroke(); }
+    yy += hh;
+  }
+  newPage();
+  if (!rows.length) { g.font = '22px sans-serif'; g.fillText('這一年還沒有記工作狀況。', M + 8, yy + 36); }
+  var f = '22px sans-serif', lh = 31;
+  rows.forEach(function (x) {
+    var p = x.date.split('-'), day = (Number(p[0]) - 1911) + '.' + p[1] + '.' + p[2] + '（' + weekday(x.date).replace('週', '') + '）';
+    var cells = [wrap(day, cols[0] - 16, f), wrap(x.site, cols[1] - 16, f), wrap(x.who || '─', cols[2] - 16, f), wrap(x.text, xs[4] - xs[3] - 16, f)];
+    var rh = Math.max(42, Math.max.apply(null, cells.map(function (c) { return c.length; })) * lh + 14);
+    if (yy + rh > Hh - M) newPage();
+    g.font = f;
+    cells.forEach(function (c, i) { g.fillStyle = i === 3 ? '#C62828' : '#1F2933'; c.forEach(function (ln, k) { g.fillText(ln, xs[i] + 8, yy + 32 + k * lh); }); });
+    g.strokeStyle = '#9AA5B1'; g.lineWidth = 1.2; g.strokeRect(xs[0], yy, xs[4] - xs[0], rh); for (var i = 1; i < 4; i++) { g.beginPath(); g.moveTo(xs[i], yy); g.lineTo(xs[i], yy + rh); g.stroke(); }
+    yy += rh;
+  });
+  return loadJsPdf().then(function (J) {
+    var doc = new J({ unit: 'pt', format: 'a4', compress: true });
+    pages.forEach(function (c, i) { if (i) doc.addPage(); doc.addImage(c.toDataURL('image/jpeg', 0.85), 'JPEG', 0, 0, 595.28, 841.89); });
+    return new Uint8Array(doc.output('arraybuffer'));
+  });
+}
+function staffActs() {
+  ACT.staffopen = function () { S.staffMsg = ''; go('staff'); staffLoad(false); };
+  ACT.staffreload = function () { S.staffMsg = ''; staffLoad(true); render(); };
+  ACT.stafftog = function (v) { var y = Number(v); S.staffOpen = S.staffOpen || {}; S.staffOpen[y] = !S.staffOpen[y]; render(); };
+  ACT.staffpdf = function (v) {
+    var y = Number(v); S.staffMsg = '產生 ' + y + ' 年的 PDF…'; render();
+    staffPdf(y).then(function (bytes) {
+      S.staffMsg = '';
+      openPdfDoc({ id: 'staff:' + y, modified: String(Date.now()), site: '', name: '工作狀況_' + y + '年.pdf' }, { title: '👷 工作狀況 ' + y + ' 年', save: '工作狀況_' + y + '年.pdf', from: 'staff',
+        load: function () { return Promise.resolve(bytes); } });
+    }).catch(function (e) { S.staffMsg = '沒有做出來：' + errText(e); render(); });
+  };
+}
 S.tasks = null; S.taskCache = {}; S.taskErr = ''; S.taskBusy = false; S.taskFrom = 'site'; S.taskWorkers = null; S.myTasks = null;
 S.snotes = {}; S.snMe = null; S.snWorkers = null;
 
@@ -6045,6 +6145,7 @@ setTimeout(webCheck, 20000);   // 打開 20 秒後先看一次（剛打開可能
 // ---------- 開始 ----------
 contractActs();   // 發包的按鈕（開發者改發包，2026-11-14）
 omatActs();   // 老闆、主任填材料／機具（收件服務第 36 版）
+staffActs();   // 👷 工作狀況（收件服務第 46 版）
 Object.keys(SITE_ACTS).forEach(function (k) { ACT[k] = SITE_ACTS[k]; });   // 開發者新增、改名、刪工地（使用者 2026-11-15 巡查 ⑤c）
 wpActs();   // 🔔 開啟通知（網頁推播，第 33 版）
 // 記住的代碼：顯示鎖住的 ●●●●●●，按「登入」才進去（使用者 2026-11-08）
