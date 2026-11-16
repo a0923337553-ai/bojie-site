@@ -189,9 +189,10 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
     <button class="btn ghost" id="back">‹ 返回</button>
     <h1 id="title">3D <span class="sub" id="made"></span></h1>
     <button class="btn" id="viewBtn" style="display:none"></button>
-    <button class="btn" id="verBtn" style="display:none">🗂 版本</button>
+    <button class="btn" id="verBtn" style="display:none">🗂 方案</button>
     <button class="btn" id="reset">整棟</button>
   </div>
+  <div class="chips" id="plans" style="display:none"></div>
   <div class="chips" id="floors"></div>
   <div class="chips" id="kinds"></div>
 </div>
@@ -220,7 +221,7 @@ textarea.in{width:100%;min-height:64px;border:1px solid #CBD5DC;border-radius:10
   <div class="row"><button class="btn solid" id="markSend">送出</button><button class="btn" id="markRedo">⭕ 重圈</button><button class="btn ghost" id="markCancel">取消圈</button><span class="muted" id="markErr"></span></div>
 </div>
 <div id="dwgView"><div class="bar"><span class="t" id="dwgTitle">配筋圖</span><button id="dwgOut">－</button><button id="dwgIn">＋</button><button id="dwgClose">✕ 關閉</button></div><div class="sc" id="dwgBody"></div></div>
-<div id="verPanel"><div class="vp"><div class="vh"><span>🗂 3D 模型版本</span><button class="btn ghost" id="verClose">✕ 關閉</button></div><div id="verBody"></div></div></div>
+<div id="verPanel"><div class="vp"><div class="vh"><span>🗂 3D 方案</span><button class="btn ghost" id="verClose">✕ 關閉</button></div><div id="verBody"></div></div></div>
 <input type="file" id="verFile" style="display:none">
 <div id="side" style="display:none">
   <div class="hd"><span id="sideTitle">🚚 灌漿區</span><button class="btn ghost tog" id="tog">收起</button></div>
@@ -300,13 +301,15 @@ async function loadModel() {
   }
   let have = null;
   try { have = JSON.parse(ls('m3d.' + SITE) || 'null'); } catch (e) { have = null; }
-  const r = await api('model3d', { site: SITE, have: have ? have.modified : '' });
+  const r = await api('model3d', { site: SITE, have: have ? have.modified : '', plan: PLAN });
   pours = (r.pours || []).map(p => { const pr = p.props || {}; return { id: p.id, date: pr.pourDate || '', part: pr.part || String(p.name || '').replace(/\.pdf$/i, ''), m3: pr.m3 || '', trucks: pr.trucks || '' }; });
   marks = r.marks || []; me = r.me || null;
   SKMETA = r.sk || null;   // 收件服務第 27 版：這個工地有 SketchUp 模型
-  verInit(!!r.canUp, r.skPending || []);   // 第 34 版：開發者、老闆可以上傳、換版本
+  // 第 47 版：方案（舊的收件服務沒有 plans＝只有一個，不顯示方案那排）
+  PLANS = r.plans || []; PLAN = r.plan || PLAN; CONFIRMED = r.confirmed || ''; WAIT_PLAN = !!r.waitPlan;
+  verInit(!!r.canUp, r.skPending || []);   // 第 34 版：開發者、老闆可以上傳；第 47 版：方案
   if (r.same && have) return JSON.parse(have.text);
-  if (!r.model) { if (SKMETA) return null; throw { error: 'NONE' }; }
+  if (!r.model) { if (SKMETA) return null; throw { error: WAIT_PLAN ? 'WAIT' : 'NONE' }; }
   ls('m3d.' + SITE, JSON.stringify({ modified: r.modified || '', text: r.model }));
   return JSON.parse(r.model);
 }
@@ -315,6 +318,8 @@ async function loadModel() {
 // 電腦把 .skp 轉成 .glb（材質、群組名、標籤＝樓層）傳到 工地App/3D/<工地>/SketchUp模型.glb；收件服務 model3d {skPart} 一段一段給（App 也只能問 model3d）。
 // 下載好記在這台（IndexedDB），模型沒換就不重抓。本機測試：&glb=xxx.glb
 let SK = null, SKMETA = P.get('glb') ? { local: P.get('glb') } : null, skErr = '';
+// 第 47 版：方案（使用者 2026-11-16「這裡改成方案，有時候要提方案就會有方案一方案二」）：網址帶 plan＝看哪個方案；換方案＝帶新的 plan 重新打開
+let PLAN = P.get('plan') || '', PLANS = [], CONFIRMED = '', WAIT_PLAN = false;
 const skItems = [];   // {mesh, tag, name, mat}
 function idb() {
   return new Promise((ok, bad) => {
@@ -327,12 +332,12 @@ async function idbPut(k, v) { try { const db = await idb(); db.transaction('sk',
 function b64Bytes(s) { const bin = atob(s), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
 async function skBytes() {
   if (SKMETA.local) return fetch(SKMETA.local).then(r => { if (!r.ok) throw { error: '讀不到 ' + SKMETA.local }; return r.arrayBuffer(); });
-  const key = 'sk.' + SITE, hit = await idbGet(key);
+  const key = 'sk.' + SITE + (PLAN && PLAN !== 'p1' ? '.' + PLAN : ''), hit = await idbGet(key);   // 每個方案各記一份（方案一沿用以前的）
   if (hit && hit.modified === SKMETA.modified && hit.buf) return hit.buf;
   const parts = [], mb = (SKMETA.size / 1048576).toFixed(1);
   for (let i = 0; i < SKMETA.parts; i++) {
     say('下載 SketchUp 模型 ' + (i + 1) + '／' + SKMETA.parts + '（共 ' + mb + ' MB；第一次比較久，之後記在這台）…');
-    const r = await api('model3d', { site: SITE, skPart: i });
+    const r = await api('model3d', { site: SITE, skPart: i, plan: PLAN });
     if (r.modified !== SKMETA.modified) throw { error: '模型剛好重新上傳，按「再試一次」' };
     parts.push(b64Bytes(r.data));
   }
@@ -404,7 +409,8 @@ function setView(v) {
   st.sel = null; st.skSel = null; st.pour = null; st.rebar = null; st.focus = null; st.bars = false;
   // 「🙈 隱藏」只有 SketchUp 模型有（3D 結構用上面的種類開關）
   if (v !== 'sk') { st.hideBar = false; st.hideMode = ''; }
-  document.getElementById('hideBtn').style.display = v === 'sk' ? 'block' : 'none'; hideUi();
+  // 「🙈 隱藏」拿掉了（使用者 2026-11-17「舊的3d隱藏不要」，改成方案）；程式留著不用
+  document.getElementById('hideBtn').style.display = 'none'; hideUi();
   const vb = document.getElementById('viewBtn');
   vb.style.display = SK && hasStruct() && ST_ON ? '' : 'none';
   vb.textContent = v === 'sk' ? '🏗 3D 結構' : '🏠 SketchUp 模型';
@@ -1326,7 +1332,7 @@ function selectMark(id, jump) {
 }
 async function markApi(body) {
   if (LOCAL) return { ok: true, local: true };
-  return api('mark3d', Object.assign({ site: SITE }, body));
+  return api('mark3d', Object.assign({ site: SITE, plan: PLAN || 'p1' }, body));   // 第 47 版：圈的地方每個方案各一份
 }
 async function reloadMarks() {
   if (LOCAL) return;
@@ -1709,8 +1715,30 @@ document.getElementById('toolsBtn').onclick = () => {
   toolsOpen = !toolsIsOpen(); try { localStorage.setItem('bojie.3dtools', toolsOpen ? '1' : '0'); } catch (e) { }
   renderToolsBtn(); layout();
 };
+// ---------- 方案一、方案二…（收件服務第 47 版）：上面那排；確定的打 ✓，鎖住的反灰打不開 ----------
+function planGo(id) {
+  const u = new URL(location.href); u.searchParams.set('plan', id);
+  location.replace(u.toString());
+}
+function renderPlans() {
+  const R = document.getElementById('plans'); if (!R) return;
+  R.innerHTML = '';
+  if (st.view !== 'sk' || !(PLANS.length > 1 || (CANUP && PLANS.length))) { R.style.display = 'none'; return; }
+  PLANS.forEach(p => {
+    const label = (p.locked ? '🔒 ' : '') + p.name + (p.confirmed ? ' ✓ 確定' : '');
+    const c = chip(label, p.id === PLAN, p.locked ? 'off' : '', () => {
+      if (p.locked) { alert('已經確定用「' + ((PLANS.find(x => x.confirmed) || {}).name || '') + '」，其他方案鎖起來了。\n要換：開發者或老闆在「🗂 方案」按「取消確定」。'); return; }
+      if (p.id !== PLAN) planGo(p.id);
+    });
+    if (p.locked) c.style.opacity = '.45';
+    R.appendChild(c);
+  });
+  if (CANUP) { const g = chip('⚙ 方案', false, '', () => verShow()); g.style.fontWeight = '700'; R.appendChild(g); }
+  R.style.display = '';
+}
 function renderChips() {
   const F = document.getElementById('floors'), K = document.getElementById('kinds');
+  renderPlans();
   renderChipsIn(F, K);
   // 空的那排不佔位置（樓層搬到模型左上角以後，上面通常只剩標籤那排）
   F.style.display = F.children.length ? '' : 'none'; K.style.display = K.children.length ? '' : 'none';
@@ -2041,10 +2069,7 @@ function renderSide() {
     T.textContent = 'SketchUp 模型';
     h += '<div class="card"><div class="t">' + esc(it.name || '（沒有名稱的面）') + '</div>'
       + table([['標籤', it.tag || '未加標籤']])
-      + '<div class="row"><button class="btn" id="skHideOne">🙈 隱藏這個</button>'
-      + (skSameOf(it).length > 1 ? '<button class="btn" id="skHideSame">🙈 一樣的全部隱藏（' + skSameOf(it).length + ' 個）</button>' : '')
-      + '<button class="btn ghost" id="skUnsel">取消</button></div>'
-      + '<div class="muted" style="margin-top:4px">擋住後面的東西就藏起來；要拿回來按右上「🙈 隱藏」→「取消隱藏」（個別或全部）。</div></div>' + markSection();
+      + '<div class="row"><button class="btn ghost" id="skUnsel">取消</button></div></div>' + markSection();
   } else if (st.view === 'sk') {
     T.textContent = '🏠 SketchUp 模型';
     h += (hasStruct() && ST_ON ? '<div class="tip">🚚 <b>' + (SKF.length ? '灌漿區' : '灌漿區、切樓層') + '</b>：按上面「🏗 3D 結構」</div>' : '')
@@ -2324,16 +2349,19 @@ function demoModel() {
       '梁|1F|FG1': { t: '梁', size: '60x150', kind: '地梁', topSize: '#8', botSize: '#8', top: ['5', '5', '5'], bot: ['5', '5', '5'], topLen: ['', ''], botLen: ['', ''], stir: ['', '#4@15', ''], side: '4-#4' } } };
 }
 
-// ---------- 3D 版本：上傳新的、切回舊的（收件服務第 34 版，使用者 2026-11-14「我也想要可以在電腦上上傳3d的功能,及修改上傳的3d功能(有時候會有變更」「手機也可以上傳及修改3d」→ 都a、老闆也可） ----------
-// 開發者、老闆看得到「🗂 版本」。.glb 傳完馬上換；.skp 要等電腦（有 SketchUp 轉檔工具的那台）轉好，大約 5 分鐘。舊的放「舊版」，最多留 10 個，可以切回來。
+// ---------- 3D 方案（收件服務第 47 版，使用者 2026-11-16／17）：開發者、老闆的「🗂 方案」 ----------
+// 上傳時選「取代某個方案」或「＋ 新方案」（取代＝舊的丟雲端垃圾桶、不留舊版：「舊的就取代掉不要留下來」）；
+// .glb 傳完馬上換；.skp 要等電腦（有 SketchUp 轉檔工具的那台）轉好，大約 5 分鐘。可以改名、確定、取消確定（先問一次，怕誤按）、刪除方案。
+// 確定一個以後：其他方案反灰鎖起來，大家都只能看確定的那個，施工人員這時才看得到（「只能看確定的，怕現場會弄錯」）。
 // 一段 2 MB 傳給收件服務（App 裡也一樣經過 App 代傳），收件服務直接接到雲端硬碟。
 const VP = document.getElementById('verPanel'), VB = document.getElementById('verBody'), VF = document.getElementById('verFile');
-let CANUP = false, VPEND = [], vBusy = false;
+let CANUP = false, VPEND = [], vBusy = false, VTARGET = '', VLAST = null;
+const PLAN_NUMS = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
 function verInit(can, pend) {
   CANUP = can; VPEND = pend;
   const b = document.getElementById('verBtn');
   b.style.display = can ? '' : 'none';
-  b.textContent = '🗂 版本' + (pend.some(p => !p.err) ? ' ⏳' : '');
+  b.textContent = '🗂 方案' + (pend.some(p => !p.err) ? ' ⏳' : '');
 }
 function vTime(ms) { const d = new Date(ms); const p = n => String(n).padStart(2, '0'); return (d.getFullYear() - 1911) + '.' + p(d.getMonth() + 1) + '.' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); }
 function vMB(n) { return n < 104858 ? Math.max(1, Math.round(n / 1024)) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
@@ -2351,82 +2379,92 @@ addEventListener('resize', () => { if (VP.style.display === 'flex') vpFit(); });
 async function verShow() {
   VP.style.display = 'flex'; vpFit();
   VB.innerHTML = '<div class="muted">讀取中…</div>';
-  try { verRender(await api('model3d', { site: SITE, op: 'versions' })); }
+  try { verRender(await api('model3d', { site: SITE, op: 'plans' })); }
   catch (e) { VB.innerHTML = '<div class="muted">讀不到：' + esc(errText(e)) + '</div>'; }
 }
 function verRender(r) {
-  VPEND = r.pending || [];
-  let h = '<div class="row" style="margin-top:0"><button class="btn solid" id="vpUp"' + (vBusy ? ' disabled' : '') + '>⬆ 上傳新的 3D</button><span class="muted">SketchUp 檔（.skp）或 .glb</span></div>' +
-    '<div class="muted" id="vpMsg" style="margin-top:6px"></div><div class="bar2" id="vpBar"><i></i></div>';
-  const dis = vBusy ? ' disabled' : '', old = r.old || [];
-  // 刪除：傳錯的檔（使用者 2026-11-14「第三點的修改也包含刪除功能」「有時候是錯誤的檔案」）。只丟雲端硬碟垃圾桶，30 天內「最近刪除」救得回來
-  const delBtn = (id, kind, label) => '<button class="btn ghost red" data-del="' + esc(id) + '" data-kind="' + kind + '"' + dis + '>' + label + '</button>';
+  VLAST = r; VPEND = r.pending || VPEND || [];
+  const plans = r.plans || [], conf = r.confirmed || '', dis = vBusy ? ' disabled' : '';
+  PLANS = plans; CONFIRMED = conf; renderPlans();
+  const open = plans.filter(p => !p.locked);
+  if (!VTARGET || (VTARGET !== 'new' && !open.some(p => p.id === VTARGET))) VTARGET = open.some(p => p.id === PLAN) ? PLAN : (open[0] ? open[0].id : 'new');
+  const nextName = '方案' + (PLAN_NUMS[plans.length + 1] || (plans.length + 1));
+  let h = '<div class="card" style="margin-top:0"><div class="t">⬆ 上傳 3D <span class="muted">（SketchUp 檔 .skp 或 .glb）</span></div>' +
+    '<div class="chips" style="padding:6px 0 2px;flex-wrap:wrap">' + open.map(p => '<span class="chip' + (VTARGET === p.id ? ' on' : '') + '" data-tgt="' + esc(p.id) + '">取代「' + esc(p.name) + '」</span>').join('') +
+    '<span class="chip' + (VTARGET === 'new' ? ' on' : '') + '" data-tgt="new">＋ 新方案</span></div>' +
+    '<div class="row" style="margin-top:4px"><button class="btn solid" id="vpUp"' + dis + '>選檔案上傳</button><span class="muted">' +
+    (VTARGET === 'new' ? '會變成「' + esc(nextName) + '」' : '取代以後舊的那個不留（丟雲端垃圾桶）') + '</span></div>' +
+    (conf ? '<div class="muted" style="margin-top:4px">已經確定方案了：鎖住的方案不能換；新方案上傳後也是鎖住的，要「取消確定」才看得到。</div>' : '') +
+    '<div class="muted" id="vpMsg" style="margin-top:6px"></div><div class="bar2" id="vpBar"><i></i></div></div>';
   VPEND.forEach(p => {
     h += '<div class="tip" style="margin-top:8px">' + (p.err ? '⚠️ ' : '⏳ ') + esc(p.name || 'SketchUp 檔') + '：' +
       (p.err ? '轉檔失敗（' + esc(p.err) + '）' : '等電腦轉好（有轉檔工具的那台電腦開著，大約 5 分鐘）') + '<div class="muted">' + esc(p.by || '') + '・' + vTime(p.at) + '</div>' +
-      '<div style="margin-top:6px">' + delBtn(p.id, 'skp', p.err ? '移除' : '取消（傳錯了）') + '</div></div>';
+      '<div style="margin-top:6px"><button class="btn ghost red" data-del="' + esc(p.id) + '"' + dis + '>' + (p.err ? '移除' : '取消（傳錯了）') + '</button></div></div>';
   });
-  const c = r.cur;
-  h += '<div class="card" style="margin-top:10px"><div class="t">現在的模型</div>' + (c
-    ? '<div class="vrow" style="border-top:0;padding-top:2px"><div class="g muted">' + esc(c.name || 'SketchUp 模型') + '・' + esc(c.by || '電腦上傳') + '・' + vTime(c.at) + '・' + vMB(c.size) + (c.from ? '（切回 ' + vTime(c.from) + ' 那版）' : '') + '</div>' + delBtn(c.id, 'cur', '刪除') + '</div>'
-    : '<div class="muted">還沒有</div>') + '</div>';
-  h += '<div class="card"><div class="t">舊版 <span class="muted">（最多留 10 個，可以切回來）</span></div>';
-  if (!old.length) h += '<div class="muted" style="padding:6px 0">還沒有舊版（上傳新的以後，現在這版會放到這裡）</div>';
-  old.forEach(o => {
-    h += '<div class="vrow"><div class="g"><b>' + vTime(o.at) + '</b><div class="muted">' + esc(o.name || 'SketchUp 模型') + '・' + esc(o.by || '電腦上傳') + '・' + vMB(o.size) + '</div></div>' +
-      '<div class="vb"><button class="btn ghost" data-rid="' + esc(o.id) + '" data-at="' + o.at + '"' + dis + '>切回這版</button>' + delBtn(o.id, 'old', '刪除') + '</div></div>';
+  h += '<div class="card"><div class="t">方案 <span class="muted">（確定一個以後，其他方案鎖起來，施工人員才看得到確定的那個）</span></div>';
+  if (!plans.length) h += '<div class="muted" style="padding:6px 0">還沒有方案：上面選「＋ 新方案」上傳</div>';
+  plans.forEach(p => {
+    const sk = p.sk;
+    h += '<div class="vrow"><div class="g"><b>' + (p.locked ? '🔒 ' : '') + esc(p.name) + (p.confirmed ? ' <span style="color:#15803D">✓ 確定</span>' : '') + '</b>' +
+      '<div class="muted">' + (sk ? esc(sk.by || '電腦上傳') + '・' + vTime(sk.at) + '・' + vMB(sk.size) : '還沒有模型（等電腦轉檔）') + '</div></div><div class="vb">' +
+      '<button class="btn ghost" data-ren="' + esc(p.id) + '"' + dis + '>改名</button>' +
+      (p.confirmed ? '<button class="btn ghost red" data-unconf="' + esc(p.id) + '"' + dis + '>取消確定</button>'
+        : !conf && sk ? '<button class="btn solid" data-conf="' + esc(p.id) + '"' + dis + '>確定用這個</button>' : '') +
+      (!conf ? '<button class="btn ghost red" data-pdel="' + esc(p.id) + '"' + dis + '>刪除</button>' : '') + '</div></div>';
   });
   h += '</div>';
-  const del = r.del || [];
-  if (del.length) {
-    h += '<div class="card"><div class="t">最近刪除 <span class="muted">（30 天內可以救回來，之後雲端硬碟自己清掉）</span></div>';
-    del.forEach(d => {
-      const left = Math.max(0, 30 - Math.floor((Date.now() - d.del) / 864e5));
-      h += '<div class="vrow"><div class="g"><b>' + esc(d.name || 'SketchUp 模型') + '</b><div class="muted">' + ({ cur: '原本是現在的模型', old: '舊版', skp: 'SketchUp 檔（還沒轉）' }[d.kind] || '') +
-        '・' + esc(d.dby || '') + ' ' + vTime(d.del) + ' 刪的・還剩 ' + left + ' 天</div></div><button class="btn ghost" data-undel="' + esc(d.id) + '" data-kind="' + esc(d.kind || '') + '"' + dis + '>救回</button></div>';
-    });
-    h += '</div>';
-  }
   VB.innerHTML = h;
+  const P2 = id => plans.find(p => p.id === id);
+  VB.querySelectorAll('[data-tgt]').forEach(b => b.onclick = () => { if (vBusy) return; VTARGET = b.dataset.tgt; verRender(r); });
   document.getElementById('vpUp').onclick = () => { if (vBusy) return; VF.value = ''; VF.click(); };
-  VB.querySelectorAll('[data-rid]').forEach(b => b.onclick = () => verRestore(b.dataset.rid, +b.dataset.at));
-  VB.querySelectorAll('[data-del]').forEach(b => b.onclick = () => verDelete(r, b.dataset.del, b.dataset.kind));
-  VB.querySelectorAll('[data-undel]').forEach(b => b.onclick = () => verUndel(b.dataset.undel, b.dataset.kind));
+  VB.querySelectorAll('[data-ren]').forEach(b => b.onclick = () => planRename(P2(b.dataset.ren)));
+  VB.querySelectorAll('[data-conf]').forEach(b => b.onclick = () => planConfirm(P2(b.dataset.conf)));
+  VB.querySelectorAll('[data-unconf]').forEach(b => b.onclick = () => planUnconfirm(P2(b.dataset.unconf)));
+  VB.querySelectorAll('[data-pdel]').forEach(b => b.onclick = () => planDelete(P2(b.dataset.pdel)));
+  VB.querySelectorAll('[data-del]').forEach(b => b.onclick = () => verDelete(b.dataset.del));
 }
-/** 雲端硬碟要幾秒才不列出剛丟、剛救回的：先自己拿掉 */
-async function verReload(dropId, msg, lists) {
-  const v = await api('model3d', { site: SITE, op: 'versions' });
-  if (dropId) { (lists || ['pending', 'old']).forEach(k => v[k] = (v[k] || []).filter(x => x.id !== dropId)); if (!lists && v.cur && v.cur.id === dropId) v.cur = null; }
-  verRender(v); verInit(CANUP, VPEND); if (msg) vMsg(msg);
-}
-async function verDelete(r, id, kind) {
-  if (vBusy) return;
-  const all = [].concat(r.cur ? [r.cur] : [], r.old || [], r.pending || []), x = all.find(y => y.id === id) || {}, nm = '「' + (x.name || 'SketchUp 模型') + '」';
-  const old = (r.old || []).filter(o => o.id !== id);
-  const ask = kind === 'cur' ? '刪除現在的模型？\n' + nm + '\n\n' + (old.length ? '會換回上一版（' + vTime(old[0].at) + ' 那版）。' : '刪除後這個工地就沒有 3D 模型了。')
-    : kind === 'skp' ? (x.err ? '移除這個轉不了的檔？\n' : '取消這個 SketchUp 檔？\n') + nm + (x.err ? '' : '\n\n還沒轉好，取消就不會換上。')
-    : '刪除這個舊版？\n' + vTime(x.at) + ' ' + nm;
-  if (!confirm(ask + '\n\n刪錯了：30 天內可以在「最近刪除」救回來。')) return;
-  vBusy = true; vMsg('刪除中…');
+async function planAct(op, p, extra) {
+  vBusy = true; vMsg('處理中…');
   try {
-    const res = await api('model3d', { site: SITE, op: 'del', id: id });
-    if (kind === 'cur') { vMsg('✅ 刪好了' + (res.back ? '，換回 ' + vTime(res.back.at) + ' 那版' : '') + '，重新打開 3D…'); setTimeout(() => location.reload(), 700); return; }
-    vBusy = false; await verReload(id, '✅ 刪好了（30 天內可以在「最近刪除」救回來）');
-  } catch (e) { vBusy = false; vMsg('沒有刪除：' + esc(errText(e))); }
+    const res = await api('model3d', Object.assign({ site: SITE, op: op, plan: p.id }, extra || {}));
+    vBusy = false; verRender(Object.assign({ pending: VPEND }, res)); return true;
+  } catch (e) { vBusy = false; vMsg('沒有成功：' + esc(errText(e))); return false; }
 }
-async function verUndel(id, kind) {
+async function planRename(p) {
+  if (!p || vBusy) return;
+  const n = prompt('方案名稱（例如：方案二：玻璃欄杆）', p.name);
+  if (n == null || !n.trim() || n.trim() === p.name) return;
+  if (await planAct('rename', p, { name: n.trim().slice(0, 20) })) vMsg('✅ 改好名字了');
+}
+async function planConfirm(p) {
+  if (!p || vBusy) return;
+  if (!confirm('確定用「' + p.name + '」？\n\n確定以後：其他方案反灰鎖起來，大家都只能看「' + p.name + '」；施工人員也看得到了（會通知大家）。\n要換：再按「取消確定」。')) return;
+  if (await planAct('confirm', p)) { vMsg('✅ 確定用「' + esc(p.name) + '」，重新打開 3D…'); setTimeout(() => planGo(p.id), 700); }
+}
+async function planUnconfirm(p) {
+  if (!p || vBusy) return;
+  if (!confirm('取消確定「' + p.name + '」？\n\n取消以後：每個方案都打得開；施工人員就看不到 3D 了，直到再確定一個。\n（不是要換方案的話請按「取消」）')) return;
+  if (await planAct('unconfirm', p)) { vMsg('✅ 取消確定了，重新打開 3D…'); setTimeout(() => planGo(PLAN || p.id), 700); }
+}
+async function planDelete(p) {
+  if (!p || vBusy) return;
+  if (!confirm('刪除「' + p.name + '」？\n\n模型丟進雲端硬碟的垃圾桶（30 天內救得回來），這個方案圈的地方也看不到了。')) return;
+  if (await planAct('plandel', p)) {
+    if (p.id === PLAN) { vMsg('✅ 刪好了，重新打開 3D…'); setTimeout(() => planGo(''), 700); } else vMsg('✅ 刪好了（30 天內雲端垃圾桶救得回來）');
+  }
+}
+/** 取消等轉檔的 .skp（傳錯了、轉不了） */
+async function verDelete(id) {
   if (vBusy) return;
-  vBusy = true; vMsg('救回中…');
+  const x = VPEND.find(y => y.id === id) || {};
+  if (!confirm((x.err ? '移除這個轉不了的檔？\n' : '取消這個 SketchUp 檔？\n') + '「' + (x.name || 'SketchUp 檔') + '」' + (x.err ? '' : '\n\n還沒轉好，取消就不會換上。'))) return;
+  vBusy = true; vMsg('處理中…');
   try {
-    await api('model3d', { site: SITE, op: 'undel', id: id }); vBusy = false;
-    await verReload(id, kind === 'skp' ? '✅ 救回來了：等電腦轉好就會換上（雲端硬碟要幾秒才會列出來）' : '✅ 救回來了：放在「舊版」，要用就按「切回這版」（雲端硬碟要幾秒才會列出來）', ['del']);
-  } catch (e) { vBusy = false; vMsg('沒有救回：' + esc(errText(e))); }
-}
-async function verRestore(id, at) {
-  if (vBusy || !confirm('切回 ' + vTime(at) + ' 那一版？\n現在這版會放進舊版，之後也可以再切回來。')) return;
-  vBusy = true; vMsg('切換中…');
-  try { await api('model3d', { site: SITE, op: 'restore', id: id }); vMsg('✅ 換好了，重新打開 3D…'); setTimeout(() => location.reload(), 700); }
-  catch (e) { vBusy = false; vMsg('沒有換成功：' + esc(errText(e))); }
+    await api('model3d', { site: SITE, op: 'del', id: id }); vBusy = false;
+    VPEND = VPEND.filter(y => y.id !== id);
+    const r = await api('model3d', { site: SITE, op: 'plans' }); r.pending = (r.pending || []).filter(y => y.id !== id);
+    verRender(r); verInit(CANUP, VPEND); vMsg('✅ 取消了');
+  } catch (e) { vBusy = false; vMsg('沒有成功：' + esc(errText(e))); }
 }
 function vB64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
 VF.onchange = async () => {
@@ -2434,6 +2472,8 @@ VF.onchange = async () => {
   const ext = ((/\.(skp|glb)$/i.exec(f.name) || [])[1] || '').toLowerCase();
   if (!ext) { vMsg('只能傳 SketchUp 檔（.skp）或 .glb'); return; }
   if (f.size > 300 * 1048576) { vMsg('檔案太大（超過 300 MB）'); return; }
+  const tgt = VTARGET || 'new', tname = tgt === 'new' ? '新方案' : '「' + ((PLANS.find(p => p.id === tgt) || {}).name || '') + '」';
+  if (tgt !== 'new' && !confirm('用「' + f.name + '」取代' + tname + '？\n舊的那個不留（丟雲端垃圾桶）。')) return;
   vBusy = true; document.getElementById('vpUp').disabled = true;
   try {
     vMsg('讀檔案…', 0);
@@ -2450,13 +2490,12 @@ VF.onchange = async () => {
     for (let i = 0; i < parts; i++) {
       vMsg('上傳中 ' + (i + 1) + '／' + parts + '（' + vMB(size) + '）…', Math.round(i / parts * 100));
       const seg = new Uint8Array(await src.slice(i * CH, (i + 1) * CH).arrayBuffer());
-      r = await api('model3d', { site: SITE, op: 'up', up: up, part: i, parts: parts, size: size, name: f.name, data: vB64(seg) });
+      r = await api('model3d', { site: SITE, op: 'up', up: up, part: i, parts: parts, size: size, name: f.name, data: vB64(seg), plan: tgt });
     }
-    if (r && r.installed) { vMsg('✅ 換好了，重新打開 3D…', 100); setTimeout(() => location.reload(), 700); return; }
+    if (r && r.installed) { vMsg('✅ 換好了，重新打開 3D…', 100); setTimeout(() => planGo(r.plan || tgt), 700); return; }
     vBusy = false;
-    vMsg('✅ 傳上去了：' + esc(f.name) + '。等電腦轉好（大約 5 分鐘）就會自動換成新的，舊的會放進舊版。', 100);
-    const v = await api('model3d', { site: SITE, op: 'versions' }); verRender(v); verInit(CANUP, VPEND);
-    vMsg('✅ 傳上去了：' + esc(f.name) + '。等電腦轉好（大約 5 分鐘）就會自動換成新的。');
+    const v = await api('model3d', { site: SITE, op: 'plans' }); verRender(v); verInit(CANUP, VPEND);
+    vMsg('✅ 傳上去了：' + esc(f.name) + '。等電腦轉好（大約 5 分鐘）就會' + (tgt === 'new' ? '變成新方案' : '取代' + esc(tname)) + '。');
   } catch (e) { vBusy = false; vMsg('沒有傳完：' + esc(errText(e)) + '。再傳一次。'); const b = document.getElementById('vpUp'); if (b) b.disabled = false; }
 };
 document.getElementById('verBtn').onclick = verShow;
@@ -2474,7 +2513,8 @@ try {
   if (!SK && !ST_ON) throw { error: 'NONE' };   // 3D 結構先藏起來：只有 3D 結構的工地也當作還沒有
   start();
 } catch (e) {
-  const t = e && e.error === 'NONE' ? '這個工地還沒有 SketchUp 模型。<br><span class="muted">' + (CANUP ? '按右上「🗂 版本」→「⬆ 上傳新的 3D」，或電腦上把 .skp 拖到「SketchUp 傳到工地App」'
+  const t = e && e.error === 'WAIT' ? '3D 方案還沒確定。<br><span class="muted">開發者或老闆確定用哪個方案以後，這裡就看得到（會通知你）。</span>'
+    : e && e.error === 'NONE' ? '這個工地還沒有 SketchUp 模型。<br><span class="muted">' + (CANUP ? '按右上「🗂 方案」→ 選「＋ 新方案」上傳，或電腦上把 .skp 拖到「SketchUp 傳到工地App」'
     : '開發者、老闆上傳以後就有了') + (ST_ON ? '；3D 結構：BricsCAD「混凝土」按「全部樓層」，再按「上傳 3D 到工地App」。' : '。') + '</span>' : esc(errText(e));
   say('<div>' + t + '</div>' + (CANUP && e && e.error === 'NONE' ? '<button class="btn solid" style="margin-right:8px" onclick="document.getElementById(\'verBtn\').click()">⬆ 上傳 3D</button>' : '') +
     '<button class="btn ghost" onclick="location.reload()">再試一次</button>');
