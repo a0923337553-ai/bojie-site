@@ -405,7 +405,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/16b';
+var WEB_VERSION = '11/16c';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1086,6 +1086,7 @@ function siteCard(sites, news) {
       h += siteAdmin() ? '<div style="display:flex;align-items:center;gap:6px">' + row + '<button class="key" style="flex:none" data-act="siteedit" data-v="' + esc(x.name) + '">✎ 編輯</button></div>' : row;
     });
     if (siteAdmin()) h += '<button class="siteopt" data-act="siteadd" style="color:var(--navy);font-weight:bold;font-size:17px">＋ 新增工地</button><div class="note" style="margin:2px 4px 0">開發者：✎ 編輯可以改名字、開工／竣工日期、刪除（跟摺疊機一樣）。</div>';
+    else if (workerSiteAdd()) h += '<button class="siteopt" data-act="wsiteadd" style="color:var(--navy);font-weight:bold;font-size:17px">＋ 新增工地</button>';
     h += '</div>';
   }
   return h + '</div>';
@@ -1096,6 +1097,9 @@ var SITE_ACTS = {};   // 開機時併進 ACT（這段在 var ACT 前面）
 function siteAdmin() { return isOwner() && !!S.gMode; }
 function siteSafe(n) { return String(n).replace(/[\\\/:*?"<>|]/g, '_'); }
 SITE_ACTS.siteadd = function () { S.modal = { type: 'siteedit', old: '', name: '', start: todayYmd(), end: '', busy: '', err: '', ask: false }; renderModal(); var i = $('sitename'); if (i) i.focus(); };
+// 施工人員「＋ 新增工地」：只打名稱，開工日開發者填（收件服務第 44 版，使用者 2026-11-16「施工人員要讓他們新增工地」「開工日讓開發者寫」）
+function workerSiteAdd() { return !!S.s && S.s.role === '施工人員' && Number(S.s.version) >= 44; }
+SITE_ACTS.wsiteadd = function () { S.modal = { type: 'siteedit', worker: true, old: '', name: '', start: '', end: '', busy: '', err: '', ask: false }; renderModal(); var i = $('sitename'); if (i) i.focus(); };
 SITE_ACTS.siteedit = function (n) {
   var st = feedSites().filter(function (x) { return x.name === n; })[0] || { name: n };
   S.modal = { type: 'siteedit', old: n, name: n, start: st.start || '', end: st.end || '', busy: '', err: '', ask: false }; renderModal();
@@ -1105,6 +1109,7 @@ function siteEditProblem(m) {
   if (!n) return '要打工地名稱';
   if (/[\\\/:*?"<>|]/.test(n)) return '名稱不能有 \\ / : * ? " < > |';
   if (n !== m.old && siteNames().indexOf(n) >= 0) return '已經有「' + n + '」這個工地了';
+  if (m.worker) return '';   // 施工人員只打名稱
   if (!dateOf(m.start)) return '要選開工日期';
   if (m.end && !dateOf(m.end)) return '竣工日期不對';
   if (m.end && m.end < m.start) return '竣工日期比開工早';
@@ -1115,6 +1120,11 @@ function siteEditModal(m) {
   if (m.ask) return '<h3>刪掉「' + esc(m.old) + '」？</h3><div style="font-size:15.5px;line-height:24px;margin:4px 0 12px">雲端「工地App」裡這個工地的日誌、照片、日誌 PDF、施工單、灌漿數量、3D、發包資料夾都放進 Google 雲端的垃圾桶（30 天內救得回來）；工地清單拿掉（摺疊機同步後也拿掉）。施工人員傳的（收件服務的表）不會刪。</div>' +
     (m.err ? '<div class="err">' + esc(m.err) + '</div>' : '') +
     '<button class="big" style="background:var(--red)" data-act="sitedelok"' + (m.busy ? ' disabled' : '') + '>' + esc(m.busy || '刪除') + '</button><button class="ghost" data-act="sitedelno"' + (m.busy ? ' disabled' : '') + '>不要刪</button>';
+  if (m.worker) return '<h3>新增工地</h3>' +
+    '<div class="label">工地名稱</div><input type="text" id="sitename" data-f="m.name" maxlength="30" autocomplete="off" placeholder="例如：林先生住宅" value="' + esc(m.name) + '">' +
+    '<div class="note" id="mmsg" style="margin-top:6px">' + esc(m.err || siteEditNote(m)) + '</div>' +
+    '<button class="big" style="margin-top:12px" id="msave" data-act="siteeditok"' + (p || m.busy ? ' disabled' : '') + '>' + esc(m.busy || '加入') + '</button>' +
+    '<button class="ghost" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button>';
   return '<h3>' + (m.old ? '編輯工地' : '新增工地') + '</h3>' +
     '<div class="label">工地名稱</div><input type="text" id="sitename" data-f="m.name" maxlength="30" autocomplete="off" value="' + esc(m.name) + '">' +
     '<div class="row2" style="margin-top:8px"><div><div class="label">開工日期</div><input type="date" data-f="m.start" value="' + esc(m.start) + '"></div>' +
@@ -1126,6 +1136,7 @@ function siteEditModal(m) {
 }
 function siteEditNote(m) {
   var p = siteEditProblem(m); if (p) return p;
+  if (m.worker) return '只要打名稱，開工日由開發者填。加了以後大家的工地清單都會有。';
   if (m.old && String(m.name || '').trim() !== m.old) return '改名：雲端的資料夾、施工人員傳的、注意事項、待辦、派工都一起改成新名字（跟摺疊機一樣）。改之前摺疊機最好先同步好（首頁沒有「還有幾筆等網路上傳」）。';
   return m.old ? '只改日期。' : '加好之後摺疊機同步就會有；電腦 Excel 按「從手機匯入」建日誌。';
 }
@@ -1146,6 +1157,13 @@ function siteEditDone(m, name, start, end, gone) {
 }
 SITE_ACTS.siteeditok = function () {
   var m = S.modal; if (!m || m.type !== 'siteedit' || m.busy || siteEditProblem(m)) return;
+  if (m.worker) {   // 施工人員：交給收件服務（第 44 版 siteadd），開發者會收到通知填開工日
+    var wn = String(m.name).trim();
+    siteEditMsg(m, '加入中…'); m.err = '';
+    api('siteadd', { name: wn }).then(function () { S.siteMsg = '✅ 已新增工地「' + wn + '」，開工日等開發者填'; siteEditDone(m, wn, '', '', null); },
+      function (e) { siteEditFail(m, e); });
+    return;
+  }
   var name = String(m.name).trim(), start = m.start, end = m.end || '', old = m.old;
   m.err = '';
   dLogin(function () {
@@ -1232,7 +1250,8 @@ SITE_ACTS.sitedelok = function () {
   }, function (msg) { siteEditFail(m, new Error(msg || '沒連上 Google 雲端')); });
 };
 function progressHtml(st) {
-  var t = siteDaysText(st), p = siteProgress(st);
+  // 收件服務給的工地清單 start 是空字串＝施工人員加的、開發者還沒填開工日（第 44 版）；還沒拿到清單時 start 是 undefined，不寫
+  var t = siteDaysText(st) || (st && st.start === '' ? '開工日還沒填（開發者填）' : ''), p = siteProgress(st);
   return (t ? '<div class="sub" style="font-size:12.5px">' + esc(t) + '</div>' : '') + (p != null ? '<div class="bar"><i style="width:' + Math.max(2, Math.round(p * 100)) + '%"></i></div>' : '');
 }
 
