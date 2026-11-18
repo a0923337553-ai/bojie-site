@@ -2352,7 +2352,7 @@ function demoModel() {
 
 // ---------- 3D 方案（收件服務第 47 版，使用者 2026-11-16／17）：開發者、老闆的「🗂 方案」 ----------
 // 上傳時選「取代某個方案」或「＋ 新方案」（取代＝舊的丟雲端垃圾桶、不留舊版：「舊的就取代掉不要留下來」）；
-// .glb 傳完馬上換；.skp 要等電腦（有 SketchUp 轉檔工具的那台）轉好，大約 5 分鐘。可以改名、確定、取消確定（先問一次，怕誤按）、刪除方案。
+// .glb 傳完馬上換；.skp 第 48 版起雲端轉（GitHub，大約 3 分鐘），叫不到就等電腦（有 SketchUp 轉檔工具的那台）轉，大約 5 分鐘。可以改名、確定、取消確定（先問一次，怕誤按）、刪除方案。
 // 確定一個以後：其他方案反灰鎖起來，大家都只能看確定的那個，施工人員這時才看得到（「只能看確定的，怕現場會弄錯」）。
 // 一段 2 MB 傳給收件服務（App 裡也一樣經過 App 代傳），收件服務直接接到雲端硬碟。
 const VP = document.getElementById('verPanel'), VB = document.getElementById('verBody'), VF = document.getElementById('verFile');
@@ -2399,15 +2399,18 @@ function verRender(r) {
     '<div class="muted" id="vpMsg" style="margin-top:6px"></div><div class="bar2" id="vpBar"><i></i></div></div>';
   VPEND.forEach(p => {
     h += '<div class="tip" style="margin-top:8px">' + (p.err ? '⚠️ ' : '⏳ ') + esc(p.name || 'SketchUp 檔') + '：' +
-      (p.err ? '轉檔失敗（' + esc(p.err) + '）' : '等電腦轉好（有轉檔工具的那台電腦開著，大約 5 分鐘）') + '<div class="muted">' + esc(p.by || '') + '・' + vTime(p.at) + '</div>' +
-      '<div style="margin-top:6px"><button class="btn ghost red" data-del="' + esc(p.id) + '"' + dis + '>' + (p.err ? '移除' : '取消（傳錯了）') + '</button></div></div>';
+      (p.err ? '轉檔失敗（' + esc(p.err) + '）' : p.cloud ? '雲端轉檔中（大約 3 分鐘，轉好會自動換上）' : '等電腦轉好（有轉檔工具的那台電腦開著，大約 5 分鐘）') +
+      '<div class="muted">' + esc(p.by || '') + '・' + vTime(p.at) + '</div>' +
+      '<div style="margin-top:6px"><button class="btn ghost red" data-del="' + esc(p.id) + '"' + dis + '>' + (p.err ? '移除' : '取消（傳錯了）') + '</button>' +
+      // 第 48 版：雲端沒叫到、或轉失敗 → 再叫一次雲端
+      (p.err || !p.cloud ? ' <button class="btn ghost" data-kick="' + esc(p.id) + '"' + dis + '>☁ 雲端再轉一次</button>' : '') + '</div></div>';
   });
   h += '<div class="card"><div class="t">方案 <span class="muted">（確定一個以後，其他方案鎖起來，施工人員才看得到確定的那個）</span></div>';
   if (!plans.length) h += '<div class="muted" style="padding:6px 0">還沒有方案：上面選「＋ 新方案」上傳</div>';
   plans.forEach(p => {
     const sk = p.sk;
     h += '<div class="vrow"><div class="g"><b>' + (p.locked ? '🔒 ' : '') + esc(p.name) + (p.confirmed ? ' <span style="color:#15803D">✓ 確定</span>' : '') + '</b>' +
-      '<div class="muted">' + (sk ? esc(sk.by || '電腦上傳') + '・' + vTime(sk.at) + '・' + vMB(sk.size) : '還沒有模型（等電腦轉檔）') + '</div></div><div class="vb">' +
+      '<div class="muted">' + (sk ? esc(sk.by || '電腦上傳') + '・' + vTime(sk.at) + '・' + vMB(sk.size) : '還沒有模型（等轉檔）') + '</div></div><div class="vb">' +
       '<button class="btn ghost" data-ren="' + esc(p.id) + '"' + dis + '>改名</button>' +
       (p.confirmed ? '<button class="btn ghost red" data-unconf="' + esc(p.id) + '"' + dis + '>取消確定</button>'
         : !conf && sk ? '<button class="btn solid" data-conf="' + esc(p.id) + '"' + dis + '>確定用這個</button>' : '') +
@@ -2423,6 +2426,17 @@ function verRender(r) {
   VB.querySelectorAll('[data-unconf]').forEach(b => b.onclick = () => planUnconfirm(P2(b.dataset.unconf)));
   VB.querySelectorAll('[data-pdel]').forEach(b => b.onclick = () => planDelete(P2(b.dataset.pdel)));
   VB.querySelectorAll('[data-del]').forEach(b => b.onclick = () => verDelete(b.dataset.del));
+  VB.querySelectorAll('[data-kick]').forEach(b => b.onclick = () => verKick(b.dataset.kick));
+}
+/** 第 48 版：再叫一次雲端轉（雲端沒叫到、或轉失敗） */
+async function verKick(id) {
+  if (vBusy) return;
+  vBusy = true; vMsg('叫雲端轉…');
+  try {
+    const k = await api('model3d', { site: SITE, op: 'cloudkick', id: id }); vBusy = false;
+    const r = await api('model3d', { site: SITE, op: 'plans' }); VPEND = r.pending || []; verRender(r); verInit(CANUP, VPEND);
+    vMsg(k.cloud && k.cloud.ok ? '✅ 叫雲端轉了，大約 3 分鐘轉好會自動換上' : '雲端叫不到（還沒設定或 GitHub 鑰匙過期），等電腦轉');
+  } catch (e) { vBusy = false; vMsg('沒有成功：' + esc(errText(e))); }
 }
 async function planAct(op, p, extra) {
   vBusy = true; vMsg('處理中…');
@@ -2496,7 +2510,7 @@ VF.onchange = async () => {
     if (r && r.installed) { vMsg('✅ 換好了，重新打開 3D…', 100); setTimeout(() => planGo(r.plan || tgt), 700); return; }
     vBusy = false;
     const v = await api('model3d', { site: SITE, op: 'plans' }); verRender(v); verInit(CANUP, VPEND);
-    vMsg('✅ 傳上去了：' + esc(f.name) + '。等電腦轉好（大約 5 分鐘）就會' + (tgt === 'new' ? '變成新方案' : '取代' + esc(tname)) + '。');
+    vMsg('✅ 傳上去了：' + esc(f.name) + '。' + (r && r.cloud ? '雲端轉好（大約 3 分鐘）' : '等電腦轉好（大約 5 分鐘）') + '就會' + (tgt === 'new' ? '變成新方案' : '取代' + esc(tname)) + '。');
   } catch (e) { vBusy = false; vMsg('沒有傳完：' + esc(errText(e)) + '。再傳一次。'); const b = document.getElementById('vpUp'); if (b) b.disabled = false; }
 };
 document.getElementById('verBtn').onclick = verShow;
