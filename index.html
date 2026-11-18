@@ -446,7 +446,10 @@ var OLD_CATS = { '機械設備': '開挖整地', '泥作工程': '裝修工程' 
 function canonCat(c) { c = String(c == null ? '' : c).trim(); return OLD_CATS[c] || c; }
 // 細項（收件服務第 50 版，使用者 2026-11-18 全 A：裝修工程一筆一定選一個細項；寫在內容最前面「【泥作】…」；以前的泥作工程＝裝修工程【泥作】）
 var OLD_SUBS = { '泥作工程': '泥作' };
-var DEFAULT_SUBS = { '裝修工程': ['泥作', '磁磚', '油漆', '天花板', '木作', '地板', '防水'] };
+var DEFAULT_SUBS = { '裝修工程': ['泥作', '磁磚', '油漆', '天花板', '木作', '地板', '防水'], '灌漿雜項': ['灌漿', '養護', '其他'],
+  '開挖整地': ['開挖', '回填', '整地', '夯實', '運土', '吊車', '其他'], '門窗工程': ['鋁門窗', '木門', '鐵捲門', '不鏽鋼', '其他'], '雜項工程': ['其他'] };
+/** 廠商是柏捷（自己的工人）才點工人名字（使用者 2026-11-18「開發者如果選擇柏捷廠商時才會出現他們的名字」）；空的＝柏捷 */
+function isBojie(v) { v = String(v == null ? '' : v).trim(); return !v || v.indexOf('柏捷') >= 0; }
 function subsOf(c) { var s = (S.s && S.s.subs) || DEFAULT_SUBS; return (s && s[canonCat(c)]) || []; }
 /** 內容最前面的【細項】拆出來：{sub, text}（不是這個大項的細項就不拆） */
 function splitSub(c, t) { t = String(t == null ? '' : t); var m = /^\s*【([^】]{1,12})】\s*/.exec(t); return m && subsOf(c).indexOf(m[1]) >= 0 ? { sub: m[1], text: t.slice(m[0].length) } : { sub: '', text: t }; }
@@ -3569,7 +3572,7 @@ var ACT = {
   },
   date: function (v) { S.d.date = v; applyWx(); render(); },
   wx: function (v) { S.d.weather = S.d.weather === v ? '' : v; S.d.touchedWx = true; render(); },
-  cat: function (v) { var d = S.d; d.cat = v; if (subsOf(v).indexOf(d.sub) < 0) d.sub = ''; S.err = ''; render(); },
+  cat: function (v) { var d = S.d, ss = subsOf(v); d.cat = v; if (ss.indexOf(d.sub) < 0) d.sub = ss.length === 1 ? ss[0] : ''; S.err = ''; render(); },   // 只有一個細項（雜項工程：其他）就直接選好
   hours: function (v) { S.d.hours = v; if (hasHours()) S.d.workH = numTxt(Number(v) * HOURS_PER_DAY); render(); },
   // 第 50 版：細項（一定要選一個）；按小時；一天好幾項
   sub: function (v) { S.d.sub = v; S.err = ''; render(); },
@@ -4910,8 +4913,10 @@ function dlFilled(i) { return +i.people > 0 || +i.people2 > 0 || (i.lines || [])
 function dlFull(l, k) { var t = String(l.text || '').trim(); if (!t) return ''; var w = l.workers || []; return (k + 1) + '.' + t + (w.length ? '(' + w.join('+') + ')' : ''); }
 /** 存回雲端的樣子（跟摺疊機 toJson 一樣：qty、每行的 full 算好；空的行不寫） */
 function dlItemOut(i) {
+  // 廠商不是柏捷：工人名字不存（2026-11-18「選擇柏捷廠商時才會出現他們的名字」）
+  var bj = isBojie(i.vendor);
   var o = { category: i.category, vendor: i.vendor || '柏捷', unit: i.unit || '工', people: +i.people || 0, hours: String(i.hours || '1'), qty: dlQty(i),
-    lines: (i.lines || []).map(function (l, k) { var f = dlFull(l, k); return f ? { text: String(l.text).trim(), workers: l.workers || [], full: f } : null; }).filter(Boolean) };
+    lines: (i.lines || []).map(function (l, k) { var l2 = bj ? l : { text: l.text, workers: [] }, f = dlFull(l2, k); return f ? { text: String(l.text).trim(), workers: l2.workers || [], full: f } : null; }).filter(Boolean) };
   if (i.qtyText) o.qtyText = i.qtyText; if (i.src) o.src = i.src; if (i.at) o.at = i.at;
   if (+i.people2 > 0) { o.people2 = +i.people2; o.hours2 = String(i.hours2 || '1'); }
   if (i.wids && i.wids.length) o.wids = i.wids;
@@ -5222,10 +5227,18 @@ function dlItemEditor(dl, c) {
     hrs(it.hours2 || '1').map(function (x) { return dlChip('dlih2', x, x, String(it.hours2 || '1') === x, 'hours'); }).join('') + dlAddChip('hours', 'ih2') + '</div>';
   else h += '<button class="link" data-act="dltwo">＋ 加第二組人數×工時</button>';
   if (it.qtyText && !(+it.people > 0)) h += '<div class="note">數量：' + esc(it.qtyText) + '（電腦傳來的；填人數就換掉）</div>';
-  h += '<div class="label" style="margin-top:10px">工作內容（最多 3 行；點名字＝誰做的）</div>';
+  // 2026-11-18：細項（裝修工程、灌漿雜項…：每一行選一個，寫成「【泥作】…」）；工人名字只有廠商是柏捷才點（別家廠商的人不是我們的工人）
+  var subs = subsOf(it.category), bj = isBojie(it.vendor);
+  h += '<div class="label" style="margin-top:10px">工作內容（最多 3 行' + (bj ? '；點名字＝誰做的' : '') + '）</div>';
+  if (!bj) h += '<div class="note">廠商不是柏捷：不用點工人名字。</div>';
   it.lines.forEach(function (l, k) {
-    h += '<div style="margin:6px 0 10px"><input type="text" data-df="il.' + k + '" value="' + esc(l.text) + '" placeholder="' + (k + 1) + '. 例：地梁綁紮（A 區）" maxlength="80">' +
-      '<div class="chips" style="margin-top:4px">' + L.workers.map(function (w) { return dlChip('dliw', k + '|' + w, w, (l.workers || []).indexOf(w) >= 0, 'workers'); }).join('') + dlAddChip('workers', 'iw.' + k) + '</div></div>';
+    var sp = subs.length ? splitSub(it.category, l.text) : { sub: '', text: l.text };
+    h += '<div style="margin:6px 0 10px">';
+    if (subs.length) h += '<div class="subchips" style="margin-bottom:6px"><div class="label">細項（第 ' + (k + 1) + ' 行）</div><div class="chips">' +
+      subs.map(function (x) { return chip('dlisub', k + '|' + x, x, sp.sub === x, true); }).join('') + (isOwner() ? '<button class="chip small" data-act="dlisubadd" data-v="' + k + '" style="border-style:dashed">＋ 新增</button>' : '') + '</div></div>';
+    h += '<input type="text" data-df="il.' + k + '" value="' + esc(sp.text) + '" placeholder="' + (k + 1) + '. 例：' + (subs.length ? '2F 浴室牆面打底' : '地梁綁紮（A 區）') + '" maxlength="80">';
+    if (bj) h += '<div class="chips" style="margin-top:4px">' + L.workers.map(function (w) { return dlChip('dliw', k + '|' + w, w, (l.workers || []).indexOf(w) >= 0, 'workers'); }).join('') + dlAddChip('workers', 'iw.' + k) + '</div>';
+    h += '</div>';
   });
   h += '<div class="row2"><button class="ghost" style="margin:0" data-act="dlback">完成</button><button class="ghost red" style="margin:0" data-act="dlclear">清空這個大項</button></div></div>';
   return h;
@@ -5375,6 +5388,23 @@ ACT.dliv = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.vend
 ACT.dliu = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.unit = v; dlTouch(); render(); };
 ACT.dlih = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.hours = v; dlTouch(); render(); };
 ACT.dlih2 = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.hours2 = v; dlTouch(); render(); };
+// 細項（2026-11-18）：點了換那一行的【細項】，再點一次拿掉
+ACT.dlisub = function (v) {
+  var dl = S.dl; if (!dl || !dl.cur) return; var p = v.split('|'), l = dl.cur.lines[+p[0]]; if (!l) return;
+  var sp = splitSub(dl.cur.category, l.text); l.text = sp.sub === p[1] ? sp.text : '【' + p[1] + '】' + sp.text; dlTouch(); render();
+};
+ACT.dlisubadd = function (k) {
+  var dl = S.dl; if (!dl || !dl.cur || !isOwner()) return; var c = canonCat(dl.cur.category);
+  var v = window.prompt('「' + c + '」要加哪個細項？（最多 8 個字）', ''); v = String(v || '').replace(/[\s【】\/]+/g, '').slice(0, 8); if (!v) return;
+  var pick = function () { var l = dl.cur && dl.cur.lines[+k]; if (l) { var sp = splitSub(c, l.text); l.text = '【' + v + '】' + sp.text; } dlTouch(); render(); };
+  if (subsOf(c).indexOf(v) >= 0) { pick(); return; }
+  dCustomEdit(function (j) {
+    j.added = j.added || {}; var a = Array.isArray(j.added.subs) ? j.added.subs : [];
+    if (a.indexOf(c + '/' + v) < 0) a.push(c + '/' + v); j.added.subs = a;
+    if (Array.isArray(j.hidden)) j.hidden = j.hidden.filter(function (x) { return x !== 'subs:' + c + '/' + v; });
+  }).then(function () { S.s.subs = S.s.subs || JSON.parse(JSON.stringify(DEFAULT_SUBS)); S.s.subs[c] = (S.s.subs[c] || []).concat([v]); pick(); })
+    .catch(function (e) { alert('細項沒加成：' + errText(e)); });
+};
 ACT.dliw = function (v) {
   var dl = S.dl; if (!dl || !dl.cur) return; var p = v.split('|'), l = dl.cur.lines[+p[0]]; if (!l) return;
   var i = l.workers.indexOf(p[1]); if (i >= 0) l.workers.splice(i, 1); else l.workers.push(p[1]); dlTouch(); render();
@@ -6251,7 +6281,11 @@ document.addEventListener('input', function (ev) {
   else if (k === 'iv' && dl.cur) dl.cur.vendor = v;
   else if (k === 'ip' && dl.cur) dl.cur.people = Math.max(0, Math.min(99, parseInt(v, 10) || 0));
   else if (k === 'ip2' && dl.cur) dl.cur.people2 = Math.max(0, Math.min(99, parseInt(v, 10) || 0));
-  else if (k.indexOf('il.') === 0 && dl.cur) dl.cur.lines[+k.split('.')[1]].text = v;
+  else if (k.indexOf('il.') === 0 && dl.cur) {
+    // 有細項的大項：框裡打的是細項後面的字，【細項】留著（2026-11-18）
+    var ln = dl.cur.lines[+k.split('.')[1]], sub = subsOf(dl.cur.category).length ? splitSub(dl.cur.category, ln.text).sub : '';
+    ln.text = sub ? '【' + sub + '】' + v : v;
+  }
   else if (k.indexOf('mat.') === 0) { var p = k.split('.'); dl.e.materials[+p[1]][p[2]] = v; }
   else if (k === 'pline') { var ph = dlCurPhoto(dl); if (ph) ph.line = v; }
   dlTouch();
