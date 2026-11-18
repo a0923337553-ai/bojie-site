@@ -1095,6 +1095,8 @@ function updatePins() {
     const near = p => boxes.some(b => p[0] >= b[0] - pad && p[0] <= b[3] + pad && p[1] >= b[1] - pad && p[1] <= b[4] + pad && p[2] >= b[2] - pad && p[2] <= b[5] + pad);
     list = list.filter(({ m }) => m.pos && m.pos.length >= 3 && near(m.pos));
   }
+  // 已改好的圈不畫（使用者 2026-11-18「選擇已改好，圖上就不要顯示圓圈，除非使用者去點選右下的已改好內容」）：只有點了那一筆才顯示
+  list = list.filter(({ m }) => !m.done || st.markSel === m.id);
   if (st.draft) list.push({ m: { id: '_draft', pos: st.draft.pos }, no: '＋', draft: true });
   let h = '';
   list.forEach(({ m, no, draft }) => {
