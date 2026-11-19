@@ -20,16 +20,24 @@
 //   iPhone 的規定：點小工具一定先經過它的 App（Scriptable，閃一下）再跳到 Safari；主畫面那個「柏捷工地」圖示沒辦法從別的地方打開。
 //   完整清單（待辦打勾、換代碼）還在：打開 Scriptable 點「柏捷工地」。
 //   點小工具不再經過清單 → 小工具重畫的時候自己看有沒有新版（selfUpdate）。
+// 11/19b（使用者「三個都做看看」）：點小工具可以選三種，存在鑰匙圈 bojie.widget.tap：
+//   safari＝用 Safari 打開柏捷工地；full＝在 Scriptable 裡面全螢幕打開柏捷工地（試驗，不用再輸入代碼）；list＝完整清單（待辦打勾）；ask＝每次問。
+//   沒選過：開發者、老闆、主任、公司＝每次問（先試用三種）；施工人員＝Safari。清單最下面「👆 點小工具要打開什麼」可以換。
 
-const VER = '11/19a';
+const VER = '11/19b';
 const API = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
 const WEB = 'https://a0923337553-ai.github.io/bojie-site/';
 const SELF = WEB + 'bojie-widget.js';
 // 點小工具打開的網址（?from=widget：網頁版的登入頁看到這個會說「這裡是 Safari，輸入一次代碼」，不叫他再加入主畫面）
 const OPEN = WEB + '?from=widget';
+// 在 Scriptable 裡面全螢幕打開的網址（?from=sapp：網頁版看到這個、又有記住的代碼，就自己進去，不用按「登入」）
+const FULL = WEB + '?from=sapp';
+const ORIGIN = 'https://a0923337553-ai.github.io';
+// 點小工具打開什麼
+const TAP_NAME = { safari: '🌐 柏捷工地（用 Safari 打開）', full: '📱 柏捷工地 全螢幕（試驗）', list: '📋 清單（待辦打勾）', ask: '❓ 每次問我' };
 // 這個檔的最後一行。自己更新的時候要看到這一行才換（半份寫進去小工具會壞掉）→ 以後每一版最後一行都要留著
 const END = '// END-' + 'BOJIE-WIDGET';
-const KC = 'bojie.widget.code', KD = 'bojie.widget.device', KU = 'bojie.widget.updated';
+const KC = 'bojie.widget.code', KD = 'bojie.widget.device', KU = 'bojie.widget.updated', KT = 'bojie.widget.tap';
 const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 
 // ---------------- 顏色（深色模式也看得清楚） ----------------
@@ -388,8 +396,11 @@ function buildWidget(d, fam, p) {
   const w = new ListWidget();
   w.refreshAfterDate = new Date(Date.now() + 15 * 60000);
   const kind = /消息|news/i.test(p) ? 'news' : /行事曆|月曆|行程|cal/i.test(p) ? 'cal' : /提醒|rem/i.test(p) ? 'rem' : /日誌|log/i.test(p) ? 'log' : '';
-  w.url = OPEN;   // 點小工具 → 柏捷工地（11/19a；原本是 scriptable:///run/… 打開完整清單）
   const f = d.f;
+  // 點小工具（11/19b）：沒資料（還沒設代碼、代碼不能用…）→ 打開 Scriptable 的清單去設定；
+  // 沒選過又是施工人員 → 直接用 Safari 打開柏捷工地；其他 → 先回 Scriptable 照設定走（?tap=1，見 tapMain），改了設定馬上有效
+  const run = 'scriptable:///run/' + encodeURIComponent(Script.name());
+  w.url = !f ? run : (!kget(KT) && tapMode(f) === 'safari') ? OPEN : run + '?tap=1' + (kind ? '&show=' + kind : '');
 
   // 鎖定畫面
   if (fam.indexOf('accessory') === 0) {
@@ -572,10 +583,10 @@ async function askCode(why) {
     }
   }
 }
-/** 看 GitHub 上有沒有新版（6 小時最多看一次）：在 Scriptable 裡打開的時候、小工具自己重畫的時候都看；有新版就把這個檔換掉，回傳新的版本 */
-async function selfUpdate() {
+/** 看 GitHub 上有沒有新版（1 小時最多看一次；force＝現在就看）：在 Scriptable 裡打開的時候、小工具自己重畫的時候都看；有新版就把這個檔換掉，回傳新的版本 */
+async function selfUpdate(force) {
   try {
-    if (Date.now() - (Number(kget(KU)) || 0) < 6 * 3600000) return '';
+    if (!force && Date.now() - (Number(kget(KU)) || 0) < 3600000) return '';   // 1 小時最多看一次（11/19b；原本 6 小時，要等太久）
     Keychain.set(KU, String(Date.now()));
     const r = new Request(SELF + '?t=' + Date.now()); r.timeoutInterval = 8;
     const src = await r.loadString();
@@ -588,8 +599,77 @@ async function selfUpdate() {
   } catch (e) { return ''; }
 }
 
+/** 點小工具要打開什麼：選過的照選的；沒選過 → 開發者、老闆、主任、公司＝每次問（試用），施工人員（或還不知道是誰）＝Safari */
+function tapMode(f) {
+  const m = kget(KT);
+  if (TAP_NAME[m]) return m;
+  return f && f.role && f.role !== '施工人員' ? 'ask' : 'safari';
+}
+/** 固定用哪一種（withAsk＝也可以選「每次問我」）；回傳選的那一種，取消＝'' */
+async function pickTap(withAsk) {
+  const ks = withAsk ? ['safari', 'full', 'list', 'ask'] : ['safari', 'full', 'list'];
+  const a = new Alert();
+  a.title = '以後點小工具都打開哪一個？';
+  a.message = '之後要換：打開 Scriptable → 點「柏捷工地」→ 最下面「👆 點小工具要打開什麼」';
+  ks.forEach(k => a.addAction(TAP_NAME[k]));
+  a.addCancelAction('取消');
+  const i = await a.presentSheet();
+  if (i < 0 || i >= ks.length) return '';
+  Keychain.set(KT, ks[i]);
+  return ks[i];
+}
+/** 「每次問我」：點小工具先跳這個選單；回傳 safari／full／list，取消＝'' */
+async function askTap() {
+  const ks = ['safari', 'full', 'list'];
+  const a = new Alert();
+  a.title = '要打開哪一個？';
+  a.message = '三種都可以試。試好了，選最下面那個固定用一種，以後就不會再問。';
+  ks.forEach(k => a.addAction(TAP_NAME[k]));
+  a.addAction('⚙️ 固定用一種，以後不要問');
+  a.addCancelAction('取消');
+  const i = await a.presentSheet();
+  if (i < 0) return '';
+  return i < ks.length ? ks[i] : pickTap(false);
+}
+/**
+ * 全螢幕打開柏捷工地（試驗）：在 Scriptable 裡面開網頁版，沒有 Safari 的網址列。
+ * 這支手機的代碼（鑰匙圈裡的）直接放進那一頁在這支手機上的儲存區，不放在網址上 → 不用再輸入代碼；網頁版看到 ?from=sapp 會自己進去。
+ * 打不開就改用 Safari。
+ */
+function fullScript() {
+  return '(function(){try{if(location.origin!==' + JSON.stringify(ORIGIN) + ')return "x";' +
+    'var c=' + JSON.stringify(kget(KC)) + ',d=' + JSON.stringify(device()) + ',L=localStorage,had=L.getItem("bojie.code")||"";' +
+    'if(!L.getItem("bojie.device"))L.setItem("bojie.device",d);' +
+    'if(had===c)return "ok";' +
+    '["sess","feed","here","fc","seen"].forEach(function(k){L.removeItem("bojie."+k)});' +
+    'L.setItem("bojie.code",c);return "set"}catch(e){return "err"}})()';
+}
+async function openFull() {
+  try {
+    const wv = new WebView();
+    await wv.loadURL(FULL);
+    const r = await wv.evaluateJavaScript(fullScript(), false);
+    if (r === 'set') await wv.loadURL(FULL);   // 第一次（或換過代碼）：再載一次，網頁版就用這個代碼自己進去
+    await wv.present(true);
+  } catch (e) {
+    await say('全螢幕打不開', ((e && e.message) || String(e)) + '\n\n改用 Safari 打開。');
+    Safari.open(OPEN);
+  }
+}
+/** 點小工具進來的（scriptable:///run/…?tap=1）：照設定打開 Safari／全螢幕／清單 */
+async function tapMain(show) {
+  if (!kget(KC)) return appMain(show);   // 還沒設代碼：清單（會先問代碼）
+  const c = readCache();
+  let mode = tapMode(c && c.f);
+  if (mode === 'ask') mode = await askTap();
+  if (!mode) return;
+  if (mode === 'safari') { Safari.open(OPEN); return; }
+  if (mode === 'full') return openFull();
+  return appMain(show);
+}
+
 const HOWTO = '放到桌面：\n① 回到桌面，長按空白的地方\n② 左上角「編輯」→「加入小工具」\n③ 搜尋「Scriptable」，選大小 →「加入小工具」\n④ 點一下剛放好的小工具，「Script」選「柏捷工地」\n\n' +
-  '點小工具＝打開柏捷工地（用 Safari；第一次要在 Safari 輸入一次代碼）。待辦打勾、換代碼：打開 Scriptable 點「柏捷工地」。\n\n小、中＝今日提醒；大＝月曆＋這週行程＋待辦；特大（iPad）＝左邊月曆、右邊今日提醒＋這週＋待辦。\n開發者：大、特大是最完整的（多了今天的日誌、最新消息）。\n「Parameter」打「消息」＝最新消息、「日誌」＝今天的日誌。\n鎖定畫面也可以放。\n\nMac：macOS 14 以上可以把這支 iPhone 的小工具放到 Mac 桌面（桌面按右鍵 →「編輯小工具」→ iPhone 的 Scriptable）。';
+  '點小工具：可以選打開「柏捷工地（Safari）」「柏捷工地 全螢幕（試驗）」或「清單」；清單最下面「👆 點小工具要打開什麼」可以換。\n\n小、中＝今日提醒；大＝月曆＋這週行程＋待辦；特大（iPad）＝左邊月曆、右邊今日提醒＋這週＋待辦。\n開發者：大、特大是最完整的（多了今天的日誌、最新消息）。\n「Parameter」打「消息」＝最新消息、「日誌」＝今天的日誌。\n鎖定畫面也可以放。\n\nMac：macOS 14 以上可以把這支 iPhone 的小工具放到 Mac 桌面（桌面按右鍵 →「編輯小工具」→ iPhone 的 Scriptable）。';
 
 async function appMain(show) {
   const upd = await selfUpdate();
@@ -656,6 +736,8 @@ async function appMain(show) {
     }
     head('其他');
     line('🔄 重新整理', COL.teal, '', async () => { d = await getData(true); fill(); t.reload(); });
+    line('👆 點小工具要打開什麼', COL.teal, '現在：' + TAP_NAME[tapMode(d.f)].replace(/^\S+\s/, '') + (kget(KT) ? '' : '（還沒固定）'), async () => { if (await pickTap(true)) { fill(); t.reload(); } });
+    line('📱 全螢幕打開柏捷工地（試驗）', COL.teal, '在這裡面直接開，不用再輸入代碼', async () => { await openFull(); });
     line('🌐 打開柏捷工地網頁版', COL.teal, '用 Safari 打開；第一次要在 Safari 輸入一次代碼', () => Safari.open(WEB));
     line('👁 看小工具的樣子（小）', COL.teal, '', async () => { await buildWidget(d, 'small', '').presentSmall(); });
     line('👁 看小工具的樣子（中）', COL.teal, '', async () => { await buildWidget(d, 'medium', '').presentMedium(); });
@@ -663,6 +745,10 @@ async function appMain(show) {
     if (Device.isPad()) line('👁 看小工具的樣子（特大）', COL.teal, '', async () => { await buildWidget(d, 'extraLarge', '').presentExtraLarge(); });
     line('📖 怎麼放到桌面', COL.teal, '', async () => { await say('怎麼放到桌面', HOWTO); });
     line('🔑 換代碼', COL.muted, '', async () => { if (await askCode('')) { d = await getData(true); fill(); t.reload(); } });
+    line('⬇️ 看有沒有新版的小工具', COL.teal, '現在是 ' + VER, async () => {
+      const v = await selfUpdate(true);
+      await say(v ? '更新到 ' + v + ' 版了' : '已經是最新的（' + VER + '）', v ? '把這個清單關掉，再點一次小工具就是新的。' : '');
+    });
     line('小工具版本 ' + VER, COL.muted);
   };
   fill();
@@ -676,7 +762,8 @@ if (config.runsInWidget) {
   Script.setWidget(buildWidget(d, config.widgetFamily, P));
   await selfUpdate();   // 畫好以後看有沒有新版（點小工具不再打開 Scriptable）；有的話下次重畫就用新的
 } else if (config.runsInApp) {
-  await appMain(String((args.queryParameters || {}).show || ''));
+  const q = args.queryParameters || {};
+  if (q.tap) await tapMain(String(q.show || '')); else await appMain(String(q.show || ''));
 } else {
   // 捷徑、分享選單：預覽中的
   const d = await getData(false);
