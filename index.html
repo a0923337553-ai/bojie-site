@@ -421,7 +421,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/19';
+var WEB_VERSION = '11/19b';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -789,7 +789,7 @@ function render() {
     '<button class="ghost dim" data-act="tologin" style="margin-top:14px">回登入畫面</button></div>';
   else h = ({ hub: renderHub, work: renderWork, edit: renderEdit, view: renderView, site: renderSite, pours: renderPours, sheets: renderSheets,
     pdf: renderPdf, contracts: renderContracts, todo: renderTodo, logs: renderLogs, calendar: renderCal, tasks: renderTasks,
-    people: renderPeople, adminq: renderAdminQ, dlog: renderDlog, staff: renderStaff }[S.route] || renderHub)();
+    people: renderPeople, adminq: renderAdminQ, dlog: renderDlog, staff: renderStaff, mats: renderMats }[S.route] || renderHub)();
   if (S.asCode && S.route !== 'login') h = asBar() + h;   // 開發者切換成別人測試中
   $('app').innerHTML = h;
   if ($('gbtn')) mountGis();
@@ -810,7 +810,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -1433,6 +1433,8 @@ function renderWork() {
   if (hasFeed() && S.site && S.site !== UNFILED) h += '<button class="ghost" data-act="logsfromwork">📋 看「' + esc(S.site) + '」的施工日誌</button>';
   // 施工人員看 3D（收件服務第 38 版，使用者 2026-11-15「施工人員只有看3d不能看改哪」）：只能看、量、藏東西；沒有圈的地方
   if (!isOffice() && S.s && Number(S.s.version) >= 38 && S.site && S.site !== UNFILED) h += '<button class="ghost" data-act="work3d">🏗️ 看「' + esc(S.site) + '」的 3D 模型</button>';
+  // 現場材料數量（收件服務第 52 版，使用者 2026-11-19「每個人都能填寫」）
+  if (hasMats() && S.site && S.site !== UNFILED) h += '<button class="ghost" style="border-color:#8D6E63;color:#8D6E63" data-act="matsfromwork">📦 「' + esc(S.site) + '」的現場材料數量</button>';
   var groups = {}, order = [];
   S.entries.forEach(function (e) { if (!groups[e.date]) { groups[e.date] = []; order.push(e.date); } groups[e.date].push(e); });
   order.sort().reverse();
@@ -1726,6 +1728,8 @@ function renderSite() {
   else h += tile('施工日誌', '每天的日誌、施工人員傳的、照片', '#2F80ED', '📋', 'logs');
   h += tile('鋼筋施工單', sheets + ' 份', '#16A6A0', '📐', 'sheets');
   h += tile('混凝土灌漿數量', next ? '下一次 ' + rocDate(pourOf(next).pourDate) + '（' + (pourOf(next).part || '') + '）' + (pourOf(next).m3 ? ' ・ ' + pourOf(next).m3 + ' m³' : '') : pours.length + ' 份', '#F2994A', '🚚', 'pours');
+  // 現場材料數量（收件服務第 52 版，使用者 2026-11-19「在混凝土灌漿數量下面新增一個按鈕」；每個人都能填）
+  if (hasMats()) h += tile('現場材料數量', matLine(site), '#8D6E63', '📦', 'mats');
   h += tile('發包', cb ? '未發包 ' + cb.todo.length + ' ・ 已發包 ' + cb.done.length : '還沒有發包資料', '#9B51E0', '🤝', 'contracts');
   if (S.feed && S.feed.todo) h += tile('待辦事項', todoLine(S.feed.todo[site]), '#1E8E5A', '✅', 'todo');
   // 派工（第 15 版）：公司、主任、老闆、開發者派給指定的施工人員
@@ -2403,6 +2407,166 @@ function todoRowPage(t) {
     (/^tmp/.test(t.id) ? '' : '<button class="tdel" data-act="tododel" data-v="' + esc(t.id) + '">🗑 刪除</button>') + '</div>';
 }
 
+// ===================== 現場材料數量（一個工地；收件服務第 52 版，使用者 2026-11-19） =====================
+// 工地頁「混凝土灌漿數量」下面的按鈕；施工人員在「我的工作」裡面。「每個人都能填寫」「填寫後會有誰寫得跟日期」。
+// 第一層＝五個資料夾（鋼筋、施工架、模板、材料、其他）；鋼筋那一夾是電腦的鋼筋系統（現場餘料）發布的，只能看；其他四夾有「＋ 新增數量」。
+// 自己寫的那一筆（或開發者）點了可以改、刪。跟 App 的 SiteMatScreen 一樣。
+var MAT_REBAR = '鋼筋', MAT_FOLDERS = [MAT_REBAR, '施工架', '模板', '材料', '其他'];
+var MAT_COLORS = { '鋼筋': '#16A6A0', '施工架': '#4F6BD8', '模板': '#B7791F', '材料': '#D9534F', '其他': '#7A8794' };
+var MAT_UNITS = { '施工架': ['組', '片', '支', '個', '層'], '模板': ['片', '支', '才', 'm²', '組'], '材料': ['包', '噸', '支', '片', '箱', '桶', 'm³'], '其他': ['個', '組', '式', '支', '箱'] };
+var MATCACHE = {};   // 工地 → 上次讀到的（工地頁那一格的「共 N 筆」、回來先顯示舊的）
+function hasMats() { return !!S.s && Number(S.s.version) >= 52; }
+function matLine(site) { var c = MATCACHE[site]; return (c && c.length ? '共 ' + c.length + ' 筆 ・ ' : '') + '鋼筋、施工架、模板、材料、其他'; }
+function matLast(m) { return Math.max(Number(m.at) || 0, Number(m.editAt) || 0); }
+function matWho(m) { return todoWhen(m.by, m.at, '寫') + (m.editAt > 0 ? '・' + todoWhen(m.editBy, m.editAt, '改') : ''); }
+// 鋼筋那一夾＝鋼筋系統的「現場餘料」（使用者「我可以在手機輸入鋼筋外掛的現場餘料功能」）：號數、形式、尺寸（公分）、支數。
+// 形式跟電腦鋼筋系統 LeftoverStock.Shapes 同一份、同一個順序（App 的 REBAR_SHAPES、收件服務的 SMAT_SHAPES 也是）：n＝名字、l＝尺寸那幾格、h＝提示、s＝中間用什麼隔
+var REBAR_SHAPES = [
+  { n: '直', l: ['長度'], h: ['700'], s: '+' }, { n: '單彎', l: ['彎鉤', '長度'], h: ['30', '600'], s: '+' }, { n: '雙彎', l: ['彎鉤', '長度', '彎鉤'], h: ['30', '500', '30'], s: '+' },
+  { n: 'ㄇ', l: ['腳', '底', '腳'], h: ['23', '12', '23'], s: '+' }, { n: '工作筋-ㄇ字', l: ['腳', '底', '腳'], h: ['20', '40', '20'], s: '+' },
+  { n: '工作筋-S筋', l: ['直線段', 'H'], h: ['30', '6'], s: '+' }, { n: '工作筋-馬騎筋', l: ['腳', '高', '頂寬'], h: ['20', '40', '30'], s: '+' },
+  { n: '柱箍筋', l: ['寬', '深'], h: ['40', '50'], s: 'x' }, { n: '地梁箍筋', l: ['寬', '深'], h: ['40', '50'], s: 'x' }, { n: '繫筋', l: ['長度'], h: ['51'], s: '+' },
+  { n: '梁箍筋(一組)', l: ['寬', '深'], h: ['30', '50'], s: 'x' }, { n: '梁箍筋(ㄩ形)', l: ['寬', '深'], h: ['30', '50'], s: 'x' }, { n: '梁箍筋(帽蓋)', l: ['寬'], h: ['30'], s: '+' },
+  { n: '母公頭', l: ['長度'], h: ['360'], s: '+' }, { n: '單母頭', l: ['長度'], h: ['360'], s: '+' }];
+function rebarShape(n) { return REBAR_SHAPES.filter(function (s) { return s.n === n; })[0]; }
+/** 「5|直|700」「4|柱箍筋|40x50」；號數沒選、尺寸沒填完回 ''（尺寸最多一位小數、多的 0 拿掉） */
+function rebarSpec(size, shape, dims) {
+  if (!(size >= 3 && size <= 11) || !shape) return '';
+  var out = [];
+  for (var i = 0; i < shape.l.length; i++) {
+    var t = String(dims[i] == null ? '' : dims[i]).trim(); if (!/^\d+(\.\d*)?$|^\.\d+$/.test(t)) return '';
+    var r = Math.round(Number(t) * 10) / 10; if (!(r > 0 && r < 10000)) return '';
+    out.push(String(r));
+  }
+  return size + '|' + shape.n + '|' + out.join(shape.s);
+}
+// 形狀圖（使用者 2026-11-19「手機填的可以跟電腦一樣有圖」）：跟電腦鋼筋系統「現場餘料」右邊的圖同一套座標（寬 320；App 的 RebarFigData.kt 也是這一份）。
+// h＝高；l＝折線；a＝半圓（圓心 x、y、半徑、從幾度開始，順時針畫 180°）；m＝每一格尺寸寫在圖上哪裡（順序跟 REBAR_SHAPES 的 l 一樣）；
+// b＝母頭的方塊；w＝公頭箭頭的尖端；p／s＝數字前後多寫的字（S筋「30×3」「H 6」）
+var REBAR_CAP = [118, 46, 100, 30, 220, 30, 220, 54];
+var REBAR_FIGS = {
+  '直': { h: 46, l: [[60, 34, 260, 34]], m: [[160, 18]] },
+  '單彎': { h: 70, l: [[60, 60, 60, 34, 260, 34]], m: [[32, 48], [160, 18]] },
+  '雙彎': { h: 70, l: [[60, 60, 60, 34, 260, 34, 260, 60]], m: [[32, 48], [160, 18], [288, 48]] },
+  'ㄇ': { h: 82, l: [[110, 72, 110, 30, 210, 30, 210, 72]], m: [[82, 52], [160, 15], [238, 52]] },
+  '工作筋-ㄇ字': { h: 82, l: [[110, 72, 110, 30, 210, 30, 210, 72]], m: [[82, 52], [160, 15], [238, 52]] },
+  '工作筋-S筋': { h: 98, l: [[220, 32, 100, 32], [100, 60, 220, 60], [220, 88, 100, 88]], a: [[100, 46, 14, 90], [220, 74, 14, -90]], m: [[160, 15], [62, 46]], p: ['', 'H '], s: ['×3', ''] },
+  '工作筋-馬騎筋': { h: 132, l: [[86, 124, 110, 100, 110, 30, 210, 30, 210, 100, 234, 76]], m: [[60, 112], [82, 65], [160, 15]] },
+  '柱箍筋': { h: 122, l: [[100, 30, 220, 30, 220, 112, 100, 112, 100, 30], [108, 30, 124, 46], [100, 38, 116, 54]], m: [[160, 15], [248, 71]] },
+  '地梁箍筋': { h: 134, l: [[122, 122, 100, 122, 100, 30, 220, 30, 220, 112, 92, 112, 92, 90]], m: [[160, 15], [248, 71]] },
+  '繫筋': { h: 92, l: [[80, 70, 80, 34, 220, 34], [220, 56, 186, 56]], a: [[220, 45, 11, -90]], m: [[150, 18]] },
+  '梁箍筋(一組)': { h: 196, l: [REBAR_CAP, [100, 70, 100, 166, 220, 166, 220, 70], [114, 70, 114, 94], [206, 70, 206, 94]], a: [[107, 70, 7, 180], [213, 70, 7, 180]], m: [[160, 182], [248, 118]] },
+  '梁箍筋(ㄩ形)': { h: 164, l: [[100, 38, 100, 134, 220, 134, 220, 38], [114, 38, 114, 62], [206, 38, 206, 62]], a: [[107, 38, 7, 180], [213, 38, 7, 180]], m: [[160, 150], [248, 86]] },
+  '梁箍筋(帽蓋)': { h: 74, l: [REBAR_CAP], m: [[160, 15]] },
+  '母公頭': { h: 86, l: [[66, 48, 244, 48]], m: [[160, 70]], b: [60, 42, 12, 12], w: [256, 48] },
+  '單母頭': { h: 86, l: [[66, 48, 256, 48]], m: [[160, 70]], b: [60, 42, 12, 12] } };
+/** 形狀圖的 SVG：dims＝填的數字（標在圖上；沒填的寫那一格叫什麼）；thumb＝清單上的小圖（只有形狀、放大到剛好） */
+function rebarFigSvg(name, dims, thumb) {
+  var f = REBAR_FIGS[name], sh = rebarShape(name); if (!f || !sh) return '';
+  var st = ' fill="none" stroke="#263238" stroke-width="' + (thumb ? 1.8 : 2.4) + '" stroke-linecap="round" stroke-linejoin="round"' + (thumb ? ' vector-effect="non-scaling-stroke"' : '');
+  var xs = [], ys = [], g = '';
+  f.l.forEach(function (p) { g += '<polyline points="' + p.join(' ') + '"' + st + '/>'; for (var i = 0; i < p.length; i += 2) { xs.push(p[i]); ys.push(p[i + 1]); } });
+  (f.a || []).forEach(function (a) {
+    var r = a[2], c = Math.round(Math.cos(a[3] * Math.PI / 180)), s = Math.round(Math.sin(a[3] * Math.PI / 180));
+    g += '<path d="M' + (a[0] + r * c) + ' ' + (a[1] + r * s) + ' A' + r + ' ' + r + ' 0 0 1 ' + (a[0] - r * c) + ' ' + (a[1] - r * s) + '"' + st + '/>';
+    xs.push(a[0] - r, a[0] + r); ys.push(a[1] - r, a[1] + r);
+  });
+  if (f.b) { g += '<rect x="' + f.b[0] + '" y="' + f.b[1] + '" width="' + f.b[2] + '" height="' + f.b[3] + '" fill="#263238"/>'; xs.push(f.b[0], f.b[0] + f.b[2]); ys.push(f.b[1], f.b[1] + f.b[3]); }
+  if (f.w) { g += '<polygon points="' + f.w[0] + ',' + f.w[1] + ' ' + (f.w[0] - 12) + ',' + (f.w[1] - 6) + ' ' + (f.w[0] - 12) + ',' + (f.w[1] + 6) + '" fill="#263238"/>'; xs.push(f.w[0]); ys.push(f.w[1] - 6, f.w[1] + 6); }
+  if (thumb) {
+    var x0 = Math.min.apply(null, xs), y0 = Math.min.apply(null, ys), bw = Math.max.apply(null, xs) - x0, bh = Math.max.apply(null, ys) - y0, pad = 8;
+    return '<svg viewBox="' + (x0 - pad) + ' ' + (y0 - pad) + ' ' + (bw + pad * 2) + ' ' + (bh + pad * 2) + '" width="50" height="34" style="flex:none;margin-right:6px">' + g + '</svg>';
+  }
+  f.m.forEach(function (p, i) {
+    var v = String(dims && dims[i] != null ? dims[i] : '').trim(), t = v ? ((f.p && f.p[i]) || '') + v + ((f.s && f.s[i]) || '') : sh.l[i];
+    g += '<text x="' + p[0] + '" y="' + (p[1] + 5) + '" text-anchor="middle" font-size="14" ' + (v ? 'font-weight="bold" fill="#1C5D99"' : 'fill="#5D7486"') + '>' + esc(t) + '</text>';
+  });
+  return '<svg viewBox="0 0 320 ' + f.h + '" style="display:block;width:100%">' + g + '</svg>';
+}
+function rebarModalSpec(m) { return rebarSpec(Number(m.size), rebarShape(m.shape), [m.d0, m.d1, m.d2]); }
+function rebarModalMiss(m) { return !(m.size >= 3) ? '還沒選號數' : !rebarModalSpec(m) ? '尺寸還沒填完' : !(/^\d{1,4}$/.test(String(m.qty || '').trim()) && Number(m.qty) >= 1) ? '還沒寫支數' : ''; }
+function matFolderLine(f, list) {
+  if (!list.length) return f === MAT_REBAR ? '現場剩下的鋼筋（給鋼筋系統的現場餘料用）' : '還沒有，點進去新增';
+  var last = list.slice().sort(function (a, b) { return matLast(b) - matLast(a); })[0];
+  var who = last.editAt > last.at ? todoWhen(last.editBy, last.editAt, '') : todoWhen(last.by, last.at, '');
+  return list.length + ' 筆 ・ 最後 ' + who.trim();
+}
+function renderMats() {
+  var M = S.mat || (S.mat = { from: 'site', items: null, busy: '', err: '', folder: '' }), items = M.items, f = M.folder, right = M.busy || '⟳ 更新', h;
+  if (!f) {
+    h = topBar('📦 現場材料數量', M.from, right, 'matsreload') + '<div class="wrap"><div style="font-size:15px;font-weight:bold;margin:0 4px 10px">工地：' + esc(S.site) + '</div>';
+    if (M.err) h += '<div class="err">' + esc(M.err) + '</div>';
+    if (!items && !M.err) h += '<div class="sub" style="font-size:15px;margin:0 4px 10px">讀取中…</div>';
+    h += MAT_FOLDERS.map(function (x) {
+      var list = (items || []).filter(function (m) { return m.folder === x; });
+      return '<button class="tile" data-act="matfolder" data-v="' + esc(x) + '"><span class="em" style="background:' + MAT_COLORS[x] + '29">📁</span><span class="grow"><b>' + esc(x) + '</b>' +
+        '<span class="sub" style="display:block;font-size:14px">' + esc(matFolderLine(x, list)) + '</span></span><span class="arrow">›</span></button>';
+    }).join('');
+    return h + '<div class="note" style="padding:0 4px">每個人都可以填；每一筆會記是誰、哪一天寫的。自己寫的可以改、刪（開發者每一筆都可以）。鋼筋那一夾填的是現場剩下的鋼筋，電腦的鋼筋系統「現場餘料」可以讀進去用。</div></div>';
+  }
+  var rebar = f === MAT_REBAR;
+  var list = (items || []).filter(function (m) { return m.folder === f; });
+  list.sort(function (a, b) { return matLast(b) - matLast(a); });
+  h = topBar('📁 ' + f + '・' + S.site, 'matsroot', right, 'matsreload') + '<div class="wrap">';
+  h += '<button class="big" style="background:' + MAT_COLORS[f] + '" data-act="matadd">' + (rebar ? '＋ 新增鋼筋（現場餘料）' : '＋ 新增數量') + '</button>';
+  if (M.err) h += '<div class="err">' + esc(M.err) + '</div>';
+  h += '<div class="card"><div class="label">' + (items ? list.length + ' 筆' : '讀取中…') + '</div>';
+  if (items && !list.length) h += '<div class="sub" style="font-size:15px;padding:8px 0;line-height:1.5">' + (rebar ? '還沒有。現場剩下的鋼筋按上面「＋ 新增鋼筋」填：號數、形式、尺寸、幾支。' : '這一夾還沒有東西，按上面「＋ 新增數量」。') + '</div>';
+  h += list.map(function (m) {
+    return '<div class="row" style="padding:8px 0;align-items:center"' + (m.canEdit ? ' data-act="matedit" data-v="' + esc(m.id) + '"' : '') + '>' +
+      (rebar && m.spec ? rebarFigSvg(String(m.spec).split('|')[1], null, true) : '') + '<div class="grow" style="min-width:0">' +
+      '<div style="font-size:18px;font-weight:bold;line-height:24px">' + esc(m.name) + '</div>' +
+      (m.note ? '<div class="sub" style="font-size:14px">' + esc(m.note) + '</div>' : '') +
+      '<div style="font-size:12.5px;color:#8A9BA8">' + esc(matWho(m)) + '</div></div>' +
+      '<b style="font-size:19px;color:var(--navy);white-space:nowrap">' + esc((m.qty + ' ' + (m.unit || '')).trim()) + '</b>' +
+      (m.canEdit ? '<span style="font-size:22px;color:var(--line)">›</span>' : '') + '</div>';
+  }).join('<div class="div"></div>');
+  h += '</div><div class="note" style="padding:0 4px">' + (rebar ? '這裡填的是現場剩下的鋼筋（尺寸都是公分）。電腦的鋼筋系統在「現場餘料」按「讀手機填的」就會帶進去。<br>' : '') +
+    '點自己寫的那一筆可以改或刪掉；別人寫的只能看（開發者都可以改）。</div>';
+  return h + '</div>';
+}
+/** 鋼筋那一夾：新增／改一筆現場餘料（號數 #3～#11、形式、尺寸、支數；換形式＝尺寸那幾格跟著換） */
+function smatRebarModal(m) {
+  var t = m.t, sh = rebarShape(m.shape) || REBAR_SHAPES[0], i;
+  var h = '<h3>📁 鋼筋：' + (t ? '改這一筆' : '新增現場餘料') + '</h3><div class="label">號數</div><div class="chips">';
+  for (i = 3; i <= 11; i++) h += chip('msmsize', String(i), '#' + i, Number(m.size) === i, true);
+  h += '</div><div class="label" style="margin-top:10px">形式</div><div class="chips">' + REBAR_SHAPES.map(function (s) { return chip('msmshape', s.n, s.n, s.n === sh.n, true); }).join('') + '</div>' +
+    // 形狀圖：填的數字直接標在圖上（跟電腦的現場餘料一樣）
+    '<div id="smrfig" style="background:#F3F7FA;border-radius:12px;padding:10px 4px;margin-top:8px">' + rebarFigSvg(sh.n, [m.d0, m.d1, m.d2]) + '</div>' +
+    '<div class="label" style="margin-top:10px">尺寸（公分）</div><div class="row" style="align-items:flex-end;gap:4px">';
+  for (i = 0; i < sh.l.length; i++) h += (i ? '<span style="color:var(--muted);padding-bottom:10px">' + (sh.s === 'x' ? '×' : '＋') + '</span>' : '') +
+    '<label style="flex:1;min-width:0"><span style="display:block;font-size:13px;color:var(--muted)">' + esc(sh.l[i]) + '</span>' +
+    '<input type="text" inputmode="decimal" data-f="m.d' + i + '" maxlength="6" placeholder="' + sh.h[i] + '" style="font-size:19px;font-weight:bold" value="' + esc(m['d' + i] || '') + '"></label>';
+  h += '</div><div class="label" style="margin-top:10px">支數</div><div class="row"><input type="text" inputmode="numeric" data-f="m.qty" maxlength="4" placeholder="12" style="flex:1;min-width:0;font-size:20px;font-weight:bold" value="' + esc(m.qty) + '">' +
+    '<span style="flex:1;font-size:18px">支</span></div>' +
+    '<div class="label" style="margin-top:10px">備註（放哪裡…可以不寫）</div><textarea data-f="m.note" maxlength="100" placeholder="例：1F 東側" style="min-height:48px">' + esc(m.note) + '</textarea>' +
+    '<div id="mmsg" style="color:var(--warn);font-size:13px;margin-top:6px">' + esc(rebarModalMiss(m)) + '</div>';
+  if (t) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(matWho(t)) + '</div>' +
+    (m.ask ? '<div style="color:var(--red);font-weight:bold;font-size:14px;margin-top:10px">確定要刪掉這一筆嗎？大家都看不到了。</div>' : '') +
+    '<button class="tdel' + (m.ask ? ' strong' : '') + '" style="margin:' + (m.ask ? '6' : '10') + 'px 0 0" data-act="msmdel">' + (m.ask ? '🗑 確定刪除' : '🗑 刪除這一筆') + '</button>';
+  if (m.err) h += '<div style="color:var(--red);font-size:14px;margin-top:6px">' + esc(m.err) + '</div>';
+  return h + '<div class="btns"><button class="dim" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button><button id="msave" data-act="msmsave"' + (modalOk(m) ? '' : ' disabled') + '>' +
+    (m.busy ? '存檔中…' : t ? '存檔' : '加入') + '</button></div>';
+}
+/** 新增數量／改一筆（m.t＝改的那一筆；沒有＝新增） */
+function smatModal(m) {
+  var t = m.t, units = MAT_UNITS[m.folder] || MAT_UNITS['其他'];
+  var ph = m.folder === '施工架' ? '例：框式施工架' : m.folder === '模板' ? '例：3×6 夾板' : '例：水泥';
+  var h = '<h3>📁 ' + esc(m.folder) + '：' + (t ? '改這一筆' : '新增數量') + '</h3>' +
+    '<div class="label">品名（要寫）</div><input type="text" data-f="m.name" maxlength="40" placeholder="' + ph + '" value="' + esc(m.name) + '">' +
+    '<div class="label" style="margin-top:10px">數量（要寫）</div><div class="row">' +
+    '<input type="text" inputmode="decimal" data-f="m.qty" maxlength="20" placeholder="120" style="flex:1.2;min-width:0;font-size:20px;font-weight:bold" value="' + esc(m.qty) + '">' +
+    '<input type="text" id="smunit" data-f="m.unit" maxlength="10" placeholder="單位" style="flex:1;min-width:0" value="' + esc(m.unit) + '"></div>' +
+    '<div class="chips" style="margin-top:6px">' + units.map(function (u) { return chip('msmunit', u, u, m.unit === u, true); }).join('') + '</div>' +
+    '<div class="label" style="margin-top:10px">備註（放哪裡、規格…可以不寫）</div><textarea data-f="m.note" maxlength="100" placeholder="例：1F 東側" style="min-height:56px">' + esc(m.note) + '</textarea>';
+  if (t) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(matWho(t)) + '</div>' +
+    (m.ask ? '<div style="color:var(--red);font-weight:bold;font-size:14px;margin-top:10px">確定要刪掉這一筆嗎？大家都看不到了。</div>' : '') +
+    '<button class="tdel' + (m.ask ? ' strong' : '') + '" style="margin:' + (m.ask ? '6' : '10') + 'px 0 0" data-act="msmdel">' + (m.ask ? '🗑 確定刪除' : '🗑 刪除這一筆') + '</button>';
+  if (m.err) h += '<div style="color:var(--red);font-size:14px;margin-top:6px">' + esc(m.err) + '</div>';
+  return h + '<div class="btns"><button class="dim" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button><button id="msave" data-act="msmsave"' + (modalOk(m) ? '' : ' disabled') + '>' +
+    (m.busy ? '存檔中…' : t ? '存檔' : '加入') + '</button></div>';
+}
+
 // ===================== 施工日誌（只能看） =====================
 function logItem(log, c) {
   if (!log || !log.items) return null;
@@ -2737,6 +2901,8 @@ function modalOk(m) {
   if (m.type === 'contract') return !m.busy && !contractProblem(m);
   if (m.type === 'siteedit') return !m.busy && !siteEditProblem(m);
   if (m.type === 'pouredit') return !m.busy && !pourEditProblem(m);
+  if (m.type === 'smat') return !m.busy && !!String(m.name || '').trim() && !!String(m.qty || '').trim();
+  if (m.type === 'smatr') return !m.busy && !rebarModalMiss(m);
   return true;
 }
 
@@ -3504,6 +3670,17 @@ function loadTodos() {
 }
 function findTodo(id) { return (S.todoItems || []).filter(function (t) { return t.id === id; })[0]; }
 
+/** 現場材料數量（一個工地；第 52 版）：from＝返回去哪（site／work） */
+function openMats(from) { S.mat = { from: from, items: MATCACHE[S.site] || null, busy: '', err: '', folder: '' }; go('mats'); loadMats(); }
+function loadMats(keep) {
+  var M = S.mat, site = S.site; M.busy = '讀取中…'; renderSoft();
+  return api('smat', { op: 'list', site: site }).then(function (r) {
+    if (S.site !== site || S.mat !== M) return;
+    M.items = r.items || []; MATCACHE[site] = M.items; M.busy = ''; M.err = keep || ''; renderSoft();
+  }).catch(function (e) { M.busy = ''; var m = failMsg(e); if (m) { M.err = keep || ('讀不到：' + m); renderSoft(); } });
+}
+function findMat(id) { return ((S.mat && S.mat.items) || []).filter(function (m) { return m.id === id; })[0]; }
+
 /** 行事曆 */
 function openCal(d) { d = d || todayYmd(); S.cal.sel = d; S.cal.month = d.slice(0, 7); S.cal.err = ''; S.cal.events = S.cal.cache[S.cal.month] || []; go('calendar'); loadCal(); }
 function loadCal() {
@@ -3570,6 +3747,7 @@ var ACT = {
   tologin: function () { S.route = 'login'; S.err = ''; render(); },
   nav: function (v) {
     if (v === 'sheetsroot') { S.sheetFolder = ''; go('sheets'); return; }   // 從資料夾回施工單清單
+    if (v === 'matsroot') { if (S.mat) { S.mat.folder = ''; S.mat.err = ''; } go('mats'); return; }   // 現場材料數量：從資料夾回五個資料夾
     if (v === 'site') S.sheetFolder = '';
     if (v === 'work' || v === 'site' || v === 'hub' || v === 'pours' || v === 'sheets') { if (S.busy) return; go(v); if (v === 'work') refresh(); }
     else go(v);
@@ -3796,6 +3974,7 @@ var ACT = {
     S.sheetMsg = ''; S.contractMsg = '';
     if (v === 'logs') openLogs('site');
     else if (v === 'todo') openTodo('site');
+    else if (v === 'mats') openMats('site');
     else if (v === '3d') open3d();
     else if (v === 'tasks') openTasks('site');
     else if (v === 'work') openWork('site');   // 管理者：這個工地施工人員傳的
@@ -3822,6 +4001,47 @@ var ACT = {
       .catch(function (e) { var m = failMsg(e); if (m) { S.todoErr = '沒有改到：' + m; loadTodos(); } });
   },
   todoedit: function (id) { var t = findTodo(id); if (!t || /^tmp/.test(id)) return; S.modal = { type: 'todoedit', t: t, text: t.text, ask: false, busy: false, err: '' }; renderModal(); },
+  // 現場材料數量（第 52 版）
+  matsfromwork: function () { openMats('work'); },
+  matsreload: function () { if (S.mat) { S.mat.err = ''; loadMats(); } },
+  matfolder: function (v) { if (!S.mat) return; S.mat.folder = v; S.mat.err = ''; render(); window.scrollTo(0, 0); },
+  matadd: function () {
+    var f = S.mat && S.mat.folder; if (!f) return;
+    S.modal = f === MAT_REBAR ? { type: 'smatr', folder: f, t: null, size: 0, shape: '直', d0: '', d1: '', d2: '', qty: '', note: '', ask: false, busy: false, err: '' }
+      : { type: 'smat', folder: f, t: null, name: '', qty: '', unit: '', note: '', ask: false, busy: false, err: '' };
+    renderModal();
+  },
+  matedit: function (id) {
+    var t = findMat(id); if (!t || !t.canEdit) return;
+    if (t.folder === MAT_REBAR) {
+      var p = String(t.spec || '').split('|'), sh = rebarShape(p[1]) || REBAR_SHAPES[0], d = String(p[2] || '').split(sh.s);
+      S.modal = { type: 'smatr', folder: t.folder, t: t, size: Number(p[0]) || 0, shape: sh.n, d0: d[0] || '', d1: d[1] || '', d2: d[2] || '', qty: t.qty, note: t.note || '', ask: false, busy: false, err: '' };
+    } else S.modal = { type: 'smat', folder: t.folder, t: t, name: t.name, qty: t.qty, unit: t.unit || '', note: t.note || '', ask: false, busy: false, err: '' };
+    renderModal();
+  },
+  msmunit: function (v) { var m = S.modal; if (!m || m.type !== 'smat') return; m.unit = m.unit === v ? '' : v; renderModal(); },
+  msmsize: function (v) { var m = S.modal; if (!m || m.type !== 'smatr') return; m.size = Number(v); renderModal(); },
+  msmshape: function (v) { var m = S.modal; if (!m || m.type !== 'smatr' || !rebarShape(v)) return; m.shape = v; renderModal(); },
+  msmsave: function () {
+    var m = S.modal; if (!m || (m.type !== 'smat' && m.type !== 'smatr') || !modalOk(m)) return;
+    var t = m.t, f = m.type === 'smatr' ? { name: '', qty: String(Number(m.qty)), unit: '', note: String(m.note || '').trim(), spec: rebarModalSpec(m) }
+      : { name: m.name.trim(), qty: m.qty.trim(), unit: String(m.unit || '').trim(), note: String(m.note || '').trim(), spec: '' };
+    var same = t && f.qty === t.qty && f.note === (t.note || '') && (m.type === 'smatr' ? f.spec === (t.spec || '') : f.name === t.name && f.unit === (t.unit || ''));
+    if (same) { closeModal(); return; }
+    m.busy = true; m.err = ''; renderModal();
+    var req = t ? { op: 'edit', id: t.id } : { op: 'add', site: S.site, folder: m.folder };
+    req.name = f.name; req.qty = f.qty; req.unit = f.unit; req.note = f.note; req.spec = f.spec;
+    api('smat', req).then(function () { S.modal = null; renderModal(); loadMats(); })
+      .catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '沒有存到：' + x; renderModal(); } });
+  },
+  msmdel: function () {
+    var m = S.modal; if (!m || (m.type !== 'smat' && m.type !== 'smatr') || !m.t || m.busy) return;
+    if (!m.ask) { m.ask = true; renderModal(); return; }
+    var id = m.t.id, M = S.mat; closeModal();
+    if (M && M.items) { M.items = M.items.filter(function (x) { return x.id !== id; }); MATCACHE[S.site] = M.items; M.busy = '刪除中…'; render(); }
+    api('smat', { op: 'del', id: id }).then(function () { loadMats(); })
+      .catch(function (e) { var x = failMsg(e); loadMats(x ? '刪不掉：' + x : ''); });
+  },
   // 日誌
   logdate: function (v) { if (v) loadLog(v); },
   // 主任、老闆的日誌：點大項展開／收起（只能看）
@@ -3970,6 +4190,8 @@ document.addEventListener('input', function (ev) {
     if (mm && m.type === 'pouredit') { m.err = ''; mm.textContent = pourEditNote(m); }
     var un = $('mcunitnote'); if (un && m.type === 'contract') un.textContent = cUnitNote(m);   // 單價×數量（第 43 版）
     if (mm && m.type === 'omat') mm.textContent = modalOk(m) ? '' : '要填廠商或數量';
+    if (mm && m.type === 'smatr') mm.textContent = rebarModalMiss(m);   // 現場材料數量・鋼筋：還差什麼
+    var fg = $('smrfig'); if (fg && m.type === 'smatr') fg.innerHTML = rebarFigSvg(m.shape, [m.d0, m.d1, m.d2]);   // 圖上的數字跟著換
     return;
   }
   var d = S.d; if (!d) return;
