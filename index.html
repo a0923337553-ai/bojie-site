@@ -421,7 +421,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/19g';
+var WEB_VERSION = '11/19h';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -894,9 +894,9 @@ function widgetModal(m) {
     step('④', '回到主畫面：長按空白處 → 左上角「編輯」→「加入小工具」→ 搜尋「Scriptable」→ 選大小 →「加入小工具」') +
     step('⑤', '點一下剛放好的小工具 →「Script」選「柏捷工地」') +
     (isOwner() ? '<div class="note" style="font-size:14px;margin-top:6px"><b>開發者是最完整的</b>：' + (IPAD ? '<b>特大</b>（iPad）＝跟摺疊機一樣三欄：月曆＋今日提醒｜這週＋待辦｜今天的日誌＋最新消息；' : '') +
-      '<b>大</b>＝月曆＋今日提醒＋今天的日誌＋這週＋待辦＋最新消息；中＝今日提醒＋日誌＋待辦。「Parameter」打「日誌」＝每個工地今天的日誌填了沒。<b>點小工具</b>會先問要打開哪一種：柏捷工地（Safari）、柏捷工地 全螢幕（試驗）、清單（待辦打勾）；可以固定用一種。要換：打開 Scriptable 點「柏捷工地」→ 最下面「👆 點小工具要打開什麼」。</div>'
+      '<b>大</b>＝月曆＋今日提醒＋今天的日誌＋這週＋待辦＋最新消息；中＝今日提醒＋日誌＋待辦。「Parameter」打「日誌」＝每個工地今天的日誌填了沒。<b>點小工具</b>會全螢幕打開柏捷工地，不用再輸入代碼（也可以改成用 Safari 打開、打開清單）。要換：打開 Scriptable 點「柏捷工地」→ 最下面「👆 點小工具要打開什麼」。</div>'
       : '<div class="note" style="font-size:14px;margin-top:6px">小、中＝今日提醒；大＝月曆＋這週行程＋待辦' + (IPAD ? '；<b>特大</b>（iPad 才有）＝左邊月曆、右邊今日提醒＋這週行程＋待辦' : '') +
-      '。「Parameter」打「消息」＝最新消息。<b>點小工具</b>會先問要打開哪一種：柏捷工地（Safari）、柏捷工地 全螢幕（試驗）、清單（待辦打勾）；可以固定用一種。要換：打開 Scriptable 點「柏捷工地」→ 最下面「👆 點小工具要打開什麼」。鎖定畫面也可以放。</div>') +
+      '。「Parameter」打「消息」＝最新消息。<b>點小工具</b>會全螢幕打開柏捷工地，不用再輸入代碼（也可以改成用 Safari 打開、打開清單）。要換：打開 Scriptable 點「柏捷工地」→ 最下面「👆 點小工具要打開什麼」。鎖定畫面也可以放。</div>') +
     // 使用者 2026-11-10「施工人員那也能帶他們安裝」「但你說會有一個我的密碼」：裡面是這支手機登入的人自己的代碼，不是管理者的
     '<div class="note" style="font-size:14px;color:var(--red)">安裝程式裡是<b>這支手機登入的代碼</b>（' + esc(S.s && S.s.name ? S.s.name : '你') + ' 自己的，看不出來）。每個人用自己的手機、自己的代碼登入後再按；不要把安裝程式傳給別人。</div>' +
     '<div class="btns"><button data-act="mclose">關閉</button></div>';
