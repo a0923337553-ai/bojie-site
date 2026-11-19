@@ -28,8 +28,10 @@
 // 11/19d（使用者實機：選單有了，「進入 scriptable 要快一點」「他會先進入這個 app 然後停 1 秒才會進入柏捷 app」）：
 //   全螢幕＝先放一張不用連網路的「打開中」馬上全螢幕，真的那一頁在畫面上自己載進來（原本整頁載完才顯示，所以停在 Scriptable）；
 //   固定 Safari＝小工具直接開網址，不用先跑這支程式；清單＝先用上一次的資料打開，新的在後面拿。
+// 11/19e（使用者試完三種：「固定用全螢幕」）：沒選過＝全螢幕（每個人都一樣，不再每次問）。
+//   自己選過的（Safari、清單、每次問我）照選的；清單最下面「👆 點小工具要打開什麼」一樣可以換。
 
-const VER = '11/19d';
+const VER = '11/19e';
 const API = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
 const WEB = 'https://a0923337553-ai.github.io/bojie-site/';
 const SELF = WEB + 'bojie-widget.js';
@@ -39,7 +41,7 @@ const OPEN = WEB + '?from=widget';
 const FULL = WEB + '?from=sapp';
 const ORIGIN = 'https://a0923337553-ai.github.io';
 // 點小工具打開什麼
-const TAP_NAME = { safari: '🌐 柏捷工地（用 Safari 打開）', full: '📱 柏捷工地 全螢幕（試驗）', list: '📋 清單（待辦打勾）', ask: '❓ 每次問我' };
+const TAP_NAME = { safari: '🌐 柏捷工地（用 Safari 打開）', full: '📱 柏捷工地 全螢幕', list: '📋 清單（待辦打勾）', ask: '❓ 每次問我' };
 // 這個檔的最後一行。自己更新的時候要看到這一行才換（半份寫進去小工具會壞掉）→ 以後每一版最後一行都要留著
 const END = '// END-' + 'BOJIE-WIDGET';
 const KC = 'bojie.widget.code', KD = 'bojie.widget.device', KU = 'bojie.widget.updated', KT = 'bojie.widget.tap';
@@ -608,10 +610,10 @@ async function selfUpdate(force) {
   } catch (e) { return ''; }
 }
 
-/** 點小工具要打開什麼：選過的照選的；沒選過＝每次問（每個人都一樣） */
+/** 點小工具要打開什麼：選過的照選的；沒選過＝全螢幕（11/19e，使用者「固定用全螢幕」；11/19b～d 是每次問） */
 function tapMode() {
   const m = kget(KT);
-  return TAP_NAME[m] ? m : 'ask';
+  return TAP_NAME[m] ? m : 'full';
 }
 /** 固定用哪一種（withAsk＝也可以選「每次問我」）；回傳選的那一種，取消＝'' */
 async function pickTap(withAsk) {
@@ -692,7 +694,7 @@ async function tapMain(show) {
 }
 
 const HOWTO = '放到桌面：\n① 回到桌面，長按空白的地方\n② 左上角「編輯」→「加入小工具」\n③ 搜尋「Scriptable」，選大小 →「加入小工具」\n④ 點一下剛放好的小工具，「Script」選「柏捷工地」\n\n' +
-  '點小工具：可以選打開「柏捷工地（Safari）」「柏捷工地 全螢幕（試驗）」或「清單」；清單最下面「👆 點小工具要打開什麼」可以換。\n\n小、中＝今日提醒；大＝月曆＋這週行程＋待辦；特大（iPad）＝左邊月曆、右邊今日提醒＋這週＋待辦。\n開發者：大、特大是最完整的（多了今天的日誌、最新消息）。\n「Parameter」打「消息」＝最新消息、「日誌」＝今天的日誌。\n鎖定畫面也可以放。\n\nMac：macOS 14 以上可以把這支 iPhone 的小工具放到 Mac 桌面（桌面按右鍵 →「編輯小工具」→ iPhone 的 Scriptable）。';
+  '點小工具＝全螢幕打開柏捷工地（不用再輸入代碼）。想改成用 Safari 打開、打開清單、或每次問：清單最下面「👆 點小工具要打開什麼」。\n\n小、中＝今日提醒；大＝月曆＋這週行程＋待辦；特大（iPad）＝左邊月曆、右邊今日提醒＋這週＋待辦。\n開發者：大、特大是最完整的（多了今天的日誌、最新消息）。\n「Parameter」打「消息」＝最新消息、「日誌」＝今天的日誌。\n鎖定畫面也可以放。\n\nMac：macOS 14 以上可以把這支 iPhone 的小工具放到 Mac 桌面（桌面按右鍵 →「編輯小工具」→ iPhone 的 Scriptable）。';
 
 async function appMain(show) {
   if (!kget(KC)) {
@@ -762,8 +764,8 @@ async function appMain(show) {
     }
     head('其他');
     line('🔄 重新整理', COL.teal, '', async () => { d = await getData(true); fill(); t.reload(); });
-    line('👆 點小工具要打開什麼', COL.teal, '現在：' + TAP_NAME[tapMode()].replace(/^\S+\s/, '') + (kget(KT) ? '' : '（還沒固定）'), async () => { if (await pickTap(true)) { fill(); t.reload(); } });
-    line('📱 全螢幕打開柏捷工地（試驗）', COL.teal, '在這裡面直接開，不用再輸入代碼', async () => { await openFull(); });
+    line('👆 點小工具要打開什麼', COL.teal, '現在：' + TAP_NAME[tapMode()].replace(/^\S+\s/, '') + (kget(KT) ? '' : '（預設）'), async () => { if (await pickTap(true)) { fill(); t.reload(); } });
+    line('📱 全螢幕打開柏捷工地', COL.teal, '在這裡面直接開，不用再輸入代碼', async () => { await openFull(); });
     line('🌐 打開柏捷工地網頁版', COL.teal, '用 Safari 打開；第一次要在 Safari 輸入一次代碼', () => Safari.open(WEB));
     line('👁 看小工具的樣子（小）', COL.teal, '', async () => { await buildWidget(d, 'small', '').presentSmall(); });
     line('👁 看小工具的樣子（中）', COL.teal, '', async () => { await buildWidget(d, 'medium', '').presentMedium(); });
