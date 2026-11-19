@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
@@ -421,7 +421,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/19b';
+var WEB_VERSION = '11/19c';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -810,7 +810,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smatv: smatViewModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -2513,17 +2513,58 @@ function renderMats() {
   h += '<div class="card"><div class="label">' + (items ? list.length + ' 筆' : '讀取中…') + '</div>';
   if (items && !list.length) h += '<div class="sub" style="font-size:15px;padding:8px 0;line-height:1.5">' + (rebar ? '還沒有。現場剩下的鋼筋按上面「＋ 新增鋼筋」填：號數、形式、尺寸、幾支。' : '這一夾還沒有東西，按上面「＋ 新增數量」。') + '</div>';
   h += list.map(function (m) {
-    return '<div class="row" style="padding:8px 0;align-items:center"' + (m.canEdit ? ' data-act="matedit" data-v="' + esc(m.id) + '"' : '') + '>' +
+    return '<div class="row" style="padding:8px 0;align-items:center" data-act="matedit" data-v="' + esc(m.id) + '">' +
       (rebar && m.spec ? rebarFigSvg(String(m.spec).split('|')[1], null, true) : '') + '<div class="grow" style="min-width:0">' +
       '<div style="font-size:18px;font-weight:bold;line-height:24px">' + esc(m.name) + '</div>' +
       (m.note ? '<div class="sub" style="font-size:14px">' + esc(m.note) + '</div>' : '') +
-      '<div style="font-size:12.5px;color:#8A9BA8">' + esc(matWho(m)) + '</div></div>' +
+      '<div style="font-size:12.5px;color:#8A9BA8">' + esc(matWho(m)) + (m.photos && m.photos.length ? '　📷 ' + m.photos.length : '') + '</div></div>' +
       '<b style="font-size:19px;color:var(--navy);white-space:nowrap">' + esc((m.qty + ' ' + (m.unit || '')).trim()) + '</b>' +
       (m.canEdit ? '<span style="font-size:22px;color:var(--line)">›</span>' : '') + '</div>';
   }).join('<div class="div"></div>');
   h += '</div><div class="note" style="padding:0 4px">' + (rebar ? '這裡填的是現場剩下的鋼筋（尺寸都是公分）。電腦的鋼筋系統在「現場餘料」按「讀手機填的」就會帶進去。<br>' : '') +
-    '點自己寫的那一筆可以改或刪掉；別人寫的只能看（開發者都可以改）。</div>';
+    '點自己寫的那一筆可以改、加照片或刪掉；別人寫的點了只能看（開發者都可以改）。</div>';
   return h + '</div>';
+}
+// 每一筆的照片（收件服務第 53 版，使用者 2026-11-19「現場材料數量每個都可以拍照及相簿功能」）：一筆最多 6 張（跟收件服務 SMAT_MAX_PHOTOS、App 一樣）。
+// 視窗裡：m.kept＝雲端上要留的、m.removed＝要拿掉的、m.newPhotos＝剛拍剛選還沒傳的（存檔時字先存、照片再一張一張傳）、m.big＝點開看大張的那一張
+var MAT_MAX_PHOTOS = 6;
+function hasMatPhotos() { return !!S.s && Number(S.s.version) >= 53; }
+function smatPhotoHtml(m, edit) {
+  if (!hasMatPhotos()) return '';
+  var t = m.t, kept = m.kept || [], fresh = m.newPhotos || [], n = kept.length + fresh.length;
+  if (!edit && !n) return '';
+  var box = 'position:relative;width:72px;height:72px', img = 'width:72px;height:72px;object-fit:cover;border-radius:10px;background:#EAF0F4;display:block';
+  var x = 'position:absolute;top:-5px;right:-5px;width:24px;height:24px;border:0;border-radius:12px;background:rgba(38,50,56,.85);color:#fff;font-size:13px;font-weight:bold;padding:0';
+  var h = '<div class="label" style="margin-top:10px">' + (edit ? '照片（可以不放，最多 ' + MAT_MAX_PHOTOS + ' 張）' : '照片（點了看大張）') + '</div>';
+  if (m.big) {
+    var bn = /^n:/.test(m.big) ? fresh[Number(m.big.slice(2))] : null;
+    h += '<div data-act="msmpview" data-v="" style="margin-bottom:8px;border-radius:10px;overflow:hidden;background:#EAF0F4;min-height:80px">' +
+      (bn ? '<img src="' + bn.url + '" style="width:100%;display:block" alt="">' : '<img data-sid="' + esc(t.id + '|' + m.big) + '" style="width:100%;display:block" alt="">') + '</div>';
+  }
+  h += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
+  kept.forEach(function (pid) {
+    h += '<div style="' + box + '"><img data-sid="' + esc(t.id + '|' + pid) + '" data-act="msmpview" data-v="' + esc(pid) + '" style="' + img + '" alt="">' +
+      (edit ? '<button data-act="msmprm" data-v="' + esc(pid) + '" style="' + x + '">✕</button>' : '') + '</div>';
+  });
+  fresh.forEach(function (p, i) {
+    h += '<div style="' + box + '"><img src="' + p.url + '" data-act="msmpview" data-v="n:' + i + '" style="' + img + '" alt=""><button data-act="msmprmn" data-v="' + i + '" style="' + x + '">✕</button></div>';
+  });
+  h += '</div>';
+  if (edit) h += '<div class="row2" style="margin-top:8px"><button class="ghost" style="margin:0" data-act="msmcam"' + (n >= MAT_MAX_PHOTOS || m.busy ? ' disabled' : '') + '>📷 拍照</button>' +
+    '<button class="ghost" style="margin:0" data-act="msmpick"' + (n >= MAT_MAX_PHOTOS || m.busy ? ' disabled' : '') + '>🖼️ 相簿</button></div>' +
+    (n >= MAT_MAX_PHOTOS ? '<div style="color:var(--warn);font-size:12.5px;margin-top:4px">已經 ' + MAT_MAX_PHOTOS + ' 張了，要再加先拿掉一張。</div>' : '');
+  return h;
+}
+/** 別人寫的那一筆：只能看（品名、數量、備註、誰哪天寫的、照片；鋼筋有形狀圖） */
+function smatViewModal(m) {
+  var t = m.t, p = String(t.spec || '').split('|'), sh = t.folder === MAT_REBAR ? rebarShape(p[1]) : null;
+  var h = '<h3>📁 ' + esc(t.folder) + '</h3><div class="row"><b class="grow" style="font-size:20px;line-height:26px">' + esc(t.name) + '</b>' +
+    '<b style="font-size:21px;color:var(--navy);white-space:nowrap">' + esc((t.qty + ' ' + (t.unit || '')).trim()) + '</b></div>';
+  if (sh) h += '<div style="background:#F3F7FA;border-radius:12px;padding:10px 4px;margin-top:8px">' + rebarFigSvg(sh.n, String(p[2] || '').split(sh.s)) + '</div>';
+  if (t.note) h += '<div style="font-size:16px;line-height:22px;margin-top:8px">' + esc(t.note) + '</div>';
+  h += '<div class="sub" style="margin-top:6px;font-size:13px">' + esc(matWho(t)) + '</div>' + smatPhotoHtml(m, false) +
+    '<div class="note" style="margin-top:10px">這一筆是 ' + esc(t.by) + ' 寫的，只有他（或開發者）可以改。</div>';
+  return h + '<div class="btns"><button data-act="mclose">關閉</button></div>';
 }
 /** 鋼筋那一夾：新增／改一筆現場餘料（號數 #3～#11、形式、尺寸、支數；換形式＝尺寸那幾格跟著換） */
 function smatRebarModal(m) {
@@ -2539,7 +2580,7 @@ function smatRebarModal(m) {
     '<input type="text" inputmode="decimal" data-f="m.d' + i + '" maxlength="6" placeholder="' + sh.h[i] + '" style="font-size:19px;font-weight:bold" value="' + esc(m['d' + i] || '') + '"></label>';
   h += '</div><div class="label" style="margin-top:10px">支數</div><div class="row"><input type="text" inputmode="numeric" data-f="m.qty" maxlength="4" placeholder="12" style="flex:1;min-width:0;font-size:20px;font-weight:bold" value="' + esc(m.qty) + '">' +
     '<span style="flex:1;font-size:18px">支</span></div>' +
-    '<div class="label" style="margin-top:10px">備註（放哪裡…可以不寫）</div><textarea data-f="m.note" maxlength="100" placeholder="例：1F 東側" style="min-height:48px">' + esc(m.note) + '</textarea>' +
+    '<div class="label" style="margin-top:10px">備註（放哪裡…可以不寫）</div><textarea data-f="m.note" maxlength="100" placeholder="例：1F 東側" style="min-height:48px">' + esc(m.note) + '</textarea>' + smatPhotoHtml(m, true) +
     '<div id="mmsg" style="color:var(--warn);font-size:13px;margin-top:6px">' + esc(rebarModalMiss(m)) + '</div>';
   if (t) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(matWho(t)) + '</div>' +
     (m.ask ? '<div style="color:var(--red);font-weight:bold;font-size:14px;margin-top:10px">確定要刪掉這一筆嗎？大家都看不到了。</div>' : '') +
@@ -2558,7 +2599,7 @@ function smatModal(m) {
     '<input type="text" inputmode="decimal" data-f="m.qty" maxlength="20" placeholder="120" style="flex:1.2;min-width:0;font-size:20px;font-weight:bold" value="' + esc(m.qty) + '">' +
     '<input type="text" id="smunit" data-f="m.unit" maxlength="10" placeholder="單位" style="flex:1;min-width:0" value="' + esc(m.unit) + '"></div>' +
     '<div class="chips" style="margin-top:6px">' + units.map(function (u) { return chip('msmunit', u, u, m.unit === u, true); }).join('') + '</div>' +
-    '<div class="label" style="margin-top:10px">備註（放哪裡、規格…可以不寫）</div><textarea data-f="m.note" maxlength="100" placeholder="例：1F 東側" style="min-height:56px">' + esc(m.note) + '</textarea>';
+    '<div class="label" style="margin-top:10px">備註（放哪裡、規格…可以不寫）</div><textarea data-f="m.note" maxlength="100" placeholder="例：1F 東側" style="min-height:56px">' + esc(m.note) + '</textarea>' + smatPhotoHtml(m, true);
   if (t) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(matWho(t)) + '</div>' +
     (m.ask ? '<div style="color:var(--red);font-weight:bold;font-size:14px;margin-top:10px">確定要刪掉這一筆嗎？大家都看不到了。</div>' : '') +
     '<button class="tdel' + (m.ask ? ' strong' : '') + '" style="margin:' + (m.ask ? '6' : '10') + 'px 0 0" data-act="msmdel">' + (m.ask ? '🗑 確定刪除' : '🗑 刪除這一筆') + '</button>';
@@ -3102,7 +3143,7 @@ function monthText(x) {
 
 /** 雲端的照片：第一次跟收件服務拿，之後用記住的。data-pid＝施工人員傳的、data-lid＝日誌的、data-nid＝注意事項的 */
 function fillPhotos() {
-  [['pid', 'w'], ['lid', 'l'], ['nid', 'n']].forEach(function (kv) {
+  [['pid', 'w'], ['lid', 'l'], ['nid', 'n'], ['sid', 's']].forEach(function (kv) {
     var imgs = document.querySelectorAll('img[data-' + kv[0] + ']');
     for (var i = 0; i < imgs.length; i++) {
       var id = imgs[i].getAttribute('data-' + kv[0]), key = kv[1] + ':' + id;
@@ -3126,7 +3167,7 @@ function pumpPhotos() {
 }
 function fetchPhoto(attr, kind, id) {
   var key = kind + ':' + id;
-  var p = kind === 'w' ? api('photoget', { fileId: id }) : kind === 'l' ? api('logphoto', { id: id }) : api('notice', { op: 'photo', id: id });
+  var p = kind === 'w' ? api('photoget', { fileId: id }) : kind === 'l' ? api('logphoto', { id: id }) : kind === 's' ? api('smat', { op: 'photo', id: id.split('|')[0], pid: id.split('|')[1] }) : api('notice', { op: 'photo', id: id });
   return p.then(function (r) {
     S.photos[key] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.data;
     var imgs = document.querySelectorAll('img[data-' + attr + '="' + id + '"]');
@@ -3680,6 +3721,16 @@ function loadMats(keep) {
   }).catch(function (e) { M.busy = ''; var m = failMsg(e); if (m) { M.err = keep || ('讀不到：' + m); renderSoft(); } });
 }
 function findMat(id) { return ((S.mat && S.mat.items) || []).filter(function (m) { return m.id === id; })[0]; }
+/** 這個視窗還能再放幾張照片 */
+function smatPhotoRoom(m) { return m.busy || !m.newPhotos ? 0 : MAT_MAX_PHOTOS - (m.kept || []).length - m.newPhotos.length; }
+/** 拍的、相簿選的 → 縮小（長邊 1000，跟派工的照片一樣）→ 放進視窗（還沒上傳）；一張一張縮，超過 6 張的不收 */
+function smatAddFiles(files) {
+  var m = S.modal, list = Array.prototype.slice.call(files || []); if (!m || !m.newPhotos || !list.length) return;
+  var step = Promise.resolve();
+  list.forEach(function (f) {
+    step = step.then(function () { if (S.modal !== m || smatPhotoRoom(m) <= 0) return; return shrink(f, 1000, 0.65).then(function (p) { if (S.modal === m && smatPhotoRoom(m) > 0) { m.newPhotos.push(p); renderModal(); } }, function () { }); });
+  });
+}
 
 /** 行事曆 */
 function openCal(d) { d = d || todayYmd(); S.cal.sel = d; S.cal.month = d.slice(0, 7); S.cal.err = ''; S.cal.events = S.cal.cache[S.cal.month] || []; go('calendar'); loadCal(); }
@@ -4009,16 +4060,25 @@ var ACT = {
     var f = S.mat && S.mat.folder; if (!f) return;
     S.modal = f === MAT_REBAR ? { type: 'smatr', folder: f, t: null, size: 0, shape: '直', d0: '', d1: '', d2: '', qty: '', note: '', ask: false, busy: false, err: '' }
       : { type: 'smat', folder: f, t: null, name: '', qty: '', unit: '', note: '', ask: false, busy: false, err: '' };
+    S.modal.kept = []; S.modal.removed = []; S.modal.newPhotos = []; S.modal.big = '';
     renderModal();
   },
   matedit: function (id) {
-    var t = findMat(id); if (!t || !t.canEdit) return;
+    var t = findMat(id); if (!t) return;
+    if (!t.canEdit) { S.modal = { type: 'smatv', t: t, kept: (t.photos || []).slice(), newPhotos: [], big: '' }; renderModal(); return; }   // 別人寫的：只能看
     if (t.folder === MAT_REBAR) {
       var p = String(t.spec || '').split('|'), sh = rebarShape(p[1]) || REBAR_SHAPES[0], d = String(p[2] || '').split(sh.s);
       S.modal = { type: 'smatr', folder: t.folder, t: t, size: Number(p[0]) || 0, shape: sh.n, d0: d[0] || '', d1: d[1] || '', d2: d[2] || '', qty: t.qty, note: t.note || '', ask: false, busy: false, err: '' };
     } else S.modal = { type: 'smat', folder: t.folder, t: t, name: t.name, qty: t.qty, unit: t.unit || '', note: t.note || '', ask: false, busy: false, err: '' };
+    S.modal.kept = (t.photos || []).slice(); S.modal.removed = []; S.modal.newPhotos = []; S.modal.big = '';
     renderModal();
   },
+  // 照片：拍照、相簿、拿掉、點了看大張（再點一次收起來）
+  msmcam: function () { var m = S.modal; if (m && smatPhotoRoom(m) > 0) pickPhoto('smat', true); },
+  msmpick: function () { var m = S.modal; if (m && smatPhotoRoom(m) > 0) pickPhoto('smat', false); },
+  msmprm: function (pid) { var m = S.modal; if (!m || !m.kept || m.busy) return; m.kept = m.kept.filter(function (x) { return x !== pid; }); m.removed.push(pid); if (m.big === pid) m.big = ''; renderModal(); },
+  msmprmn: function (i) { var m = S.modal; if (!m || !m.newPhotos || m.busy) return; m.newPhotos.splice(Number(i), 1); m.big = ''; renderModal(); },
+  msmpview: function (v) { var m = S.modal; if (!m) return; m.big = m.big === v ? '' : (v || ''); renderModal(); },
   msmunit: function (v) { var m = S.modal; if (!m || m.type !== 'smat') return; m.unit = m.unit === v ? '' : v; renderModal(); },
   msmsize: function (v) { var m = S.modal; if (!m || m.type !== 'smatr') return; m.size = Number(v); renderModal(); },
   msmshape: function (v) { var m = S.modal; if (!m || m.type !== 'smatr' || !rebarShape(v)) return; m.shape = v; renderModal(); },
@@ -4027,12 +4087,21 @@ var ACT = {
     var t = m.t, f = m.type === 'smatr' ? { name: '', qty: String(Number(m.qty)), unit: '', note: String(m.note || '').trim(), spec: rebarModalSpec(m) }
       : { name: m.name.trim(), qty: m.qty.trim(), unit: String(m.unit || '').trim(), note: String(m.note || '').trim(), spec: '' };
     var same = t && f.qty === t.qty && f.note === (t.note || '') && (m.type === 'smatr' ? f.spec === (t.spec || '') : f.name === t.name && f.unit === (t.unit || ''));
-    if (same) { closeModal(); return; }
+    var del = (m.removed || []).slice(), fresh = (m.newPhotos || []).slice();
+    if (same && !del.length && !fresh.length) { closeModal(); return; }
     m.busy = true; m.err = ''; renderModal();
     var req = t ? { op: 'edit', id: t.id } : { op: 'add', site: S.site, folder: m.folder };
     req.name = f.name; req.qty = f.qty; req.unit = f.unit; req.note = f.note; req.spec = f.spec;
-    api('smat', req).then(function () { S.modal = null; renderModal(); loadMats(); })
-      .catch(function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '沒有存到：' + x; renderModal(); } });
+    // 字先存（沒改就不用送），照片再一張一張：先拿掉要拿掉的、再傳新的；照片沒傳上去要講清楚「字存好了」
+    (same ? Promise.resolve({ id: t.id }) : api('smat', req)).then(function (r) {
+      var id = t ? t.id : r.id, step = Promise.resolve(), sent = 0;
+      del.forEach(function (pid) { step = step.then(function () { return api('smat', { op: 'pdel', id: id, pid: pid }); }); });
+      fresh.forEach(function (p) { step = step.then(function () { return api('smat', { op: 'padd', id: id, photo: p.data }); }).then(function () { sent++; }); });
+      return step.then(function () { S.modal = null; renderModal(); loadMats(); }, function (e) {
+        var x = failMsg(e); S.modal = null; renderModal();
+        loadMats(x ? '字存好了，但' + (fresh.length ? '第 ' + (sent + 1) + ' 張照片沒有傳上去' : '照片沒有改到') + '（' + x + '）：點那一筆再試一次。' : '');
+      });
+    }, function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '沒有存到：' + x; renderModal(); } });
   },
   msmdel: function () {
     var m = S.modal; if (!m || (m.type !== 'smat' && m.type !== 'smatr') || !m.t || m.busy) return;
@@ -4223,7 +4292,8 @@ function onPicked(ev) {
   if (S.pickFor === 'notice' || S.pickFor === 'task') {
     var f = files && files[0], m = S.modal; if (!f || !m) return;
     shrink(f, 1000, 0.65).then(function (p) { if (S.modal === m) { m.photo = p; m.nophoto = false; renderModal(); } }).catch(function () { });
-  } else if (S.pickFor === 'dlog') dlAddFiles(files);   // 開發者寫日誌（2026-11-13）
+  } else if (S.pickFor === 'smat') smatAddFiles(files);   // 現場材料數量的視窗（第 53 版）
+  else if (S.pickFor === 'dlog') dlAddFiles(files);   // 開發者寫日誌（2026-11-13）
   else addFiles(files, S.pickFor === 'receipt');
 }
 $('cam').addEventListener('change', onPicked);
