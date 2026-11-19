@@ -421,11 +421,14 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/19d';
+var WEB_VERSION = '11/19e';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
 var PCAPP = /[?&]app=pc\b/.test(location.search);
+// 從 iPhone 桌面小工具點進來的（bojie-widget.js 11/19a 起，點小工具打開 …?from=widget；使用者 2026-11-19「為何這個點進去不會跑到柏捷app」）：
+// 這裡是 Safari，不是主畫面那個圖示（iPhone 不讓小工具打開主畫面的圖示）→ 登入頁不要再叫他「加入主畫面」
+var FROM_WIDGET = /[?&]from=widget\b/.test(location.search);
 // 哪一種蘋果裝置（使用者 2026-11-10「ipad也要適配」「macbook pro 16也要」）：
 // iPad 的 Safari 會說自己是 Mac，要看有沒有觸控；Mac 沒有觸控
 var IPAD = /iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -820,7 +823,8 @@ function closeModal() { S.modal = null; renderModal(); }
 // ===================== iPhone 桌面小工具（Scriptable） =====================
 // 網頁版不能放小工具，改用免費的 Scriptable App 跑「柏捷工地」小工具程式（bojie-widget.js，放在這個網站）。
 // 「複製安裝程式」：一小段程式（裡面是這支手機的代碼，用十六進位寫，看不出來），貼到 Scriptable 執行一次：
-// 下載 bojie-widget.js 存成「柏捷工地」、代碼存進 iPhone 的鑰匙圈。之後打開 Scriptable 它會自己更新。
+// 下載 bojie-widget.js 存成「柏捷工地」、代碼存進 iPhone 的鑰匙圈。之後它會自己更新（打開 Scriptable 時、小工具自己重畫時，6 小時最多看一次）。
+// 點小工具＝用 Safari 打開這個網頁（…?from=widget，見 FROM_WIDGET）；11/19a 以前是打開 Scriptable 的完整清單。
 var WIDGET_URL = 'https://a0923337553-ai.github.io/bojie-site/bojie-widget.js';
 function widgetInstaller(code) {
   var k = String(code || '').split('').map(function (c) { return ('000' + c.charCodeAt(0).toString(16)).slice(-4); }).join('');
@@ -887,9 +891,9 @@ function widgetModal(m) {
     step('④', '回到主畫面：長按空白處 → 左上角「編輯」→「加入小工具」→ 搜尋「Scriptable」→ 選大小 →「加入小工具」') +
     step('⑤', '點一下剛放好的小工具 →「Script」選「柏捷工地」') +
     (isOwner() ? '<div class="note" style="font-size:14px;margin-top:6px"><b>開發者是最完整的</b>：' + (IPAD ? '<b>特大</b>（iPad）＝跟摺疊機一樣三欄：月曆＋今日提醒｜這週＋待辦｜今天的日誌＋最新消息；' : '') +
-      '<b>大</b>＝月曆＋今日提醒＋今天的日誌＋這週＋待辦＋最新消息；中＝今日提醒＋日誌＋待辦。「Parameter」打「日誌」＝每個工地今天的日誌填了沒。點小工具會打開完整清單。</div>'
+      '<b>大</b>＝月曆＋今日提醒＋今天的日誌＋這週＋待辦＋最新消息；中＝今日提醒＋日誌＋待辦。「Parameter」打「日誌」＝每個工地今天的日誌填了沒。<b>點小工具會打開柏捷工地</b>（用 Safari；第一次要在 Safari 輸入一次代碼）。待辦打勾、換代碼：打開 Scriptable 點「柏捷工地」。</div>'
       : '<div class="note" style="font-size:14px;margin-top:6px">小、中＝今日提醒；大＝月曆＋這週行程＋待辦' + (IPAD ? '；<b>特大</b>（iPad 才有）＝左邊月曆、右邊今日提醒＋這週行程＋待辦' : '') +
-      '。「Parameter」打「消息」＝最新消息。點小工具會打開完整清單（待辦可以打勾）。鎖定畫面也可以放。</div>') +
+      '。「Parameter」打「消息」＝最新消息。<b>點小工具會打開柏捷工地</b>（用 Safari；第一次要在 Safari 輸入一次代碼）。待辦打勾、換代碼：打開 Scriptable 點「柏捷工地」。鎖定畫面也可以放。</div>') +
     // 使用者 2026-11-10「施工人員那也能帶他們安裝」「但你說會有一個我的密碼」：裡面是這支手機登入的人自己的代碼，不是管理者的
     '<div class="note" style="font-size:14px;color:var(--red)">安裝程式裡是<b>這支手機登入的代碼</b>（' + esc(S.s && S.s.name ? S.s.name : '你') + ' 自己的，看不出來）。每個人用自己的手機、自己的代碼登入後再按；不要把安裝程式傳給別人。</div>' +
     '<div class="btns"><button data-act="mclose">關閉</button></div>';
@@ -1027,7 +1031,9 @@ function renderLogin() {
   }
   // iPhone、iPad：先加入主畫面（iPad 的「分享」在右上角）；Mac：Safari「檔案」→「加入 Dock」（macOS 14 以上）
   if (IOS) {
-    if (!standalone()) h += '<div class="box"><b>' + DEV + ' 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按' + (IPAD ? '右上角' : '下面') +
+    if (!standalone() && FROM_WIDGET) h += '<div class="box" style="border-color:var(--teal);background:#E9F7F6"><b>從小工具點進來的：這裡是 Safari</b><div>' + DEV +
+      ' 的小工具沒辦法打開主畫面的「柏捷工地」圖示，所以用 Safari 打開同一個柏捷工地。在這裡<b>輸入一次代碼</b>就好（Safari 和主畫面的圖示是分開記的），以後點小工具就直接進來。</div></div>';
+    else if (!standalone()) h += '<div class="box"><b>' + DEV + ' 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按' + (IPAD ? '右上角' : '下面') +
       '的「分享」⬆︎ →「加入主畫面」→ 之後都從主畫面的「柏捷工地」圖示打開，在那裡輸入代碼（Safari 裡輸入的，圖示那邊不會記得）。</div></div>';
   } else if (MAC && !PCAPP) {
     if (!standalone()) h += '<div class="box" style="border-color:var(--teal);background:#E9F7F6"><b>Mac 請先「加入 Dock」再登入</b><div>用 Safari 打開這個網頁 → 最上面選單「檔案」→「加入 Dock」→ 之後都從 Dock 的「柏捷工地」打開，在那裡輸入代碼（Safari 裡輸入的，Dock 那個不會記得）。要 macOS 14 以上；舊的 Mac 就直接用 Safari 打開、加到書籤。</div></div>';
