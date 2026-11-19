@@ -421,7 +421,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/19e';
+var WEB_VERSION = '11/19f';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -429,6 +429,9 @@ var PCAPP = /[?&]app=pc\b/.test(location.search);
 // 從 iPhone 桌面小工具點進來的（bojie-widget.js 11/19a 起，點小工具打開 …?from=widget；使用者 2026-11-19「為何這個點進去不會跑到柏捷app」）：
 // 這裡是 Safari，不是主畫面那個圖示（iPhone 不讓小工具打開主畫面的圖示）→ 登入頁不要再叫他「加入主畫面」
 var FROM_WIDGET = /[?&]from=widget\b/.test(location.search);
+// 小工具的「全螢幕」（bojie-widget.js 11/19b，使用者「三個都做看看」）：在 Scriptable 裡面開這一頁（…?from=sapp），代碼它已經放進這一頁的儲存區
+// → 有記住的代碼就自己進去（不用按「登入」）；這裡不能下載檔案 → 存檔改用 iPhone 的「分享」（sappSave）；不能開通知
+var FROM_SAPP = /[?&]from=sapp\b/.test(location.search);
 // 哪一種蘋果裝置（使用者 2026-11-10「ipad也要適配」「macbook pro 16也要」）：
 // iPad 的 Safari 會說自己是 Mac，要看有沒有觸控；Mac 沒有觸控
 var IPAD = /iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -891,9 +894,9 @@ function widgetModal(m) {
     step('④', '回到主畫面：長按空白處 → 左上角「編輯」→「加入小工具」→ 搜尋「Scriptable」→ 選大小 →「加入小工具」') +
     step('⑤', '點一下剛放好的小工具 →「Script」選「柏捷工地」') +
     (isOwner() ? '<div class="note" style="font-size:14px;margin-top:6px"><b>開發者是最完整的</b>：' + (IPAD ? '<b>特大</b>（iPad）＝跟摺疊機一樣三欄：月曆＋今日提醒｜這週＋待辦｜今天的日誌＋最新消息；' : '') +
-      '<b>大</b>＝月曆＋今日提醒＋今天的日誌＋這週＋待辦＋最新消息；中＝今日提醒＋日誌＋待辦。「Parameter」打「日誌」＝每個工地今天的日誌填了沒。<b>點小工具會打開柏捷工地</b>（用 Safari；第一次要在 Safari 輸入一次代碼）。待辦打勾、換代碼：打開 Scriptable 點「柏捷工地」。</div>'
+      '<b>大</b>＝月曆＋今日提醒＋今天的日誌＋這週＋待辦＋最新消息；中＝今日提醒＋日誌＋待辦。「Parameter」打「日誌」＝每個工地今天的日誌填了沒。<b>點小工具</b>會先問要打開哪一種：柏捷工地（Safari）、柏捷工地 全螢幕（試驗）、清單（待辦打勾）；可以固定用一種。要換：打開 Scriptable 點「柏捷工地」→ 最下面「👆 點小工具要打開什麼」。</div>'
       : '<div class="note" style="font-size:14px;margin-top:6px">小、中＝今日提醒；大＝月曆＋這週行程＋待辦' + (IPAD ? '；<b>特大</b>（iPad 才有）＝左邊月曆、右邊今日提醒＋這週行程＋待辦' : '') +
-      '。「Parameter」打「消息」＝最新消息。<b>點小工具會打開柏捷工地</b>（用 Safari；第一次要在 Safari 輸入一次代碼）。待辦打勾、換代碼：打開 Scriptable 點「柏捷工地」。鎖定畫面也可以放。</div>') +
+      '。「Parameter」打「消息」＝最新消息。<b>點小工具</b>：施工人員是用 Safari 打開柏捷工地（第一次要輸入一次代碼）；老闆、主任、公司會先問要打開哪一種（Safari、全螢幕、清單），可以固定用一種。要換：打開 Scriptable 點「柏捷工地」→ 最下面「👆 點小工具要打開什麼」。鎖定畫面也可以放。</div>') +
     // 使用者 2026-11-10「施工人員那也能帶他們安裝」「但你說會有一個我的密碼」：裡面是這支手機登入的人自己的代碼，不是管理者的
     '<div class="note" style="font-size:14px;color:var(--red)">安裝程式裡是<b>這支手機登入的代碼</b>（' + esc(S.s && S.s.name ? S.s.name : '你') + ' 自己的，看不出來）。每個人用自己的手機、自己的代碼登入後再按；不要把安裝程式傳給別人。</div>' +
     '<div class="btns"><button data-act="mclose">關閉</button></div>';
@@ -982,8 +985,27 @@ function sha1Hex(u8) {
     }, function () { return ''; });
   } catch (e) { return Promise.resolve(''); }
 }
+/**
+ * 小工具的全螢幕（Scriptable 裡面，FROM_SAPP）不能直接下載：最下面跳一條，按「存檔／傳給別人」用 iPhone 的「分享」（存到檔案、LINE…）。
+ * 分享要手指按了才能叫出來，所以不能檔案一好就自己跳；這台不支援分享檔案就請他從主畫面的圖示再做一次。
+ */
+function sappSave(blob, name) {
+  var old = document.getElementById('sappbar'); if (old) old.remove();
+  var file = null; try { file = new File([blob], name, { type: blob.type || 'application/octet-stream' }); } catch (e) { }
+  var can = false; try { can = !!(file && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) { }
+  var btn = 'border:0;border-radius:10px;padding:9px 14px;font-size:15px;font-weight:bold';
+  var d = document.createElement('div'); d.id = 'sappbar';
+  d.style.cssText = 'position:fixed;left:10px;right:10px;bottom:14px;z-index:99999;background:#183B56;color:#fff;border-radius:14px;padding:12px 14px;font-size:15px;line-height:1.5;box-shadow:0 4px 14px rgba(0,0,0,.35)';
+  d.innerHTML = '<div style="margin-bottom:8px">' + (can ? '檔案好了：' + esc(name) : '這裡（小工具的全螢幕）不能存檔。請從主畫面的「柏捷工地」圖示打開，再做一次。') + '</div>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end">' + (can ? '<button id="sappgo" style="' + btn + ';background:#16A6A0;color:#fff">📤 存檔／傳給別人</button>' : '') +
+    '<button id="sappx" style="' + btn + ';background:#fff;color:#183B56">關閉</button></div>';
+  document.body.appendChild(d);
+  document.getElementById('sappx').onclick = function () { d.remove(); };
+  if (can) document.getElementById('sappgo').onclick = function () { navigator.share({ files: [file] }).then(function () { d.remove(); }, function () { }); };
+}
 /** 把檔案存到手機的「下載」 */
 function saveBlob(blob, name) {
+  if (FROM_SAPP) { sappSave(blob, name); return; }
   var url = URL.createObjectURL(blob), a = document.createElement('a');
   a.href = url; a.download = name; a.style.display = 'none';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -1033,6 +1055,7 @@ function renderLogin() {
   if (IOS) {
     if (!standalone() && FROM_WIDGET) h += '<div class="box" style="border-color:var(--teal);background:#E9F7F6"><b>從小工具點進來的：這裡是 Safari</b><div>' + DEV +
       ' 的小工具沒辦法打開主畫面的「柏捷工地」圖示，所以用 Safari 打開同一個柏捷工地。在這裡<b>輸入一次代碼</b>就好（Safari 和主畫面的圖示是分開記的），以後點小工具就直接進來。</div></div>';
+    else if (!standalone() && FROM_SAPP) h += '<div class="box" style="border-color:var(--teal);background:#E9F7F6"><b>從小工具打開的（全螢幕）</b><div>在這裡輸入你的代碼登入就好，以後點小工具會直接進來。</div></div>';
     else if (!standalone()) h += '<div class="box"><b>' + DEV + ' 請先「加入主畫面」再登入</b><div>用 Safari 打開這個網頁 → 按' + (IPAD ? '右上角' : '下面') +
       '的「分享」⬆︎ →「加入主畫面」→ 之後都從主畫面的「柏捷工地」圖示打開，在那裡輸入代碼（Safari 裡輸入的，圖示那邊不會記得）。</div></div>';
   } else if (MAC && !PCAPP) {
@@ -1954,6 +1977,7 @@ function wpOn() { try { return Notification.permission === 'granted' && !!localS
 /** 首頁最下面：開通知的按鈕／已經開了／要先加到主畫面 */
 function wpCard() {
   if (ANDROID && !PCAPP) return '';   // Android 用 App
+  if (FROM_SAPP) return '';   // 小工具的全螢幕（Scriptable 裡面）不能跳通知；通知照舊從主畫面的圖示那邊來
   if (IOS && !wpStandalone()) return '<div class="note" style="padding:6px 4px 0">🔔 要讓這台跳通知：在 Safari 按「分享」→「加入主畫面」，以後從主畫面的柏捷工地圖示打開，再按「開啟通知」。</div>';
   if (!wpSupported()) return '';
   var p = Notification.permission, msg = WP.msg ? '<div class="sub" style="font-size:13.5px;margin-top:4px">' + esc(WP.msg) + '</div>' : '';
@@ -3679,6 +3703,7 @@ function openPdfDoc(doc, opt) {
 function pdfSave() {
   var p = S.pdf; if (!p || !p.save) return;
   var b = PDF_CACHE[p.key]; if (!b) { pdfStatus('還在下載，等一下再按'); return; }
+  if (FROM_SAPP) { sappSave(new Blob([b], { type: p.img || 'application/pdf' }), p.save); return; }
   var url = URL.createObjectURL(new Blob([b], { type: p.img || 'application/pdf' }));
   var a = document.createElement('a'); a.href = url; a.download = p.save; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
@@ -6886,7 +6911,8 @@ S.gs = LS.get('gs');   // 這台用 Google 登入過（開發者）
 S.site = LS.get('site');
 // 開發者用 Google 登入過：打開就直接進去，不用每次按「以開發者進入」（使用者 2026-11-14「每次登入都會跑出這個畫面」）。
 // 通行證過期會回登入畫面；要換人用首頁的「🚪 這台登出 Google」
-if (S.gs) gsEnter(true); else render();
+// 小工具的全螢幕（FROM_SAPP）：代碼是小工具放進來的，直接進去，不用再按一次「登入」
+if (S.gs) gsEnter(true); else if (FROM_SAPP && S.saved) { render(); ACT.login(); } else render();
 </script>
 </body>
 </html>
