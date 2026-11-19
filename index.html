@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
@@ -142,6 +142,9 @@ textarea { min-height:76px; resize:vertical; }
 .mrow .x2 { border:none; background:none; color:var(--red); font-size:15px; padding:4px 6px; }
 .mno { display:inline-block; min-width:22px; text-align:center; background:#1AA39A; color:#fff; border-radius:7px; padding:0 6px; font-size:14px; margin-right:6px; }
 .mcur { border:2.5px solid #1AA39A; }
+.mblock { border:2.5px solid #2F80ED; }
+.msep { height:2px; background:#DCE6F2; margin:12px 0 8px; }
+.xcat { border:1px solid #D32F2F; color:#D32F2F; background:#fff; border-radius:12px; padding:3px 10px; font-size:13.5px; font-weight:bold; }
 .madd { display:block; width:100%; border:2px dashed #1AA39A; background:#F0FBF9; color:#0F766E; font-weight:bold; font-size:18px; border-radius:14px; padding:12px; margin-bottom:12px; }
 .subchips { background:#F0FBF9; border-radius:10px; padding:6px 6px 2px; margin-top:6px; }
 .mfoot { position:sticky; bottom:0; z-index:5; display:flex; align-items:center; gap:10px; background:#102A43; color:#fff; border-radius:14px; padding:8px 8px 8px 14px; margin:8px 0 6px; box-shadow:0 -2px 10px rgba(16,42,67,.25); }
@@ -418,7 +421,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/17a';
+var WEB_VERSION = '11/19';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1446,14 +1449,58 @@ function renderWork() {
 // ---------- 一天好幾項（使用者 2026-11-18「很常施工人員一天做很多事項，使用的時間不一樣」→ 全 A）----------
 // 新增的時候一頁可以記好幾項：每一項自己的大項（＋細項）、幾小時、做了什麼、照片；工地、日期、天氣、加班、材料、單據整天一份（跟第 1 項一起存）。
 // 正在填的那一項放在 S.d 的欄位（原本的按鈕、拍照都照舊用），其他項放 d.items；送出時每一項存成一筆。改舊的那一筆＝照舊一次一筆。
-var ITEM_F = ['id', 'cat', 'sub', 'workH', 'hours', 'text', 'local', 'remote', 'removed', 'done'];
+var ITEM_F = ['id', 'cat', 'sub', 'workH', 'hours', 'text', 'local', 'remote', 'removed', 'done', 'otH', 'whOther'];   // otH＝加班跟著大項（記在那個大項的第 1 件，2026-11-19 ③A）
 var HOUR_CHIPS = ['1', '2', '3', '4', '5', '6', '7', '8'];
 function itemTake(d) { var o = {}; ITEM_F.forEach(function (k) { o[k] = d[k]; }); return o; }
-function itemPut(d, it) { ITEM_F.forEach(function (k) { d[k] = it[k]; }); d.whOther = !!it.workH && HOUR_CHIPS.indexOf(String(it.workH)) < 0; }
-function itemBlank() { return { id: '', cat: '', sub: '', workH: '', hours: '', text: '', local: [], remote: [], removed: [], done: false }; }
+function itemPut(d, it) { ITEM_F.forEach(function (k) { d[k] = it[k]; }); d.otH = it.otH || ''; d.whOther = !!it.whOther || (!!it.workH && HOUR_CHIPS.indexOf(String(it.workH)) < 0); }
+function itemBlank() { return { id: '', cat: '', sub: '', workH: '', hours: '', text: '', local: [], remote: [], removed: [], done: false, otH: '', whOther: false }; }
 function itemEmpty(it) { return !it.cat && !String(it.text || '').trim() && !(it.local || []).length && !(it.remote || []).length && !hrsOf(it.workH); }
 function allItems(d) { if (!d.multi) return [itemTake(d)]; var a = d.items.slice(); a[d.cur] = itemTake(d); return a; }
-function liveItems(d) { return allItems(d).filter(function (x) { return !itemEmpty(x); }); }
+// 2026-11-19（使用者「施工人員的這個很難用」「他輸入完都不知道有輸入什麼」「讓使用者點選每個項次時都有自己的下面藍色功能」→ ①A ③A）：
+// 上面點大項，下面就多一塊它自己的（細項、幾小時、做了什麼、照片、加班），每一塊一直打開；同一個大項可以「＋ 再加一件」；沒有「＋ 再加一項」了。
+/** 照大項一塊一塊排（點的順序），同一個大項的幾件排在一起：[{it, i}]（i＝在 d.items 的位置） */
+function groupedItems(d) {
+  var all = allItems(d), cats = [], out = [];
+  all.forEach(function (x) { if (x.cat && cats.indexOf(x.cat) < 0) cats.push(x.cat); });
+  cats.forEach(function (c) { all.forEach(function (x, i) { if (x.cat === c) out.push({ it: x, i: i }); }); });
+  return out;
+}
+function liveItems(d) { return groupedItems(d).map(function (x) { return x.it; }); }
+/** 「裝修工程第 2 件」；那個大項只有一件就只寫大項 */
+function itemLabel(its, i) { var same = its.filter(function (x) { return x.cat === its[i].cat; }); return its[i].cat + (same.length > 1 ? '第 ' + (same.indexOf(its[i]) + 1) + ' 件' : ''); }
+/** 這一件只選了大項、其他都還沒填（拿掉不用問） */
+function itemBlankish(it) { return !String(it.text || '').trim() && !(it.local || []).length && !(it.remote || []).length && !hrsOf(it.workH) && !String(it.otH || '').trim(); }
+/** 拿掉幾件（idx＝在 d.items 的位置；要先把正在填的放回 d.items）；加班記在那個大項的第 1 件，刪掉第 1 件就交給下一件 */
+function dropItems(idx) {
+  var d = S.d;
+  idx.forEach(function (j) {
+    var it = d.items[j]; if (!it || !String(it.otH || '').trim()) return;
+    var nx = d.items.filter(function (x, i) { return i > j && idx.indexOf(i) < 0 && x.cat === it.cat; })[0];
+    if (nx && !String(nx.otH || '').trim()) nx.otH = it.otH;
+  });
+  d.items = d.items.filter(function (x, i) { return idx.indexOf(i) < 0; });
+  if (!d.items.length) d.items = [itemBlank()];
+  d.cur = 0; itemPut(d, d.items[0]); S.err = ''; render();
+}
+/** 每一件都打開：點、打字的那一件先換成「正在填的」（它的內容搬到 S.d 的欄位，原本的按鈕、拍照照舊用） */
+function focusFromEvent(el) {
+  var d = S.d; if (!d || !d.multi || S.route !== 'edit' || !el || !el.closest) return;
+  var b = el.closest('[data-j]'); if (!b) return;
+  var j = +b.getAttribute('data-j'); if (j === d.cur || !d.items[j]) return;
+  d.items[d.cur] = itemTake(d); d.cur = j; itemPut(d, d.items[j]);
+}
+/** 送出以後：這次傳的內容列給他看 */
+function showSent(x) {
+  var o = document.createElement('div');
+  o.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99;background:rgba(0,0,0,.53);display:flex;align-items:center;justify-content:center;padding:20px';
+  o.innerHTML = '<div style="background:#fff;border-radius:16px;padding:18px;max-width:420px;width:100%;max-height:80vh;overflow:auto;text-align:left">' +
+    '<div style="font-size:19px;font-weight:bold;color:#0F766E">✓ 送出了，這是你這次傳的</div><div style="font-size:14px;color:#5D7486;margin:2px 0 10px">' + esc(x.head) + '</div>' +
+    x.rows.map(function (r) { return '<div style="margin-bottom:8px;font-size:15.5px;line-height:1.45"><b>■ ' + esc(r.t) + '</b><br>　' + esc(r.s) + '</div>'; }).join('') +
+    '<div style="font-size:13px;color:#5D7486">要改的話，點清單裡那一筆就可以改。</div>' +
+    '<div style="text-align:right;margin-top:10px"><button style="background:#16A6A0;color:#fff;border:0;border-radius:10px;padding:10px 26px;font-size:17px;font-weight:bold">好</button></div></div>';
+  o.addEventListener('click', function (ev) { if (ev.target === o || ev.target.tagName === 'BUTTON') { ev.stopPropagation(); o.parentNode.removeChild(o); } });
+  document.body.appendChild(o);
+}
 /** 這一項還缺什麼（'' ＝可以送）；first＝第 1 項（材料、單據也算內容） */
 function itemProblem(it, first) {
   var d = S.d;
@@ -1478,44 +1525,46 @@ function editOk() {
 /** 送出鈕下面那一行：哪一項還缺什麼 */
 function editMissing() {
   var d = S.d, its = d.multi ? liveItems(d) : [itemTake(d)];
-  if (!its.length) return '先選大項';
-  for (var i = 0; i < its.length; i++) { var p = itemProblem(its[i], i === 0); if (p) return (d.multi && its.length > 1 ? '第 ' + (i + 1) + ' 項：' : '') + p; }
+  if (!its.length) return '先點今天做的大項';
+  for (var i = 0; i < its.length; i++) { var p = itemProblem(its[i], i === 0); if (p) return (d.multi ? itemLabel(its, i) + '：' : '') + p; }
   return '';
 }
 
-/** 正在填的那一項（大項、細項、幾小時、做了什麼、照片）；用 S.d 的欄位，原本的按鈕照舊 */
-function editItemCard(d, j, n) {
-  var s = S.s, subs = subsOf(d.cat), many = d.multi && n > 1;
-  var h = '<div class="card' + (many ? ' mcur' : '') + '" id="mcur">';
-  if (many) h += '<div style="margin-bottom:6px"><span class="mno">' + (j + 1) + '</span><b>第 ' + (j + 1) + ' 項</b></div>';
-  h += '<div class="label">大項</div><div class="chips">' + uniq(s.categories.map(canonCat)).map(function (c) { return chip('cat', c, c, d.cat === c, true); }).join('') + '</div>';
+/** 一件工作自己的：細項、幾小時、做了什麼、照片。it＝那一件；j＝在 d.items 的位置（點、打字時 focusFromEvent 先把它換成正在填的） */
+function editItemBody(it, j) {
+  var subs = subsOf(it.cat), cur = j === S.d.cur;
+  var h = '<div data-j="' + j + '"' + (cur ? ' id="mcur"' : '') + '>';
   // 細項（裝修工程：泥作、磁磚…；一定要選一個；開發者可以加）
-  if (subs.length) h += '<div class="subchips"><div class="label">細項（' + esc(canonCat(d.cat)) + '，選一個）</div><div class="chips">' +
-    subs.map(function (x) { return chip('sub', x, x, d.sub === x, true); }).join('') + (isOwner() ? '<button class="chip small" data-act="subadd" style="border-style:dashed">＋ 新增</button>' : '') + '</div></div>';
+  if (subs.length) h += '<div class="subchips"><div class="label">細項（' + esc(canonCat(it.cat)) + '，選一個）</div><div class="chips">' +
+    subs.map(function (x) { return chip('sub', x, x, it.sub === x, true); }).join('') + (isOwner() ? '<button class="chip small" data-act="subadd" style="border-style:dashed">＋ 新增</button>' : '') + '</div></div>';
   if (hasHours()) {
     // 按小時（使用者 2026-11-18 ⑤A）：1～8 或「其他」自己打；8 小時＝1 工
     h += '<div class="label" style="margin-top:10px">花了幾小時</div><div class="chips">' +
-      HOUR_CHIPS.map(function (x) { return chip('whr', x, x, !d.whOther && String(d.workH) === x); }).join('') + chip('whr', 'other', '其他', !!d.whOther) + '</div>';
-    var w = hoursToWork(d.workH);
-    if (d.whOther) h += '<div class="hrow"><b>工時</b><input type="text" inputmode="decimal" maxlength="5" data-f="workH" value="' + esc(d.workH) + '" placeholder="0"><span class="u">小時</span>' +
-      '<span class="r" id="workHr">' + (w ? '＝ ' + w + ' 工' : '8 小時＝1 工') + '</span></div>';
-    else h += '<div class="note" id="workHr">' + (w ? '＝ ' + w + ' 工（8 小時＝1 工）' : '8 小時＝1 工') + '</div>';
+      HOUR_CHIPS.map(function (x) { return chip('whr', x, x, !it.whOther && String(it.workH) === x); }).join('') + chip('whr', 'other', '其他', !!it.whOther) + '</div>';
+    var w = hoursToWork(it.workH);
+    if (it.whOther) h += '<div class="hrow"><b>工時</b><input type="text" inputmode="decimal" maxlength="5" data-f="workH" value="' + esc(it.workH) + '" placeholder="0"><span class="u">小時</span>' +
+      '<span class="r">' + (w ? '＝ ' + w + ' 工' : '8 小時＝1 工') + '</span></div>';
+    else h += '<div class="note">' + (w ? '＝ ' + w + ' 工（8 小時＝1 工）' : '8 小時＝1 工') + '</div>';
   } else {
     h += '<div class="label" style="margin-top:10px">工數</div><div class="chips">' +
-      s.hours.map(function (x) { var l = hoursLabel(x); return chip('hours', x, /工$/.test(l) ? x : l + ' ' + x, d.hours === x); }).join('') + '</div>';
+      S.s.hours.map(function (x) { var l = hoursLabel(x); return chip('hours', x, /工$/.test(l) ? x : l + ' ' + x, it.hours === x); }).join('') + '</div>';
   }
   // 做了什麼放在幾小時下面、照片上面（使用者 2026-11-13 紅線：先寫做什麼，再拍照）
-  h += '<div class="label" style="margin-top:10px">做了什麼（位置、內容）</div><textarea data-f="text" placeholder="例：' + (subs.length ? '2F 浴室牆面打底' : '地梁綁紮（A 區）') + '">' + esc(d.text) + '</textarea>';
-  // 照片（這一項的）
-  var np = d.remote.length + d.local.length;
-  h += '<div class="label" style="margin-top:10px">照片（' + np + ' 張）</div><div class="thumbs">';
-  d.remote.forEach(function (id) { h += '<div class="thumb"><img data-pid="' + esc(id) + '" alt=""><button class="x" data-act="rmremote" data-v="' + esc(id) + '">✕</button></div>'; });
-  d.local.forEach(function (p, i) { h += '<div class="thumb"><img src="' + p.url + '" alt=""><button class="x" data-act="rmlocal" data-v="' + i + '">✕</button><span class="new">未上傳</span></div>'; });
+  h += '<div class="label" style="margin-top:10px">做了什麼（位置、內容）</div><textarea data-f="text" placeholder="例：' + (subs.length ? '2F 浴室牆面打底' : '地梁綁紮（A 區）') + '">' + esc(it.text) + '</textarea>';
+  // 照片（這一件的）
+  var np = (it.remote || []).length + (it.local || []).length;
+  h += '<div class="label" style="margin-top:10px">這一件的照片（' + np + ' 張）</div><div class="thumbs">';
+  (it.remote || []).forEach(function (id) { h += '<div class="thumb"><img data-pid="' + esc(id) + '" alt=""><button class="x" data-act="rmremote" data-v="' + esc(id) + '">✕</button></div>'; });
+  (it.local || []).forEach(function (p, i) { h += '<div class="thumb"><img src="' + p.url + '" alt=""><button class="x" data-act="rmlocal" data-v="' + i + '">✕</button><span class="new">未上傳</span></div>'; });
   h += '</div><div class="row2"><button class="ghost" style="margin:0" data-act="cam">📷 拍照</button><button class="ghost" style="margin:0" data-act="pick">🖼 從相簿選</button></div>' +
     '<div class="note" style="margin-top:6px">照片會先縮小（長邊 1600）再上傳；張數不限，一次可以選很多張。</div>';
   return h + '</div>';
 }
-
+/** 改舊的那一筆：一件，大項在卡片裡可以換 */
+function editItemCard(d) {
+  return '<div class="card"><div class="label">大項</div><div class="chips">' + uniq(S.s.categories.map(canonCat)).map(function (c) { return chip('cat', c, c, d.cat === c, true); }).join('') + '</div>' +
+    editItemBody(itemTake(d), d.cur) + '</div>';
+}
 function renderEdit() {
   var d = S.d, s = S.s, proxy = d.proxy && s.role !== '管理者', adm = isAdmin() && !S.asCode;
   var other = d.orig && d.orig.name && d.orig.name !== s.name ? d.orig.name : '';
@@ -1538,25 +1587,43 @@ function renderEdit() {
   h += '<div class="label" style="margin-top:10px">哪一天的工作' + (s.role === '管理者' ? '' : '（只能傳 ' + s.days + ' 天內的）') + '</div><div class="chips">' +
     dd.map(function (x) { var n = dayName(x); return chip('date', x, n.indexOf('/') >= 0 ? md(x) : n + ' ' + md(x), d.date === x); }).join('') + '</div>' +
     (s.role === '管理者' ? '<div class="row" style="margin-top:8px"><span class="sub" style="font-size:14px">其他日子</span><input type="date" data-f="date" value="' + esc(d.date) + '" max="' + esc(s.today) + '" style="max-width:190px"></div>' : '') + '</div>';
-  // 一天好幾項（2026-11-18）：做完的縮成一行（點了再改），正在填的那項整個打開
-  var all = allItems(d);
-  all.forEach(function (it, j) {
-    if (d.multi && j !== d.cur) {
-      if (itemEmpty(it)) return;
-      var pics = (it.local || []).length + (it.remote || []).length;
-      h += '<div class="card mrow" data-act="itemedit" data-v="' + j + '"><div class="t"><span class="mno">' + (j + 1) + '</span><b>' + esc(it.cat || '（還沒選大項）') + (it.sub ? '【' + esc(it.sub) + '】' : '') + '</b>' +
-        '<div class="sub">' + esc(String(it.text || '').trim() || '（還沒寫內容）') + (pics ? '・照片 ' + pics + ' 張' : '') + (itemProblem(it, j === 0) ? '・<span style="color:var(--red)">還沒填好</span>' : '') + '</div></div>' +
-        '<div class="h">' + (hrsOf(it.workH) ? numTxt(hrsOf(it.workH)) + ' 小時' : '') + '</div><button class="x2" data-act="itemdel" data-v="' + j + '">✕</button></div>';
-      return;
+  if (d.multi) {
+    // 上面只選大項：點了就在下面多一塊它自己的；點已經選的＝滑到那一塊
+    var g = groupedItems(d), cats = uniq(g.map(function (x) { return x.it.cat; }));
+    h += '<div class="card"><div class="label">今天做了哪幾個大項？（點了，下面就多一塊它自己的）</div><div class="chips">' +
+      uniq(s.categories.map(canonCat)).map(function (c) {
+        var its = g.filter(function (x) { return x.it.cat === c; }), hh = 0; its.forEach(function (x) { hh += hrsOf(x.it.workH) || 0; });
+        return chip('catadd', c, its.length ? c + (hh ? '・' + numTxt(hh) + 'h' : ' ✓') : c, its.length > 0, true);
+      }).join('') + '</div><div class="note"' + (cats.length ? '' : ' style="color:var(--warn);font-weight:bold"') + '>' +
+      (cats.length ? '每一塊都一直打開：寫了什麼、幾小時、幾張照片，往下滑都看得到。' : '先點今天做的大項（可以點好幾個）。') + '</div></div>';
+    cats.forEach(function (c) {
+      var its = g.filter(function (x) { return x.it.cat === c; }), first = its[0];
+      h += '<div class="card mblock" data-blk="' + esc(c) + '"><div class="hd"><b style="font-size:19px;color:var(--navy)">' + esc(c) + '</b>' +
+        (its.every(function (x) { return !x.it.id; }) ? '<button class="xcat" data-act="catdel" data-v="' + esc(c) + '">✕ 拿掉</button>' : '') + '</div>';
+      its.forEach(function (x, n) {
+        if (n) h += '<div class="msep"></div>';
+        if (its.length > 1) h += '<div class="hd" style="margin-top:4px"><b style="color:#0F766E">第 ' + (n + 1) + ' 件</b>' +
+          (x.it.id ? '' : '<button class="link red" style="margin:0" data-act="itemdel" data-v="' + x.i + '">刪掉這件</button>') + '</div>';
+        h += editItemBody(x.it, x.i);
+      });
+      // 同一個大項一天做兩件不同的事（①A）
+      h += '<button class="madd" style="margin:10px 0 0;padding:8px;font-size:14.5px" data-act="catadd" data-v="' + esc(c) + '" data-more="1">＋ 再加一件（' + esc(c) + ' 做的另一件事）</button>';
+      // 加班跟著大項（③A）：記在這個大項的第 1 件
+      if (hasHours()) {
+        var o1 = hoursToWork(first.it.otH);
+        h += '<div data-j="' + first.i + '"><div class="hrow ot"><b>加班</b><input type="text" inputmode="decimal" maxlength="5" data-f="otH" value="' + esc(first.it.otH || '') + '" placeholder="0"><span class="u">小時</span>' +
+          '<span class="r">' + (o1 ? '＝ ' + o1 + ' 工（另外算）' : '這一項沒加班就空著') + '</span></div></div>';
+      }
+      h += '</div>';
+    });
+  } else {
+    // 改舊的那一筆：一件；加班是那一筆的
+    h += editItemCard(d);
+    if (hasHours()) {
+      var o = hoursToWork(d.otH);
+      h += '<div class="card"><div class="hrow ot" style="margin-top:0"><b>加班</b><input type="text" inputmode="decimal" maxlength="5" data-f="otH" value="' + esc(d.otH) + '" placeholder="0"><span class="u">小時</span>' +
+        '<span class="r" id="otHr">' + (o ? '＝ ' + o + ' 工（另外算）' : '沒加班就空著') + '</span></div></div>';
     }
-    h += editItemCard(d, j, all.length);
-  });
-  if (d.multi) h += '<button class="madd" data-act="itemadd">＋ 再加一項（今天做的另一件事）</button>';
-  // 加班（小時，整天一格；改舊的那一筆＝那一筆的）
-  if (hasHours()) {
-    var o = hoursToWork(d.otH);
-    h += '<div class="card"><div class="hrow ot" style="margin-top:0"><b>加班</b><input type="text" inputmode="decimal" maxlength="5" data-f="otH" value="' + esc(d.otH) + '" placeholder="0"><span class="u">小時</span>' +
-      '<span class="r" id="otHr">' + (o ? '＝ ' + o + ' 工（另外算）' : '沒加班就空著') + '</span></div>' + (d.multi ? '<div class="note">整天一格就好（跟第 1 項一起存）。</div>' : '') + '</div>';
   }
   // 材料/機具
   h += '<div class="card"><div class="label">' + (d.mats.length ? '材料/機具（最多 ' + MAX_MATS + ' 筆）' : '材料/機具（今天進場的；沒有就不用填）') + '</div>';
@@ -3578,7 +3645,7 @@ var ACT = {
   sub: function (v) { S.d.sub = v; S.err = ''; render(); },
   whr: function (v) {
     var d = S.d;
-    if (v === 'other') { d.whOther = true; render(); var el = document.querySelector('[data-f="workH"]'); if (el) el.focus(); return; }
+    if (v === 'other') { d.whOther = true; render(); var el = document.querySelector('#mcur [data-f="workH"]') || document.querySelector('[data-f="workH"]'); if (el) el.focus(); return; }
     d.whOther = false; d.workH = v; d.hours = hoursToWork(v); S.err = ''; render();
   },
   itemadd: function () {
@@ -3598,18 +3665,35 @@ var ACT = {
     d.cur = j; itemPut(d, d.items[j]); S.err = ''; render();
     var el = $('mcur'); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   },
+  // 2026-11-19：點大項＝多一塊（已經有的＝滑到那一塊）；「＋ 再加一件」（data-more）＝同一個大項再一件
+  catadd: function (v, el) {
+    var d = S.d; if (!d.multi || S.busy) return;
+    var find = function () { var bs = document.querySelectorAll('[data-blk]'); for (var i = 0; i < bs.length; i++) if (bs[i].getAttribute('data-blk') === v) return bs[i]; return null; };
+    var has = allItems(d).some(function (x) { return x.cat === v; }), more = !!(el && el.getAttribute('data-more'));
+    if (has && !more) { var b0 = find(); if (b0 && b0.scrollIntoView) b0.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    var ss = subsOf(v), cur = itemTake(d);
+    if (itemEmpty(cur)) { d.cat = v; d.sub = ss.length === 1 ? ss[0] : ''; }   // 一開始那個空的直接拿來用
+    else { d.items[d.cur] = cur; var it = itemBlank(); it.cat = v; it.sub = ss.length === 1 ? ss[0] : ''; d.items.push(it); d.cur = d.items.length - 1; itemPut(d, it); }
+    S.err = ''; render();
+    var b = more ? $('mcur') : find(); if (b && b.scrollIntoView) b.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  },
+  catdel: function (v) {
+    var d = S.d; if (!d.multi || S.busy) return;
+    d.items[d.cur] = itemTake(d);
+    var idx = []; d.items.forEach(function (x, i) { if (x.cat === v) idx.push(i); });
+    if (idx.some(function (i) { return d.items[i].id; })) { S.err = '這個大項已經傳上去了：送出完到「我的工作」再刪'; render(); return; }
+    if (idx.some(function (i) { return !itemBlankish(d.items[i]); }) && !confirm('拿掉「' + v + '」？寫的內容和照片會拿掉。')) return;
+    dropItems(idx);
+  },
   itemdel: function (v, el, ev) {
     if (ev) ev.stopPropagation();
-    var d = S.d, j = +v; if (!d.multi || S.busy || !d.items[j]) return;
-    if (d.items[j].id) { S.err = '這一項已經傳上去了：送出完到「我的工作」再刪'; render(); return; }
-    if (!confirm('拿掉第 ' + (j + 1) + ' 項？')) return;
+    var d = S.d, j = +v; if (!d.multi || S.busy) return;
     d.items[d.cur] = itemTake(d);
-    d.items.splice(j, 1);
-    if (!d.items.length) d.items.push(itemBlank());
-    if (j < d.cur) d.cur--; else if (j === d.cur) d.cur = Math.min(d.cur, d.items.length - 1);
-    itemPut(d, d.items[d.cur]); render();
-  },
-  // 開發者加細項（跟廠商、單位一樣存在 手機新增.json：added.subs ＝ ['裝修工程/隔間']）
+    var it = d.items[j]; if (!it) return;
+    if (it.id) { S.err = '這一件已經傳上去了：送出完到「我的工作」再刪'; render(); return; }
+    if (!itemBlankish(it) && !confirm('刪掉這一件？內容和照片會拿掉。')) return;
+    dropItems([j]);
+  },  // 開發者加細項（跟廠商、單位一樣存在 手機新增.json：added.subs ＝ ['裝修工程/隔間']）
   subadd: function () {
     var d = S.d, c = canonCat(d.cat); if (!isOwner() || !c) return;
     var v = window.prompt('「' + c + '」要加哪個細項？（最多 8 個字）', '');
@@ -3664,7 +3748,7 @@ var ACT = {
     if (!editOk()) { S.err = '還差：' + editMissing(); render(); return; }
     S.busy = true; S.err = ''; S.progress = '上傳內容…'; render();
     // 一天好幾項（2026-11-18）：每一項存成一筆；材料、單據、加班跟第 1 項；傳好的那項記 done，再按一次不會重複
-    var its = d.multi ? (function () { d.items[d.cur] = itemTake(d); return d.items.map(function (it, i) { return { it: it, i: i }; }).filter(function (x) { return !itemEmpty(x.it); }); })() : null;
+    var its = d.multi ? (function () { d.items[d.cur] = itemTake(d); return groupedItems(d).map(function (x) { return { it: d.items[x.i], i: x.i }; }); })() : null;   // 照大項一塊一塊的順序；每一件帶自己的加班
     var one = function (draft, tag) { return saveDraft(draft, tag); };
     var run;
     if (!its) run = one(d, '').then(function (err) { return err ? [err] : []; });
@@ -3674,11 +3758,11 @@ var ACT = {
       its.forEach(function (x, k) {
         run = run.then(function () {
           if (x.it.done) return;
-          var draft = Object.assign({}, d, x.it, k === 0 ? {} : { mats: [], localR: [], remoteR: [], removedR: [], rLocs: {}, rLocs0: {}, rKinds: {}, rKinds0: {}, otH: '' });
-          return one(draft, n > 1 ? '第 ' + (k + 1) + '/' + n + ' 項：' : '').then(function (err) {
+          var draft = Object.assign({}, d, x.it, k === 0 ? {} : { mats: [], localR: [], remoteR: [], removedR: [], rLocs: {}, rLocs0: {}, rKinds: {}, rKinds0: {} });
+          return one(draft, n > 1 ? '第 ' + (k + 1) + '/' + n + ' 件：' : '').then(function (err) {
             ITEM_F.forEach(function (f) { x.it[f] = draft[f]; });
             if (k === 0) ['localR', 'remoteR', 'removedR', 'rLocs', 'rLocs0', 'rKinds', 'rKinds0'].forEach(function (f) { d[f] = draft[f]; });
-            if (err) errs.push((n > 1 ? '第 ' + (k + 1) + ' 項' : '') + err); else x.it.done = true;
+            if (err) errs.push((n > 1 ? '第 ' + (k + 1) + ' 件' : '') + err); else x.it.done = true;
           });
         });
       });
@@ -3687,7 +3771,14 @@ var ACT = {
     run.then(function (errs) {
       S.busy = false; S.progress = ''; S.feedStale = true;
       if (errs.length) { S.err = errs.join('；') + '（再按一次送出會接著傳，傳好的不會重複）'; render(); return; }
+      // 送出以後列出來給他確認（只有新增；使用者 2026-11-19「他輸入完都不知道有輸入什麼」）
+      var sent = its ? { head: md(d.date) + '　' + (S.site === UNFILED ? '未分組' : S.site), rows: its.map(function (x) {
+        var it = x.it, pics = (it.remote || []).length + (it.local || []).length;
+        return { t: it.cat + (it.sub && subsOf(it.cat).length ? '【' + it.sub + '】' : '') + (hrsOf(it.workH) ? '　' + numTxt(hrsOf(it.workH)) + ' 小時' : '') + (hrsOf(it.otH) ? '　加班 ' + numTxt(hrsOf(it.otH)) + ' 小時' : ''),
+          s: (String(it.text || '').trim() || '（沒寫內容）') + (pics ? '　照片 ' + pics + ' 張' : '') };
+      }) } : null;
       editDone();
+      if (sent && sent.rows.length) showSent(sent);
     }).catch(function (e) {
       S.busy = false; S.progress = ''; var m = failMsg(e);
       if (m) { S.err = m + (d.multi ? '（已經傳好的項目不會重複，再按一次會接著傳）' : d.id && (d.local.length || d.localR.length) ? '（已經傳上去的不會重複，再按一次會接著傳）' : ''); render(); }
@@ -3859,11 +3950,13 @@ document.addEventListener('click', function (ev) {
   var el = ev.target.closest ? ev.target.closest('[data-act]') : null;
   if (!el || el.disabled) return;
   var a = el.getAttribute('data-act');
+  focusFromEvent(el);   // 新增我的工作：點的是哪一件，先換成正在填的那件
   if (ACT[a]) { if (a !== 'maskclose') ev.preventDefault(); ACT[a](el.getAttribute('data-v'), el, ev); }
 });
 document.addEventListener('input', function (ev) {
   var k = ev.target.getAttribute && ev.target.getAttribute('data-f'); if (!k) return;
   var v = ev.target.value;
+  focusFromEvent(ev.target);   // 新增我的工作：打字的是哪一件，先換成正在填的那件
   if (k === 'codeInput') { S.codeInput = v; return; }
   if (k === 'todoText') { S.todoText = v; var tb = $('todoaddbtn'); if (tb) tb.disabled = !v.trim(); return; }
   if (k.indexOf('m.') === 0) {
@@ -3884,7 +3977,7 @@ document.addEventListener('input', function (ev) {
   if (k === 'workH' || k === 'otH') {
     // 只能打數字和小數點；打工時，工數跟著換（按鈕也跟著亮），旁邊的「＝ 幾工」跟著變
     var c = v.replace(/[^\d.]/g, '').slice(0, 5); if (c !== v) ev.target.value = c; d[k] = c;
-    var w = hoursToWork(c), rr = $(k + 'r');
+    var w = hoursToWork(c), rr = (ev.target.parentNode && ev.target.parentNode.querySelector('.r')) || $(k + 'r');   // 每一件都有自己的工時、加班格：改同一排的那個說明
     if (k === 'workH' && w) { d.hours = w; document.querySelectorAll('[data-act="hours"]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-v') === w); }); }
     if (rr) rr.textContent = k === 'workH' ? (w ? '＝ ' + w + ' 工' : '8 小時＝1 工') : (w ? '＝ ' + w + ' 工（另外算）' : '沒加班就空著');
   }
@@ -4908,25 +5001,55 @@ function dlNow() {
     (z >= 0 ? '+' : '-') + p(Math.floor(Math.abs(z) / 60)) + ':' + p(Math.abs(z) % 60);
 }
 function dlCopy(o) { return JSON.parse(JSON.stringify(o)); }
-function dlQty(i) { var a = []; if (+i.people > 0) a.push(i.people + '*' + (i.hours || '1')); if (+i.people2 > 0) a.push(i.people2 + '*' + (i.hours2 || '1')); return a.join('+') || String(i.qtyText || ''); }
-function dlFilled(i) { return +i.people > 0 || +i.people2 > 0 || (i.lines || []).some(function (l) { return String(l.text || '').trim(); }) || !!String(i.qtyText || '').trim(); }
+// 2026-11-19（使用者「每個工作內容都要有可以填時間跟上傳照片的功能，也就是獨立開來」→ ②A）：每一行自己的人數×工時，大項的數量＝每一行加起來。
+// 存在雲端：total＝["2*1","","1*0.5"]（跟 lines 同順序，後面多的＝只有時間沒有內容的行；收件服務本來就會幫公司、施工人員拿掉 total）；
+// 還沒更新的手機只認 people/people2/qtyText：1～2 行有時間照樣寫那兩組，3 行寫成 qtyText（數量一樣）。跟摺疊機 Model.kt 一樣。
+function dlLineQty(s) { var m = /^\s*(\d+)\s*\*\s*(.+?)\s*$/.exec(String(s || '')); return m && +m[1] > 0 ? { people: +m[1], hours: m[2] } : null; }
+/** 一個大項的每一行（都帶 people、hours）：正在編輯的（行上已經有 people）照用；雲端那份從 total 來，以前的兩組放第 1、2 行 */
+function dlLinesOf(i) {
+  var src = i.lines || [];
+  if (src.some(function (l) { return l && l.people !== undefined; })) return src;
+  var tot = Array.isArray(i.total) ? i.total : [];
+  var ls = src.map(function (l, k) { var q = dlLineQty(tot[k]); return { text: l.text || '', workers: (l.workers || []).slice(), people: q ? q.people : 0, hours: q ? q.hours : '1' }; });
+  tot.slice(ls.length).forEach(function (s) { var q = dlLineQty(s); if (q) ls.push({ text: '', workers: [], people: q.people, hours: q.hours }); });
+  if (!ls.some(function (l) { return l.people > 0; }) && (+i.people > 0 || +i.people2 > 0)) {
+    var put = function (k, p, h) { while (ls.length <= k) ls.push({ text: '', workers: [], people: 0, hours: '1' }); ls[k].people = +p; ls[k].hours = String(h || '1'); };
+    if (+i.people > 0) put(0, i.people, i.hours);
+    if (+i.people2 > 0) put(+i.people > 0 ? 1 : 0, i.people2, i.hours2);
+  }
+  return ls;
+}
+/** 存檔的順序：有內容的行在前、只有時間沒有內容的行在後（行號才不會跳） */
+function dlTidy(i) {
+  var ls = dlLinesOf(i);
+  return ls.filter(function (l) { return String(l.text || '').trim(); }).concat(ls.filter(function (l) { return !String(l.text || '').trim() && +l.people > 0; }));
+}
+function dlQty(i) { var g = dlTidy(i).filter(function (l) { return +l.people > 0; }); return g.length ? g.map(function (l) { return l.people + '*' + (l.hours || '1'); }).join('+') : String(i.qtyText || ''); }
+function dlFilled(i) { return dlTidy(i).length > 0 || !!String(i.qtyText || '').trim(); }
 function dlFull(l, k) { var t = String(l.text || '').trim(); if (!t) return ''; var w = l.workers || []; return (k + 1) + '.' + t + (w.length ? '(' + w.join('+') + ')' : ''); }
 /** 存回雲端的樣子（跟摺疊機 toJson 一樣：qty、每行的 full 算好；空的行不寫） */
 function dlItemOut(i) {
   // 廠商不是柏捷：工人名字不存（2026-11-18「選擇柏捷廠商時才會出現他們的名字」）
-  var bj = isBojie(i.vendor);
-  var o = { category: i.category, vendor: i.vendor || '柏捷', unit: i.unit || '工', people: +i.people || 0, hours: String(i.hours || '1'), qty: dlQty(i),
-    lines: (i.lines || []).map(function (l, k) { var l2 = bj ? l : { text: l.text, workers: [] }, f = dlFull(l2, k); return f ? { text: String(l.text).trim(), workers: l2.workers || [], full: f } : null; }).filter(Boolean) };
-  if (i.qtyText) o.qtyText = i.qtyText; if (i.src) o.src = i.src; if (i.at) o.at = i.at;
-  if (+i.people2 > 0) { o.people2 = +i.people2; o.hours2 = String(i.hours2 || '1'); }
+  var bj = isBojie(i.vendor), all = dlTidy(i), txt = all.filter(function (l) { return String(l.text || '').trim(); });
+  var g = all.filter(function (l) { return +l.people > 0; }), lm = g.length > 0, two = lm && g.length <= 2;
+  var o = { category: i.category, vendor: i.vendor || '柏捷', unit: i.unit || '工',
+    people: lm ? (two ? +g[0].people : 0) : 0, hours: lm && two ? String(g[0].hours || '1') : '1', qty: dlQty(i),
+    lines: txt.map(function (l, k) { var l2 = bj ? l : { text: l.text, workers: [] }; return { text: String(l.text).trim(), workers: l2.workers || [], full: dlFull(l2, k) }; }) };
+  if (lm) {
+    o.total = all.map(function (l) { return +l.people > 0 ? l.people + '*' + (l.hours || '1') : ''; });
+    if (two && g.length === 2) { o.people2 = +g[1].people; o.hours2 = String(g[1].hours || '1'); }
+    if (!two) o.qtyText = o.qty;
+  } else if (i.qtyText) o.qtyText = i.qtyText;
+  if (i.src) o.src = i.src; if (i.at) o.at = i.at;
   if (i.wids && i.wids.length) o.wids = i.wids;
   return o;
 }
+/** 比「有沒有改」用：每一行的內容、工人、時間（雲端那份和正在編輯的算出來一樣＝沒改，不會被當成手機改過） */
 function dlItemKey(i) {
-  return JSON.stringify([i.category, i.vendor || '柏捷', i.unit || '工', +i.people || 0, String(i.hours || '1'), +i.people2 || 0, String(i.hours2 || '1'), String(i.qtyText || ''),
-    (i.lines || []).map(function (l) { return [String(l.text || '').trim(), l.workers || []]; }).filter(function (x) { return x[0]; })]);
-}
-function dlMats(a) { return (a || []).filter(function (m) { return String(m.vendor || '').trim() || String(m.qty || '').trim(); }).map(function (m) { return { vendor: String(m.vendor || '').trim(), qty: String(m.qty || '').trim(), unit: String(m.unit || '').trim() }; }); }
+  var all = dlTidy(i), lm = all.some(function (l) { return +l.people > 0; });
+  return JSON.stringify([i.category, i.vendor || '柏捷', i.unit || '工', lm ? '' : String(i.qtyText || ''),
+    all.map(function (l) { return [String(l.text || '').trim(), l.workers || [], +l.people || 0, +l.people > 0 ? String(l.hours || '1') : '']; })]);
+}function dlMats(a) { return (a || []).filter(function (m) { return String(m.vendor || '').trim() || String(m.qty || '').trim(); }).map(function (m) { return { vendor: String(m.vendor || '').trim(), qty: String(m.qty || '').trim(), unit: String(m.unit || '').trim() }; }); }
 function dlPhotoKey(p) { return JSON.stringify([p.file, p.category, p.line || '', p.taken || '', p.src || '', p.vendor || '', p.kind || '']); }
 /** 這台改的記時間：改到的大項、天氣、材料、討論、照片；清空的大項、刪掉的照片記在 gone */
 function dlStamp(before, after, now) {
@@ -5206,13 +5329,36 @@ function dlItemPage(dl) {
   var c = dl.open, h = dlHead(dl, c, true) + '<div class="wrap form">';
   h += '<div class="sub" style="margin:0 4px 8px;font-size:14px">' + esc(dl.site) + '・' + rocDate(dl.date) + '（' + weekday(dl.date) + '）</div>';
   h += dlItemEditor(dl, c);
-  var ps = (dl.e.photos || []).filter(function (p) { return p.category === c; });
-  h += '<div class="card"><div class="label">這個大項的照片（' + ps.length + ' 張）</div>';
+  // 每一行自己的照片放在那一行裡（2026-11-19）；這裡只放還沒分到哪一行的
+  var mine = {}; ((dl.cur && dl.cur.lines) || []).forEach(function (l) { if (l.full0) mine[l.full0] = 1; });
+  var ps = (dl.e.photos || []).filter(function (p) { return p.category === c && !(p.line && mine[p.line]); });
+  h += '<div class="card"><div class="label">還沒分到哪一行的照片（' + ps.length + ' 張）</div>';
   if (ps.length) h += '<div class="dlgrid">' + ps.map(function (p) {
     return '<div><button class="gph" data-act="dlgph" data-v="' + esc(p.file) + '"><img data-dlf="' + esc(p.file) + '" src="' + esc(dlSrcOf(dl, p)) + '" alt=""></button>' + (p.line ? '<div class="gl">' + esc(p.line) + '</div>' : '') + '</div>';
   }).join('') + '</div>';
   h += '<div class="row2" style="margin-top:10px"><button class="ghost" style="margin:0" data-act="dlcamc" data-v="' + esc(c) + '">📷 拍照</button><button class="ghost" style="margin:0" data-act="dlpickc" data-v="' + esc(c) + '">🖼 相簿</button></div></div>';
   return h + '</div>';
+}
+/** 畫面第 k 行存檔後的全文（有內容的行才有行號；廠商不是柏捷不帶工人） */
+function dlLineFull(it, k) {
+  var l = it.lines[k]; if (!l || !String(l.text || '').trim()) return '';
+  var n = 0; for (var j = 0; j < k; j++) if (String(it.lines[j].text || '').trim()) n++;
+  return dlFull(isBojie(it.vendor) ? l : { text: l.text, workers: [] }, n);
+}
+/** 每一行下面那一條：「1.2F 浴室牆面打底(王+吉)　＝ 2*1 工」 */
+function dlLineSum(it, k) {
+  var l = it.lines[k], f = dlLineFull(it, k);
+  return (f || (k + 1) + '.（還沒寫內容）') + (+l.people > 0 ? '　＝ ' + l.people + '*' + (l.hours || '1') + ' ' + (it.unit || '工') : '　（還沒填人數）');
+}
+function dlTotalText(it) { var q = dlQty(it); return '這個大項合計 ＝ ' + (q ? q + ' ' + (it.unit || '工') : '（還沒填人數）'); }
+/** 照片連的是那一行的全文：改了字、換了行號，照片跟著那一行走（拍照前、關掉這頁時做） */
+function dlRelink(dl) {
+  var it = dl.cur; if (!it) return;
+  it.lines.forEach(function (l, k) {
+    var nf = dlLineFull(it, k); if ((l.full0 || '') === nf) return;
+    if (l.full0) (dl.e.photos || []).forEach(function (p) { if (p.category === it.category && p.line === l.full0) p.line = nf; });
+    l.full0 = nf;
+  });
 }
 function dlItemEditor(dl, c) {
   var it = dl.cur, L = dl.lists;
@@ -5221,29 +5367,32 @@ function dlItemEditor(dl, c) {
   var h = '<div class="card dled">' + dlListErr(dl);
   h += '<div class="label">廠商</div><input type="text" data-df="iv" value="' + esc(it.vendor) + '" maxlength="30"><div class="chips" style="margin-top:6px">' + L.vendors.map(function (v) { return dlChip('dliv', v, v, it.vendor === v, 'vendors'); }).join('') + dlAddChip('vendors', 'iv') + '</div>';
   h += '<div class="label" style="margin-top:10px">單位</div><div class="chips">' + L.units.map(function (u) { return dlChip('dliu', u, u, it.unit === u, 'units'); }).join('') + dlAddChip('units', 'iu') + '</div>';
-  h += '<div class="label" style="margin-top:10px">人數 × 工時</div><div class="row" style="gap:6px;flex-wrap:wrap"><input type="number" inputmode="numeric" min="0" max="99" data-df="ip" value="' + (+it.people || '') + '" placeholder="人數" style="max-width:90px"><span>×</span>' +
-    hrs(it.hours).map(function (x) { return dlChip('dlih', x, x, String(it.hours) === x, 'hours'); }).join('') + dlAddChip('hours', 'ih') + '</div>';
-  if (dl.two || +it.people2 > 0) h += '<div class="label" style="margin-top:8px">第二組（有人沒一起到場）</div><div class="row" style="gap:6px;flex-wrap:wrap"><input type="number" inputmode="numeric" min="0" max="99" data-df="ip2" value="' + (+it.people2 || '') + '" placeholder="人數" style="max-width:90px"><span>×</span>' +
-    hrs(it.hours2 || '1').map(function (x) { return dlChip('dlih2', x, x, String(it.hours2 || '1') === x, 'hours'); }).join('') + dlAddChip('hours', 'ih2') + '</div>';
-  else h += '<button class="link" data-act="dltwo">＋ 加第二組人數×工時</button>';
-  if (it.qtyText && !(+it.people > 0)) h += '<div class="note">數量：' + esc(it.qtyText) + '（電腦傳來的；填人數就換掉）</div>';
-  // 2026-11-18：細項（裝修工程、灌漿雜項…：每一行選一個，寫成「【泥作】…」）；工人名字只有廠商是柏捷才點（別家廠商的人不是我們的工人）
-  var subs = subsOf(it.category), bj = isBojie(it.vendor);
-  h += '<div class="label" style="margin-top:10px">工作內容（最多 3 行' + (bj ? '；點名字＝誰做的' : '') + '）</div>';
-  if (!bj) h += '<div class="note">廠商不是柏捷：不用點工人名字。</div>';
+  // 2026-11-18：細項（每一行選一個，寫成「【泥作】…」）；工人名字只有廠商是柏捷才點
+  // 2026-11-19（②A）：每一行工作內容都獨立：自己的時間（人數×工時）、自己的照片；上面那塊「人數×工時」「第二組」搬進每一行
+  var subs = subsOf(it.category), bj = isBojie(it.vendor), photos = (dl.e.photos || []).filter(function (p) { return p.category === c; });
+  h += '<div class="note" style="margin-top:10px">工作內容（最多 3 行，跟 Excel 一樣）：每一行有自己的時間和照片。' + (bj ? '點名字＝誰做的。' : '廠商不是柏捷：不用點工人名字。') + '</div></div>';
   it.lines.forEach(function (l, k) {
     var sp = subs.length ? splitSub(it.category, l.text) : { sub: '', text: l.text };
-    h += '<div style="margin:6px 0 10px">';
-    if (subs.length) h += '<div class="subchips" style="margin-bottom:6px"><div class="label">細項（第 ' + (k + 1) + ' 行）</div><div class="chips">' +
+    var shots = l.full0 ? photos.filter(function (p) { return p.line === l.full0; }) : [];
+    h += '<div class="card mblock"><b style="font-size:17px;color:var(--navy)">第 ' + (k + 1) + ' 行</b>';
+    if (subs.length) h += '<div class="subchips" style="margin:6px 0"><div class="label">細項</div><div class="chips">' +
       subs.map(function (x) { return chip('dlisub', k + '|' + x, x, sp.sub === x, true); }).join('') + (isOwner() ? '<button class="chip small" data-act="dlisubadd" data-v="' + k + '" style="border-style:dashed">＋ 新增</button>' : '') + '</div></div>';
-    h += '<input type="text" data-df="il.' + k + '" value="' + esc(sp.text) + '" placeholder="' + (k + 1) + '. 例：' + (subs.length ? '2F 浴室牆面打底' : '地梁綁紮（A 區）') + '" maxlength="80">';
+    h += '<input type="text" data-df="il.' + k + '" value="' + esc(sp.text) + '" placeholder="例：' + (subs.length ? '2F 浴室牆面打底' : '地梁綁紮（A 區）') + '" maxlength="80" style="margin-top:6px">';
     if (bj) h += '<div class="chips" style="margin-top:4px">' + L.workers.map(function (w) { return dlChip('dliw', k + '|' + w, w, (l.workers || []).indexOf(w) >= 0, 'workers'); }).join('') + dlAddChip('workers', 'iw.' + k) + '</div>';
+    h += '<div class="label" style="margin-top:8px">這一行的時間（人數 × 工時）</div><div class="row" style="gap:6px;flex-wrap:wrap"><input type="number" inputmode="numeric" min="0" max="99" data-df="lp.' + k + '" value="' + (+l.people || '') + '" placeholder="人數" style="max-width:90px"><span>×</span>' +
+      hrs(l.hours).map(function (x) { return dlChip('dllh', k + '|' + x, x, String(l.hours || '1') === x, 'hours'); }).join('') + dlAddChip('hours', 'lh.' + k) + '</div>';
+    h += '<div data-lsum="' + k + '" style="margin-top:6px;background:#EEF3FA;border-radius:8px;padding:5px 9px;font-weight:bold;color:var(--navy);font-size:15px">' + esc(dlLineSum(it, k)) + '</div>';
+    h += '<div class="label" style="margin-top:8px">這一行的照片（' + shots.length + ' 張）</div>';
+    if (shots.length) h += '<div class="dlgrid">' + shots.map(function (p) { return '<div><button class="gph" data-act="dlgph" data-v="' + esc(p.file) + '"><img data-dlf="' + esc(p.file) + '" src="' + esc(dlSrcOf(dl, p)) + '" alt=""></button></div>'; }).join('') + '</div>';
+    if (String(l.text || '').trim()) h += '<div class="row2" style="margin-top:6px"><button class="ghost" style="margin:0" data-act="dlcaml" data-v="' + k + '">📷 拍照</button><button class="ghost" style="margin:0" data-act="dlpickl" data-v="' + k + '">🖼 相簿</button></div>';
+    else h += '<div class="note">先寫這一行做了什麼，再拍照（照片才知道是哪一行的）。</div>';
     h += '</div>';
   });
-  h += '<div class="row2"><button class="ghost" style="margin:0" data-act="dlback">完成</button><button class="ghost red" style="margin:0" data-act="dlclear">清空這個大項</button></div></div>';
+  h += '<div class="card"><b id="dltot" style="font-size:16px">' + esc(dlTotalText(it)) + '</b>' +
+    '<div class="note">' + (it.qtyText && !dlTidy(it).some(function (l) { return +l.people > 0; }) ? '這是電腦（Excel）傳來的數量；上面哪一行填了人數，就改成每一行加起來。' : '數量＝每一行的人數 × 工時加起來（Excel 的數量欄照這樣寫）。') + '</div>' +
+    '<div class="row2" style="margin-top:8px"><button class="ghost" style="margin:0" data-act="dlback">完成</button><button class="ghost red" style="margin:0" data-act="dlclear">清空這個大項</button></div></div>';
   return h;
-}
-/** 材料／機具、與業主建築師討論（跟摺疊機一樣同一頁） */
+}/** 材料／機具、與業主建築師討論（跟摺疊機一樣同一頁） */
 function dlMatsPage(dl) {
   var e = dl.e, L = dl.lists, mats = e.materials || [];
   var h = dlHead(dl, '材料/機具、討論', true) + '<div class="wrap form">';
@@ -5324,8 +5473,9 @@ function dlNotePage(dl) {
 }
 function dlCloseItem(dl) {
   var it = dl.cur; if (!it) return;
+  dlRelink(dl);   // 改了字、換了行號：這一行的照片跟著走
   var rest = (dl.e.items || []).filter(function (i) { return i.category !== it.category; });
-  var clean = dlCopy(it); clean.lines = clean.lines.filter(function (l, k) { return String(l.text || '').trim() || k < 3; });
+  var clean = dlCopy(it); clean.lines = clean.lines.filter(function (l, k) { return String(l.text || '').trim() || +l.people > 0 || k < 3; });
   dl.e.items = dlFilled(clean) ? rest.concat([clean]) : rest;
   dl.open = ''; dl.cur = null; dl.two = false;
 }
@@ -5373,9 +5523,14 @@ ACT.dlopen = function (c) {
   var dl = S.dl; if (!dl) return; dlCloseItem(dl);
   var it = dlItemOf(dl, c), L = dl.lists;
   var cur = it ? dlCopy(it) : { category: c, vendor: '柏捷', unit: '工', people: 0, hours: L.hours.indexOf('1') >= 0 ? '1' : L.hours[0] || '1', lines: [] };
-  cur.lines = (cur.lines || []).map(function (l) { return { text: l.text || '', workers: (l.workers || []).slice() }; });
-  while (cur.lines.length < 3) cur.lines.push({ text: '', workers: [] });
-  dl.open = c; dl.cur = cur; dl.two = +cur.people2 > 0;
+  // 每一行帶自己的人數×工時（2026-11-19）：雲端那份從 total 來，以前整個大項的兩組放第 1、2 行（數量一樣）
+  var defH = L.hours.indexOf('1') >= 0 ? '1' : L.hours[0] || '1';
+  cur.lines = (it ? dlLinesOf(it) : []).map(function (l) { return { text: l.text || '', workers: (l.workers || []).slice(), people: +l.people || 0, hours: +l.people > 0 ? String(l.hours || '1') : defH }; });
+  if (cur.lines.some(function (l) { return l.people > 0; })) { cur.people = 0; cur.people2 = 0; cur.qtyText = ''; }
+  delete cur.total; delete cur.hours2;
+  while (cur.lines.length < 3) cur.lines.push({ text: '', workers: [], people: 0, hours: defH });
+  cur.lines.forEach(function (l, k) { l.full0 = dlLineFull(cur, k); });   // 存檔那時候這一行的全文：這一行的照片連的就是它
+  dl.open = c; dl.cur = cur; dl.two = false;
   dl.y = window.scrollY; dl.view = 'item'; render(); window.scrollTo(0, 0);   // 另外一頁填（跟摺疊機一樣）
 };
 ACT.dlclose = function () { ACT.dlback(); };
@@ -5383,11 +5538,20 @@ ACT.dlclear = function () {
   var dl = S.dl; if (!dl || !dl.cur) return; if (!confirm('清空「' + dl.cur.category + '」？')) return;
   dl.e.items = (dl.e.items || []).filter(function (i) { return i.category !== dl.cur.category; }); dl.open = ''; dl.cur = null; dl.view = ''; dlTouch(); render(); window.scrollTo(0, dl.y || 0);
 };
-ACT.dltwo = function () { var dl = S.dl; if (!dl || !dl.cur) return; dl.two = true; if (!dl.cur.hours2) dl.cur.hours2 = '1'; render(); };
+// 每一行的工時（2026-11-19）；這一行的拍照、相簿：先把照片連到這一行現在的全文
+ACT.dllh = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; var p = v.split('|'), l = dl.cur.lines[+p[0]]; if (!l) return; l.hours = p.slice(1).join('|'); dlTouch(); render(); };
+function dlLineShoot(k, cam) {
+  var dl = S.dl; if (!dl || !dl.cur) return; dlRelink(dl);
+  var f = dlLineFull(dl.cur, +k); if (!f) return;
+  // 先把這一行放回日誌（照片加進來的時候，那一行已經在日誌裡）
+  var it = dl.cur, rest = (dl.e.items || []).filter(function (i) { return i.category !== it.category; }); dl.e.items = rest.concat([dlCopy(it)]);
+  dl.add.cat = it.category; dl.add.line = f; if (cam) ACT.dlcam(); else ACT.dlpick();
+}
+ACT.dlcaml = function (k) { dlLineShoot(k, true); };
+ACT.dlpickl = function (k) { dlLineShoot(k, false); };
 ACT.dliv = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.vendor = v; dlTouch(); render(); };
 ACT.dliu = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.unit = v; dlTouch(); render(); };
-ACT.dlih = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.hours = v; dlTouch(); render(); };
-ACT.dlih2 = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; dl.cur.hours2 = v; dlTouch(); render(); };
+
 // 細項（2026-11-18）：點了換那一行的【細項】，再點一次拿掉
 ACT.dlisub = function (v) {
   var dl = S.dl; if (!dl || !dl.cur) return; var p = v.split('|'), l = dl.cur.lines[+p[0]]; if (!l) return;
@@ -5456,6 +5620,7 @@ ACT.dladdok = function () {
   if (isNew) dlListSave(m.kind, v, true);
 };
 function dlPickAdded(dl, ctx, v) {
+  if (String(ctx).indexOf('lh.') === 0) { var lhl = dl.cur && dl.cur.lines[+String(ctx).split('.')[1]]; if (lhl) lhl.hours = v; return; }   // 每一行的工時（2026-11-19）
   var p = String(ctx || '').split('.'), it = dl.cur, mats = (dl.e && dl.e.materials) || [];
   if (p[0] === 'iv' && it) it.vendor = v;
   else if (p[0] === 'iu' && it) it.unit = v;
@@ -6279,8 +6444,7 @@ document.addEventListener('input', function (ev) {
   if (k === 'ntext' || k === 'nother') { if (dl.note) { if (k === 'ntext') { dl.note.text = v; dl.note.err = ''; } else dl.note.other = v; } return; }   // 記一筆：按「存」才算
   if (k === 'disc') dl.e.discussion = v;
   else if (k === 'iv' && dl.cur) dl.cur.vendor = v;
-  else if (k === 'ip' && dl.cur) dl.cur.people = Math.max(0, Math.min(99, parseInt(v, 10) || 0));
-  else if (k === 'ip2' && dl.cur) dl.cur.people2 = Math.max(0, Math.min(99, parseInt(v, 10) || 0));
+  else if (k.indexOf('lp.') === 0 && dl.cur) { var lpl = dl.cur.lines[+k.split('.')[1]]; if (lpl) { lpl.people = Math.max(0, Math.min(99, parseInt(v, 10) || 0)); if (lpl.people > 0) { dl.cur.people = 0; dl.cur.people2 = 0; dl.cur.qtyText = ''; } } }
   else if (k.indexOf('il.') === 0 && dl.cur) {
     // 有細項的大項：框裡打的是細項後面的字，【細項】留著（2026-11-18）
     var ln = dl.cur.lines[+k.split('.')[1]], sub = subsOf(dl.cur.category).length ? splitSub(dl.cur.category, ln.text).sub : '';
@@ -6288,6 +6452,10 @@ document.addEventListener('input', function (ev) {
   }
   else if (k.indexOf('mat.') === 0) { var p = k.split('.'); dl.e.materials[+p[1]][p[2]] = v; }
   else if (k === 'pline') { var ph = dlCurPhoto(dl); if (ph) ph.line = v; }
+  if (dl.cur && dl.view === 'item') {   // 每一行下面那一條、合計跟著換
+    document.querySelectorAll('[data-lsum]').forEach(function (el) { el.textContent = dlLineSum(dl.cur, +el.getAttribute('data-lsum')); });
+    var tt = document.getElementById('dltot'); if (tt) tt.textContent = dlTotalText(dl.cur);
+  }
   dlTouch();
 });
 document.addEventListener('change', function (ev) {
