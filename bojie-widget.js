@@ -22,9 +22,11 @@
 //   點小工具不再經過清單 → 小工具重畫的時候自己看有沒有新版（selfUpdate）。
 // 11/19b（使用者「三個都做看看」）：點小工具可以選三種，存在鑰匙圈 bojie.widget.tap：
 //   safari＝用 Safari 打開柏捷工地；full＝在 Scriptable 裡面全螢幕打開柏捷工地（試驗，不用再輸入代碼）；list＝完整清單（待辦打勾）；ask＝每次問。
-//   沒選過：開發者、老闆、主任、公司＝每次問（先試用三種）；施工人員＝Safari。清單最下面「👆 點小工具要打開什麼」可以換。
+//   沒選過＝每次問（11/19c：每個人都一樣。11/19b 施工人員是直接 Safari，使用者「apple 的沒有跳可以選擇的功能」——
+//   那支可能是施工人員的代碼；而且 Scriptable 裡讀不到小工具存的暫存資料時也會被當成不用問）。清單最下面「👆 點小工具要打開什麼」可以換。
+//   小工具右上角的時間前面寫版本（小的不寫）：截圖就看得出手機上是哪一版。
 
-const VER = '11/19b';
+const VER = '11/19c';
 const API = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
 const WEB = 'https://a0923337553-ai.github.io/bojie-site/';
 const SELF = WEB + 'bojie-widget.js';
@@ -268,12 +270,14 @@ function stamp(d) {
   const t = new Date(d.at), today = ymd(t) === ymd(new Date());
   return { t: (today ? hm(t) : (t.getMonth() + 1) + '/' + t.getDate() + ' ' + hm(t)) + (d.state === 'old' ? ' 舊資料' : ' 更新'), old: d.state === 'old' };
 }
+let FAM = '';   // 現在在畫哪一種大小（buildWidget 設的）
 function header(w, title, d, size) {
   const h = w.addStack(); h.layoutHorizontally(); h.centerAlignContent();
   txt(h, title, size || 13, COL.head, { bold: true });
   h.addSpacer();
   const s = stamp(d);
-  if (s) txt(h, s.t, 9.5, s.old ? COL.orange : COL.muted);
+  // 時間前面寫版本（小的放不下不寫）：截圖就看得出這支手機的小工具是哪一版
+  if (s) txt(h, (FAM === 'small' ? '' : VER + '版　') + s.t, 9.5, s.old ? COL.orange : COL.muted);
   w.addSpacer(3);
 }
 /** 一串字；超過 max 行：最後一行寫「還有 N 則」 */
@@ -398,9 +402,10 @@ function buildWidget(d, fam, p) {
   const kind = /消息|news/i.test(p) ? 'news' : /行事曆|月曆|行程|cal/i.test(p) ? 'cal' : /提醒|rem/i.test(p) ? 'rem' : /日誌|log/i.test(p) ? 'log' : '';
   const f = d.f;
   // 點小工具（11/19b）：沒資料（還沒設代碼、代碼不能用…）→ 打開 Scriptable 的清單去設定；
-  // 沒選過又是施工人員 → 直接用 Safari 打開柏捷工地；其他 → 先回 Scriptable 照設定走（?tap=1，見 tapMain），改了設定馬上有效
+  // 其他 → 先回 Scriptable 照設定走（?tap=1，見 tapMain）：改了設定馬上有效，不用等小工具重畫
   const run = 'scriptable:///run/' + encodeURIComponent(Script.name());
-  w.url = !f ? run : (!kget(KT) && tapMode(f) === 'safari') ? OPEN : run + '?tap=1' + (kind ? '&show=' + kind : '');
+  w.url = !f ? run : run + '?tap=1' + (kind ? '&show=' + kind : '');
+  FAM = fam;
 
   // 鎖定畫面
   if (fam.indexOf('accessory') === 0) {
@@ -599,11 +604,10 @@ async function selfUpdate(force) {
   } catch (e) { return ''; }
 }
 
-/** 點小工具要打開什麼：選過的照選的；沒選過 → 開發者、老闆、主任、公司＝每次問（試用），施工人員（或還不知道是誰）＝Safari */
-function tapMode(f) {
+/** 點小工具要打開什麼：選過的照選的；沒選過＝每次問（每個人都一樣） */
+function tapMode() {
   const m = kget(KT);
-  if (TAP_NAME[m]) return m;
-  return f && f.role && f.role !== '施工人員' ? 'ask' : 'safari';
+  return TAP_NAME[m] ? m : 'ask';
 }
 /** 固定用哪一種（withAsk＝也可以選「每次問我」）；回傳選的那一種，取消＝'' */
 async function pickTap(withAsk) {
@@ -659,8 +663,7 @@ async function openFull() {
 /** 點小工具進來的（scriptable:///run/…?tap=1）：照設定打開 Safari／全螢幕／清單 */
 async function tapMain(show) {
   if (!kget(KC)) return appMain(show);   // 還沒設代碼：清單（會先問代碼）
-  const c = readCache();
-  let mode = tapMode(c && c.f);
+  let mode = tapMode();
   if (mode === 'ask') mode = await askTap();
   if (!mode) return;
   if (mode === 'safari') { Safari.open(OPEN); return; }
@@ -736,7 +739,7 @@ async function appMain(show) {
     }
     head('其他');
     line('🔄 重新整理', COL.teal, '', async () => { d = await getData(true); fill(); t.reload(); });
-    line('👆 點小工具要打開什麼', COL.teal, '現在：' + TAP_NAME[tapMode(d.f)].replace(/^\S+\s/, '') + (kget(KT) ? '' : '（還沒固定）'), async () => { if (await pickTap(true)) { fill(); t.reload(); } });
+    line('👆 點小工具要打開什麼', COL.teal, '現在：' + TAP_NAME[tapMode()].replace(/^\S+\s/, '') + (kget(KT) ? '' : '（還沒固定）'), async () => { if (await pickTap(true)) { fill(); t.reload(); } });
     line('📱 全螢幕打開柏捷工地（試驗）', COL.teal, '在這裡面直接開，不用再輸入代碼', async () => { await openFull(); });
     line('🌐 打開柏捷工地網頁版', COL.teal, '用 Safari 打開；第一次要在 Safari 輸入一次代碼', () => Safari.open(WEB));
     line('👁 看小工具的樣子（小）', COL.teal, '', async () => { await buildWidget(d, 'small', '').presentSmall(); });
