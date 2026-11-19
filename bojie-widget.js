@@ -16,12 +16,19 @@
 //   特大＝跟摺疊機一樣三欄：月曆＋今日提醒｜這週＋待辦｜今天的日誌＋最新消息
 //   大＝月曆＋今日提醒＋今天的日誌＋這週＋待辦＋最新消息（每樣少幾行）；中＝今日提醒＋日誌＋待辦
 // 「Parameter」打字可以換內容：消息＝📣 最新消息、提醒＝⏰ 今日提醒、行事曆＝📅 這週行程、日誌＝📋 今天的日誌
-// 點小工具：打開 Scriptable，顯示完整的清單（待辦可以打勾）
+// 點小工具：打開柏捷工地（網頁版，用 Safari。使用者 2026-11-19「為何這個點進去不會跑到柏捷app」；原本是打開 Scriptable 的完整清單）。
+//   iPhone 的規定：點小工具一定先經過它的 App（Scriptable，閃一下）再跳到 Safari；主畫面那個「柏捷工地」圖示沒辦法從別的地方打開。
+//   完整清單（待辦打勾、換代碼）還在：打開 Scriptable 點「柏捷工地」。
+//   點小工具不再經過清單 → 小工具重畫的時候自己看有沒有新版（selfUpdate）。
 
-const VER = '11/14a';
+const VER = '11/19a';
 const API = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
 const WEB = 'https://a0923337553-ai.github.io/bojie-site/';
 const SELF = WEB + 'bojie-widget.js';
+// 點小工具打開的網址（?from=widget：網頁版的登入頁看到這個會說「這裡是 Safari，輸入一次代碼」，不叫他再加入主畫面）
+const OPEN = WEB + '?from=widget';
+// 這個檔的最後一行。自己更新的時候要看到這一行才換（半份寫進去小工具會壞掉）→ 以後每一版最後一行都要留著
+const END = '// END-' + 'BOJIE-WIDGET';
 const KC = 'bojie.widget.code', KD = 'bojie.widget.device', KU = 'bojie.widget.updated';
 const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -381,7 +388,7 @@ function buildWidget(d, fam, p) {
   const w = new ListWidget();
   w.refreshAfterDate = new Date(Date.now() + 15 * 60000);
   const kind = /消息|news/i.test(p) ? 'news' : /行事曆|月曆|行程|cal/i.test(p) ? 'cal' : /提醒|rem/i.test(p) ? 'rem' : /日誌|log/i.test(p) ? 'log' : '';
-  w.url = 'scriptable:///run/' + encodeURIComponent(Script.name()) + (kind ? '?show=' + kind : '');
+  w.url = OPEN;   // 點小工具 → 柏捷工地（11/19a；原本是 scriptable:///run/… 打開完整清單）
   const f = d.f;
 
   // 鎖定畫面
@@ -565,7 +572,7 @@ async function askCode(why) {
     }
   }
 }
-/** 打開 Scriptable 時順便看 GitHub 上有沒有新版（6 小時最多看一次） */
+/** 看 GitHub 上有沒有新版（6 小時最多看一次）：在 Scriptable 裡打開的時候、小工具自己重畫的時候都看；有新版就把這個檔換掉，回傳新的版本 */
 async function selfUpdate() {
   try {
     if (Date.now() - (Number(kget(KU)) || 0) < 6 * 3600000) return '';
@@ -574,6 +581,7 @@ async function selfUpdate() {
     const src = await r.loadString();
     const m = /const VER = '([^']+)'/.exec(src);
     if (src.indexOf('柏捷工地小工具') < 0 || !m || m[1] === VER) return '';
+    if (src.trim().slice(-END.length) !== END) return '';   // 沒下載完整
     const fm = module.filename.indexOf('iCloud~') >= 0 ? FileManager.iCloud() : FileManager.local();
     fm.writeString(module.filename, src);
     return m[1];
@@ -581,7 +589,7 @@ async function selfUpdate() {
 }
 
 const HOWTO = '放到桌面：\n① 回到桌面，長按空白的地方\n② 左上角「編輯」→「加入小工具」\n③ 搜尋「Scriptable」，選大小 →「加入小工具」\n④ 點一下剛放好的小工具，「Script」選「柏捷工地」\n\n' +
-  '小、中＝今日提醒；大＝月曆＋這週行程＋待辦；特大（iPad）＝左邊月曆、右邊今日提醒＋這週＋待辦。\n開發者：大、特大是最完整的（多了今天的日誌、最新消息）。\n「Parameter」打「消息」＝最新消息、「日誌」＝今天的日誌。\n鎖定畫面也可以放。\n\nMac：macOS 14 以上可以把這支 iPhone 的小工具放到 Mac 桌面（桌面按右鍵 →「編輯小工具」→ iPhone 的 Scriptable）。';
+  '點小工具＝打開柏捷工地（用 Safari；第一次要在 Safari 輸入一次代碼）。待辦打勾、換代碼：打開 Scriptable 點「柏捷工地」。\n\n小、中＝今日提醒；大＝月曆＋這週行程＋待辦；特大（iPad）＝左邊月曆、右邊今日提醒＋這週＋待辦。\n開發者：大、特大是最完整的（多了今天的日誌、最新消息）。\n「Parameter」打「消息」＝最新消息、「日誌」＝今天的日誌。\n鎖定畫面也可以放。\n\nMac：macOS 14 以上可以把這支 iPhone 的小工具放到 Mac 桌面（桌面按右鍵 →「編輯小工具」→ iPhone 的 Scriptable）。';
 
 async function appMain(show) {
   const upd = await selfUpdate();
@@ -666,6 +674,7 @@ const P = String(args.widgetParameter || '').trim();
 if (config.runsInWidget) {
   const d = await getData(false);
   Script.setWidget(buildWidget(d, config.widgetFamily, P));
+  await selfUpdate();   // 畫好以後看有沒有新版（點小工具不再打開 Scriptable）；有的話下次重畫就用新的
 } else if (config.runsInApp) {
   await appMain(String((args.queryParameters || {}).show || ''));
 } else {
@@ -674,3 +683,4 @@ if (config.runsInWidget) {
   await buildWidget(d, 'medium', P).presentMedium();
 }
 Script.complete();
+// END-BOJIE-WIDGET
