@@ -25,8 +25,11 @@
 //   沒選過＝每次問（11/19c：每個人都一樣。11/19b 施工人員是直接 Safari，使用者「apple 的沒有跳可以選擇的功能」——
 //   那支可能是施工人員的代碼；而且 Scriptable 裡讀不到小工具存的暫存資料時也會被當成不用問）。清單最下面「👆 點小工具要打開什麼」可以換。
 //   小工具右上角的時間前面寫版本（小的不寫）：截圖就看得出手機上是哪一版。
+// 11/19d（使用者實機：選單有了，「進入 scriptable 要快一點」「他會先進入這個 app 然後停 1 秒才會進入柏捷 app」）：
+//   全螢幕＝先放一張不用連網路的「打開中」馬上全螢幕，真的那一頁在畫面上自己載進來（原本整頁載完才顯示，所以停在 Scriptable）；
+//   固定 Safari＝小工具直接開網址，不用先跑這支程式；清單＝先用上一次的資料打開，新的在後面拿。
 
-const VER = '11/19c';
+const VER = '11/19d';
 const API = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
 const WEB = 'https://a0923337553-ai.github.io/bojie-site/';
 const SELF = WEB + 'bojie-widget.js';
@@ -404,7 +407,8 @@ function buildWidget(d, fam, p) {
   // 點小工具（11/19b）：沒資料（還沒設代碼、代碼不能用…）→ 打開 Scriptable 的清單去設定；
   // 其他 → 先回 Scriptable 照設定走（?tap=1，見 tapMain）：改了設定馬上有效，不用等小工具重畫
   const run = 'scriptable:///run/' + encodeURIComponent(Script.name());
-  w.url = !f ? run : run + '?tap=1' + (kind ? '&show=' + kind : '');
+  // 固定用 Safari 的：直接開網址最快（不用先跑這支程式）。改設定以後要等小工具重畫才會照新的
+  w.url = !f ? run : tapMode() === 'safari' ? OPEN : run + '?tap=1' + (kind ? '&show=' + kind : '');
   FAM = fam;
 
   // 鎖定畫面
@@ -614,7 +618,7 @@ async function pickTap(withAsk) {
   const ks = withAsk ? ['safari', 'full', 'list', 'ask'] : ['safari', 'full', 'list'];
   const a = new Alert();
   a.title = '以後點小工具都打開哪一個？';
-  a.message = '之後要換：打開 Scriptable → 點「柏捷工地」→ 最下面「👆 點小工具要打開什麼」';
+  a.message = '之後要換：打開 Scriptable → 點「柏捷工地」→ 最下面「👆 點小工具要打開什麼」。\n（改了以後，桌面的小工具過幾分鐘才會照新的。）';
   ks.forEach(k => a.addAction(TAP_NAME[k]));
   a.addCancelAction('取消');
   const i = await a.presentSheet();
@@ -648,12 +652,28 @@ function fullScript() {
     '["sess","feed","here","fc","seen"].forEach(function(k){L.removeItem("bojie."+k)});' +
     'L.setItem("bojie.code",c);return "set"}catch(e){return "err"}})()';
 }
+/** 全螢幕一開始那張「打開中」：不用連網路，馬上出得來；5 秒還沒換成柏捷工地就多一顆按鈕可以自己點 */
+const LOADING = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+  '<style>html,body{height:100%;margin:0}body{display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;background:#F0F5F8;color:#183B56}' +
+  'b{font-size:28px;color:#16A6A0}p{font-size:16px;color:#5D7486;margin:10px 0 0}a{display:none;margin-top:22px;font-size:17px;color:#fff;background:#16A6A0;padding:11px 20px;border-radius:12px;text-decoration:none}' +
+  '@media(prefers-color-scheme:dark){body{background:#1C1C1E;color:#EEF2F5}p{color:#9AA7B2}}</style></head>' +
+  '<body><b>柏捷工地</b><p>打開中…</p><a id="go" href="' + FULL + '">沒有自己打開？點這裡</a>' +
+  '<script>setTimeout(function(){document.getElementById("go").style.display="block"},5000)</script></body></html>';
 async function openFull() {
   try {
     const wv = new WebView();
-    await wv.loadURL(FULL);
-    const r = await wv.evaluateJavaScript(fullScript(), false);
-    if (r === 'set') await wv.loadURL(FULL);   // 第一次（或換過代碼）：再載一次，網頁版就用這個代碼自己進去
+    let r = '';
+    // 快的做法（11/19d）：先放「打開中」那一張（網址算在柏捷工地底下 → 代碼可以先放好），馬上全螢幕；它自己換成真的那一頁，只載一次
+    try {
+      await wv.loadHTML(LOADING, WEB);
+      r = await wv.evaluateJavaScript('(function(){var r=' + fullScript() + ';if(r==="ok"||r==="set")setTimeout(function(){location.replace(' + JSON.stringify(FULL) + ')},20);return r})()', false);
+    } catch (e) { r = ''; }
+    if (r !== 'ok' && r !== 'set') {
+      // 快的做法不行（那一張沒有算在柏捷工地底下…）：照原本的，整頁載完再顯示
+      await wv.loadURL(FULL);
+      r = await wv.evaluateJavaScript(fullScript(), false);
+      if (r === 'set') await wv.loadURL(FULL);   // 第一次（或換過代碼）：再載一次，網頁版就用這個代碼自己進去
+    }
     await wv.present(true);
   } catch (e) {
     await say('全螢幕打不開', ((e && e.message) || String(e)) + '\n\n改用 Safari 打開。');
@@ -675,12 +695,14 @@ const HOWTO = '放到桌面：\n① 回到桌面，長按空白的地方\n② �
   '點小工具：可以選打開「柏捷工地（Safari）」「柏捷工地 全螢幕（試驗）」或「清單」；清單最下面「👆 點小工具要打開什麼」可以換。\n\n小、中＝今日提醒；大＝月曆＋這週行程＋待辦；特大（iPad）＝左邊月曆、右邊今日提醒＋這週＋待辦。\n開發者：大、特大是最完整的（多了今天的日誌、最新消息）。\n「Parameter」打「消息」＝最新消息、「日誌」＝今天的日誌。\n鎖定畫面也可以放。\n\nMac：macOS 14 以上可以把這支 iPhone 的小工具放到 Mac 桌面（桌面按右鍵 →「編輯小工具」→ iPhone 的 Scriptable）。';
 
 async function appMain(show) {
-  const upd = await selfUpdate();
   if (!kget(KC)) {
     const ok = await askCode('');
     if (!ok) return;
   }
-  let d = await getData(true);
+  // 快一點（11/19d）：有上一次的資料就先用它把清單打開，新的資料、有沒有新版在後面拿，拿到再換上去
+  const c0 = readCache();
+  let upd = '', loading = !!(c0 && c0.f);
+  let d = loading ? { state: 'ok', at: c0.at, f: c0.f } : await getData(true);
   if (d.state === 'gone') { if (!(await askCode('代碼不能用了（停用或換了）'))) return; d = await getData(true); }
   const t = new UITable();
   t.showSeparators = true;
@@ -707,6 +729,7 @@ async function appMain(show) {
     tc.titleFont = Font.heavySystemFont(26); tc.titleColor = COL.teal; tc.subtitleColor = s && s.old ? COL.orange : COL.muted;
     t.addRow(top);
     if (upd) line('小工具更新到 ' + upd + ' 版了（下次就會用新的）', COL.green);
+    if (loading) line('更新中…', COL.muted);
     if (!d.f) { line(d.msg || '連不上收件服務', COL.hot); }
     else {
       const f = d.f, todos = todoList(f);
@@ -755,7 +778,10 @@ async function appMain(show) {
     line('小工具版本 ' + VER, COL.muted);
   };
   fill();
-  await t.present(false);
+  const shown = t.present(false);
+  if (loading) { d = await getData(true); loading = false; fill(); t.reload(); }
+  selfUpdate().then(v => { if (v) { upd = v; fill(); t.reload(); } }).catch(() => { });
+  await shown;
 }
 
 // ---------------- 開始 ----------------
