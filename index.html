@@ -421,7 +421,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/19c';
+var WEB_VERSION = '11/19d';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -810,7 +810,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smatv: smatViewModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smatv: smatViewModal, smatx: smatExportModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -1349,9 +1349,9 @@ function weekCalCard(events) {
 }
 
 // 順序（使用者 2026-11-10「注意灌漿代辦發包，這樣排列」）：全部、注意事項、灌漿・施工單、待辦、發包；施工人員放最後（跟 App 一樣）
-var NEWS_GROUPS = [['全部', []], ['📢 注意事項', ['notice']], ['🚚 灌漿・施工單', ['pour', 'sheet', 'snote', 'rebar']], ['✅ 待辦', ['todo']], ['📋 派工', ['task']], ['🤝 發包', ['contract']], ['👷 施工人員', ['worker']]];
+var NEWS_GROUPS = [['全部', []], ['📢 注意事項', ['notice']], ['🚚 灌漿・施工單', ['pour', 'sheet', 'snote', 'rebar']], ['✅ 待辦', ['todo']], ['📋 派工', ['task']], ['🤝 發包', ['contract']], ['📦 現場材料', ['smat']], ['👷 施工人員', ['worker']]];
 var NEWS_ICON = { pour: ['🚚', '#F2994A'], sheet: ['📐', '#16A6A0'], contract: ['🤝', '#9B51E0'], worker: ['👷', '#2F80ED'], notice: ['📢', '#E5383B'], cal: ['📅', '#2F80ED'], todo: ['✅', '#1E8E5A'], mark: ['📍', '#E03131'],
-  task: ['📋', '#F28C28'], snote: ['📝', '#B08900'], rebar: ['🔩', '#7A3FB0'] };
+  task: ['📋', '#F28C28'], snote: ['📝', '#B08900'], rebar: ['🔩', '#7A3FB0'], smat: ['📦', '#8D6E63'] };
 function newsTag(n) {
   switch (n.kind) {
     case 'cal': return n.tag === 'add' ? ['新增行程', '#1E9E6A'] : n.tag === 'del' ? ['行程取消', '#E5383B'] : n.tag === 'chg' ? ['行程改了', '#2F80ED'] : ['行程', '#2F80ED'];
@@ -1365,6 +1365,7 @@ function newsTag(n) {
     case 'task': return [n.tag === 'got' ? '收到' : n.tag === 'done' ? '做好了' : '派工', '#F28C28'];
     case 'snote': return [n.tag === 'give' ? '給你看' : '施工單記號', '#B08900'];
     case 'rebar': return ['鋼筋發布', '#7A3FB0'];   // BricsCAD 分批發布料單群組（使用者 2026-11-11）
+    case 'smat': return ['現場材料', '#8D6E63'];   // 現場材料數量有人新增（收件服務第 54 版，使用者 2026-11-19）
     default: return ['消息', '#5D7486'];
   }
 }
@@ -2502,6 +2503,8 @@ function renderMats() {
       return '<button class="tile" data-act="matfolder" data-v="' + esc(x) + '"><span class="em" style="background:' + MAT_COLORS[x] + '29">📁</span><span class="grow"><b>' + esc(x) + '</b>' +
         '<span class="sub" style="display:block;font-size:14px">' + esc(matFolderLine(x, list)) + '</span></span><span class="arrow">›</span></button>';
     }).join('');
+    // 匯出這個工地全部的（有東西才有這顆）
+    if (hasMatExport() && items && items.length) h += '<button class="ghost" style="border-color:#8D6E63;color:#8D6E63" data-act="matexport">📤 匯出這個工地（Excel／PDF）</button>';
     return h + '<div class="note" style="padding:0 4px">每個人都可以填；每一筆會記是誰、哪一天寫的。自己寫的可以改、刪（開發者每一筆都可以）。鋼筋那一夾填的是現場剩下的鋼筋，電腦的鋼筋系統「現場餘料」可以讀進去用。</div></div>';
   }
   var rebar = f === MAT_REBAR;
@@ -2517,7 +2520,7 @@ function renderMats() {
       (rebar && m.spec ? rebarFigSvg(String(m.spec).split('|')[1], null, true) : '') + '<div class="grow" style="min-width:0">' +
       '<div style="font-size:18px;font-weight:bold;line-height:24px">' + esc(m.name) + '</div>' +
       (m.note ? '<div class="sub" style="font-size:14px">' + esc(m.note) + '</div>' : '') +
-      '<div style="font-size:12.5px;color:#8A9BA8">' + esc(matWho(m)) + (m.photos && m.photos.length ? '　📷 ' + m.photos.length : '') + '</div></div>' +
+      '<div style="font-size:12.5px;color:#8A9BA8">' + esc(matWho(m)) + (m.photos && m.photos.length ? '　📷 ' + m.photos.length : '') + '</div>' + matLeftHtml(m) + '</div>' +
       '<b style="font-size:19px;color:var(--navy);white-space:nowrap">' + esc((m.qty + ' ' + (m.unit || '')).trim()) + '</b>' +
       (m.canEdit ? '<span style="font-size:22px;color:var(--line)">›</span>' : '') + '</div>';
   }).join('<div class="div"></div>');
@@ -2529,6 +2532,29 @@ function renderMats() {
 // 視窗裡：m.kept＝雲端上要留的、m.removed＝要拿掉的、m.newPhotos＝剛拍剛選還沒傳的（存檔時字先存、照片再一張一張傳）、m.big＝點開看大張的那一張
 var MAT_MAX_PHOTOS = 6;
 function hasMatPhotos() { return !!S.s && Number(S.s.version) >= 53; }
+/** 收件服務第 54 版：匯出 Excel／PDF、鋼筋顯示電腦剩下多少 */
+function hasMatExport() { return !!S.s && Number(S.s.version) >= 54; }
+/** 鋼筋那一筆：電腦的鋼筋系統算的還剩多少（使用者 2026-11-19「電腦用掉餘料後把剩幾支傳回手機」）；電腦上還沒用到＝空的 */
+function matLeftLine(m) {
+  if (!m.left) return '';
+  var day = todoWhen('', m.leftAt, '').trim();
+  return (m.left === '用完' ? '💻 電腦上用完了' : '💻 電腦上剩：' + m.left) + (day ? '（' + day + '）' : '');
+}
+function matLeftHtml(m, mt) {
+  var s = matLeftLine(m);
+  return s ? '<div style="font-size:13px;font-weight:bold;color:' + (m.left === '用完' ? 'var(--red)' : '#00796B') + (mt ? ';margin-top:' + mt + 'px' : '') + '">' + esc(s) + '</div>' : '';
+}
+/** 匯出這個工地全部的（Excel／PDF）：收件服務做好傳回來，存到手機的「下載」 */
+function smatExportModal(m) {
+  var h = '<h3>📤 匯出「' + esc(S.site) + '」的現場材料數量</h3>';
+  if (m.done) return h + '<div style="font-size:16px;line-height:1.6">✅ 匯出好了：<b>' + esc(m.done) + '</b><br>在手機的「下載」（iPhone 是「檔案」App 的「下載項目」）。</div><div class="btns"><button data-act="mclose">關閉</button></div>';
+  h += '<div class="sub" style="font-size:15px;line-height:1.5">五個資料夾全部排成一張表（品名、數量、誰寫的、日期…）。要哪一種？</div>';
+  if (m.busy) h += '<div style="font-size:16px;margin-top:12px">匯出中…（大約 10 秒）</div>';
+  else h += '<button class="big" style="margin-top:12px;background:#1E8E5A" data-act="msmxgo" data-v="xlsx">Excel（可以再改、算）</button>' +
+    '<button class="big" style="background:#D9534F" data-act="msmxgo" data-v="pdf">PDF（直接看、傳給別人）</button>';
+  if (m.err) h += '<div style="color:var(--red);font-size:14px;margin-top:6px">' + esc(m.err) + '</div>';
+  return h + '<div class="btns"><button class="dim" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button></div>';
+}
 function smatPhotoHtml(m, edit) {
   if (!hasMatPhotos()) return '';
   var t = m.t, kept = m.kept || [], fresh = m.newPhotos || [], n = kept.length + fresh.length;
@@ -2562,7 +2588,7 @@ function smatViewModal(m) {
     '<b style="font-size:21px;color:var(--navy);white-space:nowrap">' + esc((t.qty + ' ' + (t.unit || '')).trim()) + '</b></div>';
   if (sh) h += '<div style="background:#F3F7FA;border-radius:12px;padding:10px 4px;margin-top:8px">' + rebarFigSvg(sh.n, String(p[2] || '').split(sh.s)) + '</div>';
   if (t.note) h += '<div style="font-size:16px;line-height:22px;margin-top:8px">' + esc(t.note) + '</div>';
-  h += '<div class="sub" style="margin-top:6px;font-size:13px">' + esc(matWho(t)) + '</div>' + smatPhotoHtml(m, false) +
+  h += '<div class="sub" style="margin-top:6px;font-size:13px">' + esc(matWho(t)) + '</div>' + matLeftHtml(t, 4) + smatPhotoHtml(m, false) +
     '<div class="note" style="margin-top:10px">這一筆是 ' + esc(t.by) + ' 寫的，只有他（或開發者）可以改。</div>';
   return h + '<div class="btns"><button data-act="mclose">關閉</button></div>';
 }
@@ -2581,7 +2607,7 @@ function smatRebarModal(m) {
   h += '</div><div class="label" style="margin-top:10px">支數</div><div class="row"><input type="text" inputmode="numeric" data-f="m.qty" maxlength="4" placeholder="12" style="flex:1;min-width:0;font-size:20px;font-weight:bold" value="' + esc(m.qty) + '">' +
     '<span style="flex:1;font-size:18px">支</span></div>' +
     '<div class="label" style="margin-top:10px">備註（放哪裡…可以不寫）</div><textarea data-f="m.note" maxlength="100" placeholder="例：1F 東側" style="min-height:48px">' + esc(m.note) + '</textarea>' + smatPhotoHtml(m, true) +
-    '<div id="mmsg" style="color:var(--warn);font-size:13px;margin-top:6px">' + esc(rebarModalMiss(m)) + '</div>';
+    '<div id="mmsg" style="color:var(--warn);font-size:13px;margin-top:6px">' + esc(rebarModalMiss(m)) + '</div>' + (t ? matLeftHtml(t, 6) : '');
   if (t) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(matWho(t)) + '</div>' +
     (m.ask ? '<div style="color:var(--red);font-weight:bold;font-size:14px;margin-top:10px">確定要刪掉這一筆嗎？大家都看不到了。</div>' : '') +
     '<button class="tdel' + (m.ask ? ' strong' : '') + '" style="margin:' + (m.ask ? '6' : '10') + 'px 0 0" data-act="msmdel">' + (m.ask ? '🗑 確定刪除' : '🗑 刪除這一筆') + '</button>';
@@ -3848,6 +3874,7 @@ var ACT = {
       case 'sheet': setSite(n.site); openOffice('sheets'); return;
       case 'contract': setSite(n.site); openOffice('contracts'); return;
       case 'todo': setSite(n.site); openTodo('hub'); return;
+      case 'smat': if (n.site && hasMats()) { setSite(n.site); openMats('hub'); } return;   // 現場材料數量有人新增：打開那個工地的（返回回首頁）
       case 'mark': if (isOffice()) { setSite(n.site); open3d(); } return;   // 3D 上圈要改進的地方
       case 'rebar': if (isOffice()) { setSite(n.site); open3d(n.id); } return;   // 鋼筋第 N 批發布：打開 3D 亮那一批
       case 'task': if (isOffice()) { setSite(n.site); openTasks('hub'); } else { loadMyTasks(); render(); } return;   // 派工
@@ -4055,6 +4082,18 @@ var ACT = {
   // 現場材料數量（第 52 版）
   matsfromwork: function () { openMats('work'); },
   matsreload: function () { if (S.mat) { S.mat.err = ''; loadMats(); } },
+  // 匯出這個工地（第 54 版）：先選 Excel／PDF → 收件服務做好傳回來 → 存到「下載」
+  matexport: function () { S.modal = { type: 'smatx', busy: false, err: '', done: '' }; renderModal(); },
+  msmxgo: function (fmt) {
+    var m = S.modal; if (!m || m.type !== 'smatx' || m.busy) return;
+    m.busy = true; m.err = ''; renderModal();
+    api('smat', { op: 'export', site: S.site, fmt: fmt === 'pdf' ? 'pdf' : 'xlsx' }).then(function (r) {
+      var bin = atob(r.data), u8 = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      saveBlob(new Blob([u8], { type: r.mime || 'application/octet-stream' }), r.name);
+      if (S.modal === m) { m.busy = false; m.done = r.name; renderModal(); }
+    }).catch(function (e) { m.busy = false; var x = failMsg(e); if (x && S.modal === m) { m.err = '沒有匯出：' + x; renderModal(); } });
+  },
   matfolder: function (v) { if (!S.mat) return; S.mat.folder = v; S.mat.err = ''; render(); window.scrollTo(0, 0); },
   matadd: function () {
     var f = S.mat && S.mat.folder; if (!f) return;
