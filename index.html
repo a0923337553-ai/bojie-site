@@ -421,7 +421,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/20f';
+var WEB_VERSION = '11/21a';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -816,7 +816,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smats: scafModal, smatv: smatViewModal, smatx: smatExportModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smats: scafModal, smatv: smatViewModal, smatx: smatExportModal, wmerge: wmergeModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -1442,10 +1442,64 @@ function entryRow(e) {
     // 管理者確認了沒（收件服務第 25 版，使用者 2026-11-12「全a可以」）
     (e.mine && S.s && Number(S.s.version) >= 25 ? '<div class="sub" style="font-weight:bold;color:' + (e.ok ? 'var(--green)' : '#8A96A3') + '">' + (e.ok ? '✓ 管理者確認了' : '等管理者確認') + '</div>' : '') +
     (e.site === UNFILED ? '<div class="sub" style="color:var(--warn);font-weight:bold">他打的工地：' + esc(e.siteText || '（沒打）') + '</div>' : '') +
-    '<div>' + esc(e.text || '（沒寫內容）') + '</div>' +
+    '<div>' + esc(e.text || '（沒寫內容）') + '</div>' + wmRowHtml(e) +
     (x.length ? '<div class="sub" style="color:var(--navy)">' + esc(x.join('｜')) + '</div>' : '') +
     (e.reqStatus ? '<div class="sub" style="font-weight:bold;color:' + reqColor(e.reqStatus) + '">' + esc(reqLabel(e.reqStatus)) + '</div>' : '') +
     '</div><div style="white-space:nowrap">📷' + (e.photos || []).length + (rc ? ' 🧾' + rc : '') + (e.mine ? ' <b style="color:var(--orange)">✎</b>' : '') + '</div></div>';
+}
+
+// ---------- 合併成一行（收件服務第 59 版，使用者 2026-11-21「兩位施工人員同一個地方、寫法不一樣，開發者看到可以幫他們修改，然後有功能可以選擇是讓他們合併，
+// 但他們那邊的資料一樣顯示他們寫的」）----------
+// 合併＝把勾的那幾筆「確認後的版本」（conf）的內容改成同一句＝確認；他們寫的原文不動。內容一樣，日誌、PDF、Excel 就排成一行「內容(甲+乙)」（lpGroup）。
+// App 的 WorkerMerge（candidates／defaultText／mates／applied）是同一套。
+function hasMerge() { return !!S.s && Number(S.s.version) >= 59; }
+function wmCanUse() { return isAdmin() && !S.asCode && hasMerge(); }
+/** 這一天、這個大項可以拿來合併的：改了等同意的先不算 */
+function wmCand(list, c) { return (list || []).filter(function (e) { return canonCat(effW(e).category) === c && e.reqStatus !== '待確認'; }); }
+/** 「合併後寫成」先放哪一句：寫得最完整（最長）的 */
+function wmDefault(sel) { var best = ''; sel.forEach(function (e) { var t = String(effW(e).text || '').trim(); if (t && lpNorm(t).length > lpNorm(best).length) best = t; }); return best; }
+/** 日誌、PDF 上會跟這一筆排在同一行的其他人 */
+function wmMates(inCat, e) {
+  var g = lpGroup(inCat.map(function (x) { var y = effW(x); return { id: x.id, name: x.name, text: String(y.text || '') }; })).filter(function (g) { return g.ids.indexOf(e.id) >= 0; })[0];
+  return g ? g.names.filter(function (n) { return n !== e.name; }) : [];
+}
+/** 同一天、同一個大項的那幾筆 */
+function wmSame(e) { var c = canonCat(effW(e).category); return (S.entries || []).filter(function (x) { return x.date === e.date && x.site === e.site && canonCat(effW(x).category) === c; }); }
+/** 開發者：這一筆下面多兩行——日誌用哪一句（改過、合併過的）、跟誰排同一行 */
+function wmRowHtml(e) {
+  if (!wmCanUse()) return '';
+  var x = effW(e), h = '';
+  if (e.conf && String(x.text || '') !== String(e.text || '')) h += '<div class="sub" style="color:#7B5EA7;font-weight:bold">日誌寫成：' + esc(x.text || '（沒寫內容）') + '</div>';
+  var same = wmSame(e), mates = same.length > 1 ? wmMates(same, e) : [];
+  if (mates.length) h += '<div class="sub" style="color:#7B5EA7;font-weight:bold">🔗 跟 ' + esc(mates.join('、')) + ' 排同一行</div>';
+  return h;
+}
+/** 那一天的卡片最下面：哪幾個大項有兩筆以上 → 各一顆「合併」 */
+function wmBarHtml(d, list) {
+  if (!wmCanUse() || S.site === UNFILED) return '';
+  var cats = uniq(list.map(function (e) { return canonCat(effW(e).category); })), h = '';
+  cats.forEach(function (c) {
+    var n = wmCand(list, c).length;
+    if (n >= 2) h += '<button class="ghost" style="margin:8px 0 0;color:#7B5EA7;border-color:#7B5EA7" data-act="wmopen" data-v="' + esc(d + '|' + c) + '">🔗 合併「' + esc(c) + '」的 ' + n + ' 筆成一行（同一件事、寫法不一樣）</button>';
+  });
+  return h;
+}
+function wmergeModal(m) {
+  var es = m.ids.map(function (id) { return (S.entries || []).filter(function (x) { return x.id === id; })[0]; }).filter(Boolean);
+  var h = '<h3>🔗 合併成一行・' + esc(m.cat) + '</h3><div class="sub" style="font-size:14px">' + esc(md(m.date)) + '　勾要合併的（同一件事、寫法不一樣）：</div>';
+  es.forEach(function (e) {
+    var x = effW(e), on = m.picked.indexOf(e.id) >= 0;
+    h += '<div style="display:flex;align-items:center;gap:8px;margin-top:6px;padding:7px 8px;border-radius:10px;background:' + (on ? '#F3EEFA' : '#F4F6F8') + '">' +
+      '<div data-act="wmpick" data-v="' + esc(e.id) + '" style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer">' +
+      '<span style="font-size:22px;color:' + (on ? '#7B5EA7' : '#8A96A3') + '">' + (on ? '☑' : '☐') + '</span>' +
+      '<span style="flex:1;min-width:0"><b style="font-size:15px;line-height:20px;white-space:pre-wrap">👷 ' + esc(e.name + '：' + (x.text || '（沒寫內容）')) + '</b><br><span class="sub" style="font-size:12.5px">' + esc(hoursLabel(x.hours) + workHText(x.workH)) + '</span></span></div>' +
+      (String(x.text || '').trim() ? '<button class="pill" style="flex:none" data-act="wmuse" data-v="' + esc(e.id) + '"' + (m.busy ? ' disabled' : '') + '>用這句</button>' : '') + '</div>';
+  });
+  h += '<div class="label" style="margin-top:12px">合併後寫成</div><textarea data-f="m.text" maxlength="500" placeholder="例如：3F 柱鋼筋綁紮"' + (m.busy ? ' disabled' : '') + '>' + esc(m.text) + '</textarea>' +
+    '<div class="sub" style="font-size:13.5px;line-height:1.5;margin-top:6px">日誌、PDF、Excel 會排成一行「內容(甲+乙)」，工數照各自的算；合併＝確認。他們自己看到的還是自己寫的，不會被改。要拆開：點其中一筆把內容改掉。</div>' +
+    (m.err ? '<div style="color:var(--red);font-size:14px;margin-top:6px">' + esc(m.err) + '</div>' : '');
+  return h + '<div class="btns"><button class="dim" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button><button id="msave" data-act="wmgo"' + (modalOk(m) ? '' : ' disabled') + '>' +
+    (m.busy ? '合併中…' : m.picked.length < 2 ? '要勾兩筆以上' : '合併 ' + m.picked.length + ' 筆') + '</button></div>';
 }
 
 function renderWork() {
@@ -1472,7 +1526,7 @@ function renderWork() {
   order.forEach(function (d) {
     var people = {}; groups[d].forEach(function (e) { people[e.name] = 1; });
     h += '<div class="card"><b>' + md(d) + '（' + dayName(d) + '）' + esc(S.site === UNFILED ? '未分組' : S.site) + '・' + Object.keys(people).length + ' 個人上傳</b>' +
-      groups[d].map(entryRow).join('') + '</div>';
+      groups[d].map(entryRow).join('') + wmBarHtml(d, groups[d]) + '</div>';
   });
   if (s.role !== '管理者') h += '<div class="note">超過 ' + s.days + ' 天的就看不到了；要補或要改請找管理者。</div>';
   return h + '</div>';
@@ -3023,7 +3077,7 @@ function smatExportModal(m) {
       var n = items.filter(function (x) { return matPartOf(x) === p[0]; }).length;
       return n ? chip('msmxpart', p[0], p[1] + ' ' + n, !!m.parts && m.parts.indexOf(p[0]) >= 0, true) : '';
     }).join('') + '</div>';
-    h += '<div class="sub" style="font-size:14.5px;line-height:1.5;margin-top:8px">照片會放在檔案裡。Excel：表頭的 ▼ 可以篩選，點清單上的小張照片會跳到大張；PDF：一頁一張照片。</div>';
+    h += '<div class="sub" style="font-size:14.5px;line-height:1.5;margin-top:8px">照片會放在檔案裡。Excel：表頭有 ▼ 的欄可以篩選（那一欄有兩種以上不同的資料才有），點清單上的小張照片會跳到大張；PDF：一頁一張照片。</div>';
   } else h += '<div class="sub" style="font-size:15px;line-height:1.5">五個資料夾全部排成一張表（品名、數量、誰寫的、日期…）。要哪一種？</div>';
   if (m.busy) h += '<div style="font-size:16px;margin-top:12px">匯出中…（' + (v2 ? '有照片的話要等 20～40 秒' : '大約 10 秒') + '）</div>';
   else h += '<button class="big" style="margin-top:12px;background:#1E8E5A" data-act="msmxgo" data-v="xlsx">Excel（可以再改、算）</button>' +
@@ -3441,6 +3495,7 @@ function modalOk(m) {
   if (m.type === 'notice') return noticeOk(m);
   if (m.type === 'todoadd') return !!(m.text.trim() && m.site);
   if (m.type === 'todoedit') return !!m.text.trim();
+  if (m.type === 'wmerge') return !m.busy && m.picked.length >= 2 && !!String(m.text || '').trim();
   if (m.type === 'task') return !m.busy && !!m.text.trim() && m.to.length > 0;
   if (m.type === 'padd') return !m.busy && !!m.name.trim();
   if (m.type === 'dladd') return dlAddOk(m);
@@ -5636,6 +5691,31 @@ function renderAdminQ() {
   h += '<div class="card"><div class="ttl">未分組（' + unf.length + '）</div><div class="sub">施工人員找不到工地、自己打名稱的；點進去選正確的工地歸檔。</div>' + rows(unf) + '</div>';
   return h + '</div>';
 }
+// 合併成一行的按鈕（wmCand、wmergeModal 在 renderWork 前面；ACT 要在這裡才有）
+ACT.wmopen = function (v) {
+  var i = String(v).indexOf('|'), d = String(v).slice(0, i), c = String(v).slice(i + 1);
+  var cand = wmCand((S.entries || []).filter(function (e) { return e.date === d; }), c); if (cand.length < 2) return;
+  var ids = cand.map(function (e) { return e.id; });
+  S.modal = { type: 'wmerge', cat: c, date: d, ids: ids, picked: ids.slice(), text: wmDefault(cand), err: '', busy: false }; renderModal();
+};
+ACT.wmpick = function (id) { var m = S.modal; if (!m || m.type !== 'wmerge' || m.busy) return; var i = m.picked.indexOf(id); if (i >= 0) m.picked.splice(i, 1); else m.picked.push(id); renderModal(); };
+ACT.wmuse = function (id) { var m = S.modal; if (!m || m.type !== 'wmerge' || m.busy) return; var e = (S.entries || []).filter(function (x) { return x.id === id; })[0]; if (e) { m.text = String(effW(e).text || '').trim(); renderModal(); } };
+/** 合併成功以後畫面上先照著改（不用重新下載）：管理者代填的、自己的直接換內容；施工人員傳的另存一份（conf），原文不動 */
+function wmApply(e, text, me) {
+  if (e.proxy || e.name === me) e.text = text;
+  else { var x = effW(e); e.conf = { category: x.category, hours: x.hours, workH: x.workH || '', otH: x.otH || '', text: text, weather: x.weather || '', materials: x.materials || [] }; }
+  e.ok = 1;
+}
+ACT.wmgo = function () {
+  var m = S.modal; if (!m || m.type !== 'wmerge' || !modalOk(m)) return;
+  var ids = m.ids.filter(function (id) { return m.picked.indexOf(id) >= 0; }), text = String(m.text).trim();
+  m.busy = true; m.err = ''; renderModal();
+  api('merge', { ids: ids, text: text }).then(function () {
+    var me = S.s && S.s.name;
+    [(S.entries || []), ((S.log && S.log.workers) || [])].forEach(function (list) { list.forEach(function (e) { if (ids.indexOf(e.id) >= 0) wmApply(e, text, me); }); });
+    closeModal(); render();
+  }).catch(function (x) { m.busy = false; m.err = '合併沒有成功：' + ((x && x.error) || '網路有問題'); renderModal(); });
+};
 ACT.adminq = function () { go('adminq'); loadAdminAll(); };
 ACT.adminqreload = function () { S.adminAll = null; render(); loadAdminAll(); };
 ACT.qopen = function (id) { var e = (S.adminAll || []).filter(function (x) { return x.id === id; })[0]; if (!e) return; S.site = e.site; openEdit(e); };
