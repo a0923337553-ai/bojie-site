@@ -450,7 +450,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/21i';
+var WEB_VERSION = '11/21j';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -6158,7 +6158,13 @@ function dlLists() {
     return Promise.all([read(dir, '工地設定.json'), read(dir, '手機新增.json')]).then(function (r) {
       var st = r[0] || {}, cu = r[1] || {}, added = cu.added || {}, hidden = cu.hidden || [];
       var pick = function (k) { var b = (st[k] && st[k].length ? st[k] : base[k]).concat(added[k] || []); return uniq(b.filter(function (x) { return String(x).trim(); })).filter(function (x) { return hidden.indexOf(k + ':' + x) < 0; }); };
-      return { categories: uniq((st.categories && st.categories.length ? st.categories : base.categories).map(canonCat)), workers: pick('workers'), units: pick('units'), vendors: pick('vendors'), hours: pick('hours'), weathers: st.weathers && st.weathers.length ? st.weathers : base.weathers };
+      // 每個大項自己的廠商／單位（2026-11-21）：added['vendors@放樣工程']＝那個大項的清單，拿掉的在 hidden 'vendors@放樣工程:志詮'
+      var own = {};
+      Object.keys(added).forEach(function (k) {
+        if (!/^(vendors|units)@./.test(k) || !Array.isArray(added[k])) return;
+        own[k] = uniq(added[k].filter(function (x) { return String(x).trim(); })).filter(function (x) { return hidden.indexOf(k + ':' + x) < 0; });
+      });
+      return { categories: uniq((st.categories && st.categories.length ? st.categories : base.categories).map(canonCat)), workers: pick('workers'), units: pick('units'), vendors: pick('vendors'), hours: pick('hours'), weathers: st.weathers && st.weathers.length ? st.weathers : base.weathers, own: own };
     });
   }).catch(function () { return base; });
 }
@@ -6394,8 +6400,11 @@ function dlItemEditor(dl, c) {
   // 工時那排：現在填的不在清單裡（拿掉了、電腦傳來的）也照樣顯示（跟摺疊機一樣）
   var hrs = function (cur) { cur = String(cur || ''); return cur && L.hours.indexOf(cur) < 0 ? L.hours.concat([cur]) : L.hours; };
   var h = '<div class="card dled">' + dlListErr(dl);
-  h += '<div class="label">廠商</div><input type="text" data-df="iv" value="' + esc(it.vendor) + '" maxlength="30"><div class="chips" style="margin-top:6px">' + L.vendors.map(function (v) { return dlChip('dliv', v, v, it.vendor === v, 'vendors'); }).join('') + dlAddChip('vendors', 'iv') + '</div>';
-  h += '<div class="label" style="margin-top:10px">單位</div><div class="chips">' + L.units.map(function (u) { return dlChip('dliu', u, u, it.unit === u, 'units'); }).join('') + dlAddChip('units', 'iu') + '</div>';
+  // 廠商、單位＝這個大項自己的清單（使用者 2026-11-21「放樣這些劃掉」）：在這裡加、拿掉只改這個大項
+  var kv = dlOwnKind('vendors', it.category), ku = dlOwnKind('units', it.category);
+  h += '<div class="note" style="margin:0 0 8px">廠商、單位只改「' + esc(canonCat(it.category)) + '」，別的大項不變。</div>';
+  h += '<div class="label">廠商</div><input type="text" data-df="iv" value="' + esc(it.vendor) + '" maxlength="30"><div class="chips" style="margin-top:6px">' + dlKindList(L, kv).map(function (v) { return dlChip('dliv', v, v, it.vendor === v, kv); }).join('') + dlAddChip(kv, 'iv') + '</div>';
+  h += '<div class="label" style="margin-top:10px">單位</div><div class="chips">' + dlKindList(L, ku).map(function (u) { return dlChip('dliu', u, u, it.unit === u, ku); }).join('') + dlAddChip(ku, 'iu') + '</div>';
   // 2026-11-18：細項（每一行選一個，寫成「【泥作】…」）；工人名字只有廠商是柏捷才點
   // 2026-11-19（②A）：每一行工作內容都獨立：自己的時間（人數×工時）、自己的照片；上面那塊「人數×工時」「第二組」搬進每一行
   var subs = subsOf(it.category), bj = isBojie(it.vendor), photos = (dl.e.photos || []).filter(function (p) { return p.category === c; });
@@ -6551,7 +6560,9 @@ ACT.dlwx = function (v) { var dl = S.dl; if (!dl) return; dl.e.weather = dl.e.we
 ACT.dlopen = function (c) {
   var dl = S.dl; if (!dl) return; dlCloseItem(dl);
   var it = dlItemOf(dl, c), L = dl.lists;
-  var cur = it ? dlCopy(it) : { category: c, vendor: '柏捷', unit: '工', people: 0, hours: L.hours.indexOf('1') >= 0 ? '1' : L.hours[0] || '1', lines: [] };
+  // 還沒填過的大項先選哪一顆（2026-11-21，跟 App firstPick 一樣）：柏捷／工還在這個大項的清單裡就照舊；被拿掉了選清單第一個；廠商清單空的就先空著
+  var pick1 = function (v, own, blankOk) { return own.indexOf(v) >= 0 ? v : own.length ? own[0] : blankOk ? '' : v; };
+  var cur = it ? dlCopy(it) : { category: c, vendor: pick1('柏捷', dlKindList(L, dlOwnKind('vendors', c)), true), unit: pick1('工', dlKindList(L, dlOwnKind('units', c)), false), people: 0, hours: L.hours.indexOf('1') >= 0 ? '1' : L.hours[0] || '1', lines: [] };
   // 每一行帶自己的人數×工時（2026-11-19）：雲端那份從 total 來，以前整個大項的兩組放第 1、2 行（數量一樣）
   var defH = L.hours.indexOf('1') >= 0 ? '1' : L.hours[0] || '1';
   cur.lines = (it ? dlLinesOf(it) : []).map(function (l) { return { text: l.text || '', workers: (l.workers || []).slice(), people: +l.people || 0, hours: +l.people > 0 ? String(l.hours || '1') : defH }; });
@@ -6611,42 +6622,53 @@ ACT.dlmu = function (v) { var dl = S.dl, p = v.split('|'); if (!dl) return; dl.e
 // 廠商、單位、工時、工人那幾排：最後一顆「＋ 新增」；長按名字（電腦也可以按右鍵）＝從清單拿掉。
 // 存在雲端 工地App/設定/手機新增.json（摺疊機同一份：added 加、hidden 拿掉，寫法跟 App CustomLists.add／remove 一樣），存好叫醒摺疊機同步
 var DL_KINDS = { vendors: '廠商', units: '單位', hours: '工時', workers: '工人' };
+// 每個大項自己的廠商／單位（使用者 2026-11-21「放樣這些劃掉」）：kind 寫成「vendors@放樣工程」，清單在 dl.lists.own；
+// 還沒分開的大項＝大家共用的那一份。在大項裡加、拿掉只改那個大項（寫法跟 App CustomLists.addIn／removeIn 一樣）；材料／機具那一排還是共用的
+function dlKindBase(kind) { return String(kind || '').split('@')[0]; }
+function dlKindCat(kind) { var i = String(kind || '').indexOf('@'); return i > 0 ? String(kind).slice(i + 1) : ''; }
+function dlOwnKind(kind, cat) { return kind + '@' + canonCat(cat); }
+function dlKindList(L, kind) { var o = dlKindCat(kind) && L && L.own ? L.own[kind] : null; return o || (L && L[dlKindBase(kind)]) || []; }
 function dlChip(act, v, label, on, kind) {
-  return '<button class="chip small' + (on ? ' on' : '') + '" data-act="' + act + '" data-v="' + esc(v) + '" data-lp="' + kind + '" data-lv="' + esc(label) + '">' + esc(label) + '</button>';
+  return '<button class="chip small' + (on ? ' on' : '') + '" data-act="' + act + '" data-v="' + esc(v) + '" data-lp="' + esc(kind) + '" data-lv="' + esc(label) + '">' + esc(label) + '</button>';
 }
-function dlAddChip(kind, ctx) { return '<button class="chip small addl" data-act="dladd" data-v="' + kind + '|' + ctx + '">＋ 新增</button>'; }
+function dlAddChip(kind, ctx) { return '<button class="chip small addl" data-act="dladd" data-v="' + esc(kind) + '|' + ctx + '">＋ 新增</button>'; }
 function dlListErr(dl) { return dl && dl.lerr ? '<div class="err" style="margin:0 0 8px">' + esc(dl.lerr) + '</div>' : ''; }
 function dlAddOk(m) { var t = String(m.name || '').trim(); return !!t && !m.busy && (m.kind !== 'hours' || (/^\d*\.?\d+$/.test(t) && +t > 0 && +t <= 24)); }
 function dlAddNote(m) {
-  var num = m.kind === 'hours', t = String(m.name || '').trim(), dup = t && S.dl && S.dl.lists && (S.dl.lists[m.kind] || []).indexOf(num ? String(+t) : t) >= 0;
+  var num = m.kind === 'hours', t = String(m.name || '').trim(), cat = dlKindCat(m.kind), dup = t && S.dl && S.dl.lists && dlKindList(S.dl.lists, m.kind).indexOf(num ? String(+t) : t) >= 0;
   if (num && t && !dlAddOk(m)) return '工時要打數字，例如 0.25、1.5';
-  return dup ? '清單已經有了，按「加入」就是選它。' : '加了以後每一天、每個工地都會出現；摺疊機同步後也會有。不要的：長按那個名字' + (IOS ? '' : '（電腦也可以按右鍵）') + '就能拿掉。';
+  var rm = '不要的：長按那個名字' + (IOS ? '' : '（電腦也可以按右鍵）') + '就能拿掉。';
+  if (cat) return dup ? '「' + cat + '」已經有了，按「加入」就是選它。' : '只加在「' + cat + '」，別的大項不會多出來；摺疊機同步後也會有。' + rm;
+  return dup ? '清單已經有了，按「加入」就是選它。' : '加了以後每一天、每個工地都會出現；摺疊機同步後也會有。' + rm;
 }
 function dlAddModal(m) {
-  var num = m.kind === 'hours';
-  return '<h3>新增' + DL_KINDS[m.kind] + '</h3>' +
-    '<input type="text" id="dladdin" data-f="m.name" maxlength="' + (m.kind === 'vendors' ? 30 : 12) + '"' + (num ? ' inputmode="decimal"' : '') + ' enterkeyhint="done" autocomplete="off" placeholder="' + (num ? '例如 0.25、1.5' : '輸入名稱') + '" value="' + esc(m.name) + '">' +
+  var num = m.kind === 'hours', cat = dlKindCat(m.kind);
+  return '<h3>' + (cat ? '「' + esc(cat) + '」' : '') + '新增' + DL_KINDS[dlKindBase(m.kind)] + '</h3>' +
+    '<input type="text" id="dladdin" data-f="m.name" maxlength="' + (dlKindBase(m.kind) === 'vendors' ? 30 : 12) + '"' + (num ? ' inputmode="decimal"' : '') + ' enterkeyhint="done" autocomplete="off" placeholder="' + (num ? '例如 0.25、1.5' : '輸入名稱') + '" value="' + esc(m.name) + '">' +
     '<div class="note" id="mmsg" style="margin-top:6px">' + esc(dlAddNote(m)) + '</div>' +
     '<button class="big" style="margin-top:12px" id="msave" data-act="dladdok"' + (dlAddOk(m) ? '' : ' disabled') + '>加入</button><button class="ghost" data-act="mclose">取消</button>';
 }
 function dlRmModal(m) {
-  return '<h3>從清單拿掉「' + esc(m.name) + '」？</h3><div style="font-size:15.5px;line-height:23px;margin:4px 0 14px">已經寫進日誌的不會改，只是以後這排不再出現。要再用時按「＋ 新增」加回來就好。</div>' +
+  var cat = dlKindCat(m.kind);
+  return '<h3>' + (cat ? '「' + esc(cat) + '」拿掉' : '從清單拿掉') + '「' + esc(m.name) + '」？</h3><div style="font-size:15.5px;line-height:23px;margin:4px 0 14px">' + (cat ? '只改「' + esc(cat) + '」，別的大項不變。' : '') + '已經寫進日誌的不會改，只是以後這排不再出現。要再用時按「＋ 新增」加回來就好。</div>' +
     '<button class="ghost red" data-act="dlrmok">拿掉</button><button class="ghost" data-act="mclose">不要</button>';
 }
 ACT.dladd = function (v) {
   var dl = S.dl; if (!dl || !dl.lists) return; var p = String(v || '').split('|');
-  if (!DL_KINDS[p[0]]) return;
+  if (!DL_KINDS[dlKindBase(p[0])]) return;
   S.modal = { type: 'dladd', kind: p[0], ctx: p[1] || '', name: '' }; renderModal();
   var i = $('dladdin'); if (i) i.focus();   // 在按的這一下 focus，iPad 才會跳出鍵盤
 };
 ACT.dladdok = function () {
   var m = S.modal, dl = S.dl; if (!m || m.type !== 'dladd' || !dl || !dl.lists || !dlAddOk(m)) return;
   var v = m.name.trim(); if (m.kind === 'hours') v = String(+v);   // 「.5」「0.50」→「0.5」
-  var list = dl.lists[m.kind] || (dl.lists[m.kind] = []), isNew = list.indexOf(v) < 0;
+  // 大項自己的清單（vendors@放樣工程）：還沒分開過就先照現在看到的那一份分出來（seed），再加這一個
+  var own = !!dlKindCat(m.kind), seed = own ? dlKindList(dl.lists, m.kind).slice() : null;
+  var list = own ? ((dl.lists.own = dl.lists.own || {})[m.kind] = seed.slice()) : (dl.lists[m.kind] || (dl.lists[m.kind] = [])), isNew = list.indexOf(v) < 0;
   if (isNew) list.push(v);
   dlPickAdded(dl, m.ctx, v);   // 加了就順便選它（跟摺疊機一樣）
   closeModal(); render();
-  if (isNew) dlListSave(m.kind, v, true);
+  if (isNew) dlListSave(m.kind, v, true, seed);
 };
 function dlPickAdded(dl, ctx, v) {
   if (String(ctx).indexOf('lh.') === 0) { var lhl = dl.cur && dl.cur.lines[+String(ctx).split('.')[1]]; if (lhl) lhl.hours = v; return; }   // 每一行的工時（2026-11-19）
@@ -6661,18 +6683,23 @@ function dlPickAdded(dl, ctx, v) {
   dlTouch();
 }
 function dlListRemoveAsk(kind, name) {
-  var dl = S.dl; if (!dl || !dl.lists || !DL_KINDS[kind] || !name || S.modal) return;
+  var dl = S.dl; if (!dl || !dl.lists || !DL_KINDS[dlKindBase(kind)] || !name || S.modal) return;
   S.modal = { type: 'dlrm', kind: kind, name: name }; renderModal();
 }
 ACT.dlrmok = function () {
   var m = S.modal, dl = S.dl; if (!m || m.type !== 'dlrm' || !dl || !dl.lists) return;
-  dl.lists[m.kind] = (dl.lists[m.kind] || []).filter(function (x) { return x !== m.name; });   // 已經選的不動（跟摺疊機一樣）
+  var own = !!dlKindCat(m.kind), seed = own ? dlKindList(dl.lists, m.kind).slice() : null;
+  var left = (own ? seed : dl.lists[m.kind] || []).filter(function (x) { return x !== m.name; });   // 已經選的不動（跟摺疊機一樣）
+  if (own) (dl.lists.own = dl.lists.own || {})[m.kind] = left; else dl.lists[m.kind] = left;
   closeModal(); render();
-  dlListSave(m.kind, m.name, false);
+  dlListSave(m.kind, m.name, false, seed);
 };
-/** 改雲端的 手機新增.json：讀最新的 → 只改這一個名字 → 存回去（其他欄位：工地、打勾、位置…原樣留著） */
+/**
+ * 改雲端的 手機新增.json：讀最新的 → 只改這一個名字 → 存回去（其他欄位：工地、打勾、位置…原樣留著）。
+ * seed（大項自己的清單才給）：雲端還沒有這個大項的清單時，先用這一份（改之前畫面上那一排）當底
+ */
 var DLL = { q: Promise.resolve() };
-function dlListSave(kind, v, add) {
+function dlListSave(kind, v, add, seed) {
   var dl = S.dl; if (dl) dl.lerr = '';
   var fail = function (x) {
     var d = S.dl; if (!d) return;
@@ -6689,7 +6716,7 @@ function dlListSave(kind, v, add) {
             try { o = t ? JSON.parse(t) : { version: 1, added: {}, hidden: [], sites: [], sheetDone: {}, siteGeo: {} }; } catch (e) { throw new Error('雲端的清單檔讀不懂，沒有動它'); }
             if (!o || typeof o !== 'object') throw new Error('雲端的清單檔讀不懂，沒有動它');
             var a = o.added && typeof o.added === 'object' ? o.added : (o.added = {}), h = Array.isArray(o.hidden) ? o.hidden : [], key = kind + ':' + v;
-            var cur = Array.isArray(a[kind]) ? a[kind].slice() : [];
+            var cur = Array.isArray(a[kind]) ? a[kind].slice() : (seed ? seed.slice() : []);
             if (add) { if (cur.indexOf(v) < 0) cur.push(v); h = h.filter(function (x) { return x !== key; }); }
             else { cur = cur.filter(function (x) { return x !== v; }); if (h.indexOf(key) < 0) h = h.concat([key]); }
             a[kind] = cur; o.hidden = h;
