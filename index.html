@@ -43,12 +43,18 @@ button { font-family:inherit; cursor:pointer; color:inherit; }
 .label { font-size:13.5px; color:var(--muted); margin:2px 0 6px; font-weight:bold; }
 .sub { font-size:13px; color:var(--muted); }
 .note { font-size:13px; color:var(--muted); line-height:1.5; }
-.chips { display:flex; flex-wrap:wrap; gap:7px; }
+/* 一組可以點的選項：一樣大的格子排成幾欄（使用者 2026-11-21「你的每個排版都要漂亮不要東跳西跳」「其他比較早做的畫面…全部檢查」）。
+   以前是長短不一、自動換行的小標籤。幾欄（--cols）是 gridChips() 照最長那一顆算的（App 的 ChipRow 同一套）。
+   .scroll＝一整排左右滑的篩選列、.keep＝靠右的小按鈕：這兩種維持一排，只換成同樣的方格樣子。 */
+.chips { display:grid; grid-template-columns:repeat(var(--cols, 3), minmax(0, 1fr)); gap:6px; }
+.chips > :not(.chip) { grid-column:1 / -1; }   /* 不是選項的東西（「讀取中…」那種字）：自己佔一整排 */
+.chips.scroll, .chips.keep { display:flex; flex-wrap:wrap; }
 .chips.scroll { flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; scrollbar-width:none; }
 .chips.scroll::-webkit-scrollbar { display:none; }
-.chip { border:1.5px solid var(--line); background:#fff; border-radius:18px; padding:7px 14px; font-size:16px; white-space:nowrap; flex:none; }
+.chip { border:1.5px solid var(--line); background:#fff; border-radius:11px; margin:0; padding:4px 8px; min-height:38px; min-width:0; font-size:15px; font-weight:bold; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.chips.scroll .chip, .chips.keep .chip { flex:none; padding:4px 12px; }
 .chip.on { background:var(--teal); border-color:var(--teal); color:#fff; font-weight:bold; }
-.chip.small { padding:5px 11px; font-size:14.5px; }
+.chip.small { min-height:36px; font-size:14.5px; }
 /* 匯出視窗「要匯出哪些」：整排的「全部」＋ 3×2 一樣大的格子（使用者 2026-11-21「排版要漂亮」：原本一顆一顆長短不一、排得亂） */
 .xall, .xcell { border:1.5px solid var(--line); background:#fff; color:var(--ink); border-radius:14px; margin:0; }
 .xall { display:block; width:100%; font-size:16.5px; font-weight:bold; padding:11px 0; }
@@ -444,7 +450,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/21h';
+var WEB_VERSION = '11/21i';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -806,6 +812,37 @@ function tcell(act, v, title, sub, on) {
 function twoLines(n) { var m = /^([^\-(（]+)[\-(（](.+?)[)）]?$/.exec(String(n)); return m ? [m[1], m[2]] : [String(n), '']; }
 /** 「位置」下面固定的六格（SCAF_LOCS；施工架新增一筆、施工架那一夾的新增數量）：三欄一樣大、兩排 */
 function locTiles(locs, cur) { return locs.length ? tgrid(3, locs.slice(0, 6).map(function (l) { return tcell('msmloc', l, l, '', cur === l); }).join('')) : ''; }
+/** 一排放幾格（count＝幾顆、widest＝最長那顆多寬、width＝整排多寬、gap＝間距）：照最長那一顆決定放得下幾格（最多 6）；放得下＝幾顆就幾格（一顆佔三分之一）；
+ *  放不下＝分幾排、每排一樣多（9 顆＝5＋4）。App 的 chipCols 同一套 */
+function chipCols(count, widest, width, gap) {
+  if (count <= 0) return 1;
+  var fit = Math.max(1, Math.min(6, Math.floor((width + gap) / (Math.max(1, widest) + gap))));
+  if (count === 1) return Math.min(3, fit);
+  if (count <= fit) return count;
+  var rows = Math.ceil(count / fit);
+  return Math.ceil(count / rows);
+}
+var CHIP_CTX = null;
+/** 一顆不折行要多寬（字寬＋左右留白＋框） */
+function chipNatural(el) {
+  if (!CHIP_CTX) { try { CHIP_CTX = document.createElement('canvas').getContext('2d'); } catch (e) { CHIP_CTX = false; } }
+  var txt = String(el.textContent || ''), cs = window.getComputedStyle(el), fs = parseFloat(cs.fontSize) || 15;
+  if (!CHIP_CTX) { var w0 = 0; for (var i = 0; i < txt.length; i++) w0 += txt.charCodeAt(i) > 255 ? fs : fs * 0.6; return w0 + 22; }
+  CHIP_CTX.font = 'bold ' + fs + 'px ' + (cs.fontFamily || 'sans-serif');
+  return Math.ceil(CHIP_CTX.measureText(txt).width) + 22;
+}
+/** 把畫面上每一組 .chips 排成一樣大的格子（畫面一換就會被叫到：下面的 MutationObserver） */
+function gridChips(root) {
+  var list = (root || document).querySelectorAll('.chips:not(.scroll):not(.keep)');
+  for (var i = 0; i < list.length; i++) {
+    var el = list[i], kids = el.children, n = kids.length, W = el.clientWidth; if (!n || !W) continue;
+    var widest = 0; for (var j = 0; j < n; j++) widest = Math.max(widest, chipNatural(kids[j]));
+    var cols = chipCols(n, Math.min(widest, W), W, 6);
+    if (el.getAttribute('data-cols') !== String(cols)) { el.style.setProperty('--cols', cols); el.setAttribute('data-cols', cols); }
+  }
+}
+if (typeof MutationObserver !== 'undefined') new MutationObserver(function () { gridChips(document); }).observe(document.documentElement, { childList: true, subtree: true });
+window.addEventListener('resize', function () { gridChips(document); });
 function chip(act, v, label, on, small) {
   return '<button class="chip' + (on ? ' on' : '') + (small ? ' small' : '') + '" data-act="' + act + '" data-v="' + esc(v) + '">' + esc(label) + '</button>';
 }
@@ -1116,7 +1153,8 @@ function renderHub() {
   var cNews = '<div class="a-news">' + newsCard(news) + '</div>';
   var cWx = S.fc && S.fc.days && S.fc.days.length ? '<div class="a-wx">' + weekWeather(S.fc) + '</div>' : '';
   // 👷 工作狀況（所有工地；開發者、老闆、主任，收件服務第 46 版）：放在天氣那欄
-  if (staffSees()) { if (!S.staff && !S.staffBusy) setTimeout(function () { staffLoad(false); }, 0); cWx = '<div class="a-staff">' + staffCard() + '</div>' + cWx; }
+  // 讀不到的時候不要每畫一次首頁就再讀一次（2026-11-21 本機測試發現：讀不到 → 重畫 → 又讀，幾分鐘打了一千多次）：一分鐘最多自己再試一次
+  if (staffSees()) { if (!S.staff && !S.staffBusy && Date.now() - (S.staffTry || 0) > 60000) { S.staffTry = Date.now(); setTimeout(function () { staffLoad(false); }, 0); } cWx = '<div class="a-staff">' + staffCard() + '</div>' + cWx; }
   var h = renderHero() + '<div class="wrap hub' + (week ? ' has-week' : '') + '">';
   // 管理者（第 13 版）：人員管理、施工人員待處理（等你同意、未分組）
   if (isAdmin() && !S.asCode) h += adminCard();
@@ -1697,7 +1735,7 @@ function renderEdit() {
   }
   var auto = S.wx[d.date];
   h += '<div class="card"><div class="hd"><div><div class="label">工地</div><b style="font-size:18px">' + esc(S.site === UNFILED ? '未分組' : S.site) + '</b></div>' +
-    '<div style="text-align:right"><div class="label">天氣</div><div class="chips" style="justify-content:flex-end;gap:4px">' +
+    '<div style="text-align:right"><div class="label">天氣</div><div class="chips keep" style="justify-content:flex-end;gap:4px">' +
     s.weathers.map(function (w) { return chip('wx', w, w, d.weather === w, true); }).join('') + '</div></div></div>';
   if (!d.touchedWx && auto && d.weather === auto.weather) h += '<div class="note">' + esc(wxNote(auto)) + '</div>';
   if (S.site === UNFILED) h += '<div style="margin-top:8px"><div class="label">工地名稱（你知道的叫法就好）</div><input type="text" data-f="siteText" value="' + esc(d.siteText) + '" placeholder="例：新竹王先生透天" maxlength="60"><div class="note">管理者會再歸到正確的工地。</div></div>';
@@ -2855,7 +2893,9 @@ function matSortHtml() {
 // 「電梯…是並聯排，因為電梯是矩形的」「樓梯是兩片串連，還要另外加梯」；問過都選 A：電梯並排也照 2 片算面積、示意圖照草圖。
 // 一筆的規格記在 spec：S|排法|踏板長度|片數|框架高度|從第幾層|到第幾層|這一側總共幾層(0＝自動)|梯幾支；品名、面積（數量）、單位 m² 是收件服務照規格寫的。
 // App 的 SiteScaf.kt 是同一套（scafOf／scafSpec／scafArea／畫法）。
-var SCAF = '施工架', SCAF_KINDS = [['', '一般（一排）'], ['stair', '樓梯（＋梯）'], ['lift', '電梯（並排）']];
+var SCAF = '施工架', SCAF_KINDS = [['', '一般（串連）'], ['stair', '樓梯（＋梯）'], ['lift', '電梯（並排）']];
+// 複排（收件服務第 62 版，使用者 2026-11-21「有時候東南西北也會有複排，也就是可能同一層有2層以上並排」）：一般那種多「並排幾排」rows（內＋外＝2），
+// n＝一排幾片，面積再乘排數；規格最後多一格 幾排（1 排不寫，舊的規格字串不變）。樓梯、電梯沒有這一格。App 的 Scaf.rows 是同一套。
 // 新增一筆施工架時「位置」下面固定給點的六個（使用者 2026-11-21 圈了那一排：「改成東南西北樓梯電梯」）：不再列「這個工地寫過的位置」。
 // 字照他自己寫的（東側、南側…）；別的位置（3F 女兒牆…）自己打。App 的 Scaf.LOCS 是同一份。
 var SCAF_LOCS = ['東側', '南側', '西側', '北側', '樓梯', '電梯'];
@@ -2864,6 +2904,7 @@ function hasScaf() { return (!!S.s && Number(S.s.version) >= 56) || (!!S.mat && 
 function scafOf(m) {
   var p = String((m && m.spec) || '').split('|'); if (!m || m.folder !== SCAF || p[0] !== 'S' || p.length < 8) return null;
   var e = { kind: p[1] === 'stair' || p[1] === 'lift' ? p[1] : '', len: Number(p[2]), n: Number(p[3]), h: Number(p[4]), from: Number(p[5]), to: Number(p[6]), total: Number(p[7]) || 0, lad: p[8] === undefined || p[8] === '' ? '' : Number(p[8]) };
+  e.rows = e.kind === '' && /^[2-9]$/.test(String(p[9] === undefined ? '' : p[9])) ? Number(p[9]) : 1;
   return e.len > 0 && e.n >= 1 && e.h > 0 && e.from >= 1 && e.to >= e.from ? e : null;
 }
 /** 視窗裡填的 → 規格字串；還沒填完、填錯回 ''。why＝true 回「還差什麼」那句話 */
@@ -2872,14 +2913,15 @@ function scafSpec(e, why) {
   var len = num(e.len, 999, true), n = num(e.n, 999), h = num(e.h, 999, true), from = num(e.from, 99), to = num(e.to, 99);
   var tt = String(e.total == null ? '' : e.total).trim(), total = tt === '' || tt === '0' ? 0 : num(tt, 99), lt = String(e.lad == null ? '' : e.lad).trim();
   var kind = e.kind === 'stair' || e.kind === 'lift' ? e.kind : '';
+  var rt = String(e.rows == null ? '' : e.rows).trim(), rows = kind !== '' || rt === '' ? 1 : (/^[1-9]$/.test(rt) ? Number(rt) : NaN);
   var miss = isNaN(len) ? '踏板一片幾公分還沒寫' : isNaN(n) ? '踏板幾片還沒寫' : isNaN(h) ? '框架一層幾公分還沒寫' : isNaN(from) || isNaN(to) ? '範圍第幾層到第幾層還沒寫' :
-    to < from ? '範圍：後面那一層要比前面大' : isNaN(total) || (total && total < to) ? '「這一側總共幾層」不能比範圍小' : kind === 'stair' && lt !== '' && !/^\d{1,2}$/.test(lt) ? '梯幾支要寫數字' : '';
+    to < from ? '範圍：後面那一層要比前面大' : isNaN(total) || (total && total < to) ? '「這一側總共幾層」不能比範圍小' : kind === 'stair' && lt !== '' && !/^\d{1,2}$/.test(lt) ? '梯幾支要寫數字' : isNaN(rows) ? '並排幾排要寫 1～9' : '';
   if (why) return miss;
   // 樓梯沒寫梯幾支：先帶 層數−1（使用者的樓梯 8 層、梯 7 支）
-  return miss ? '' : ['S', kind, len, n, h, from, to, total, kind === 'stair' ? (lt === '' ? Math.max(0, to - from) : Number(lt)) : ''].join('|');
+  return miss ? '' : ['S', kind, len, n, h, from, to, total, kind === 'stair' ? (lt === '' ? Math.max(0, to - from) : Number(lt)) : ''].concat(rows > 1 ? [rows] : []).join('|');
 }
 /** 面積（m²）＝（踏板長度×片數）×（框架高度×層數）；長度、高度是公分。電梯並排也照片數算（使用者選 A） */
-function scafArea(e) { return Math.round((e.len * e.n / 100) * (e.h * (e.to - e.from + 1) / 100) * 100) / 100; }
+function scafArea(e) { return Math.round((e.len * e.n * (e.rows || 1) / 100) * (e.h * (e.to - e.from + 1) / 100) * 100) / 100; }
 function scafNum(v) { return (Math.round(v * 100) / 100).toFixed(2).replace(/\.?0+$/, ''); }
 /** 施工架那一夾裡的哪一個資料夾：scaf＝施工架（新的填法；還有舊的寫法先留在這）、tie＝壁拉桿（品名有「壁拉桿」的） */
 function matSub(m) { return scafOf(m) ? 'scaf' : /壁拉桿/.test(String(m.name || '')) ? 'tie' : 'scaf'; }
@@ -2893,7 +2935,7 @@ function matQtySum(list) {
 function scafCtx(e, loc, selfId) {
   var others = [], total = Math.max(e.total || 0, e.to);
   ((S.mat && S.mat.items) || []).forEach(function (x) { var o = scafOf(x); if (o && x.id !== selfId && String(x.loc || '').trim() === loc) { others.push(o); total = Math.max(total, o.to, o.total || 0); } });
-  return { kind: e.kind, len: e.len, n: e.n, h: e.h, from: e.from, to: e.to, lad: e.lad, total: total, others: others };
+  return { kind: e.kind, len: e.len, n: e.n, h: e.h, from: e.from, to: e.to, lad: e.lad, rows: e.rows || 1, total: total, others: others };
 }
 /**
  * 示意圖（正面圖）：一格＝一片踏板 × 一層框架，最下面是第 1 層；這一筆的範圍深色、這一側其他層淺色。
@@ -2901,11 +2943,11 @@ function scafCtx(e, loc, selfId) {
  */
 function scafSvg(e, W, mini) {
   W = W || 320;
-  var par = e.kind === 'lift', k = e.to - e.from + 1, T = Math.max(e.total || 0, e.to), t;
+  var par = e.kind === 'lift', k = e.to - e.from + 1, T = Math.max(e.total || 0, e.to), t, multi = !par && (e.rows || 1) > 1;
   function face(x) { return x.kind === 'lift' ? 1 : x.n; }
   function at(t) { if (t >= e.from && t <= e.to) return e; return (e.others || []).filter(function (x) { return t >= x.from && t <= x.to; })[0] || null; }
   var maxC = face(e); for (t = 1; t <= T; t++) { var o = at(t); if (o) maxC = Math.max(maxC, face(o)); }
-  var padL = mini ? 2 : 30, padR = mini ? 2 : 92, padT = mini ? 2 : 8, padB = mini ? 2 : (par ? 92 : 40), maxH = mini ? 64 : 330;
+  var padL = mini ? 2 : 30, padR = mini ? 2 : 92, padT = mini ? 2 : 8, padB = mini ? 2 : (par || multi ? 92 : 40), maxH = mini ? 64 : 330;
   var cw = Math.min(mini ? 14 : 46, (W - padL - padR) / maxC), ch = cw * e.h / e.len;
   if (ch * T > maxH) { ch = maxH / T; cw = ch * e.len / e.h; }
   var gw = cw * maxC, gh = ch * T, H = padT + gh + padB, s = '', sw = mini ? 0.8 : 1.5;
@@ -2941,19 +2983,25 @@ function scafSvg(e, W, mini) {
       for (var j = 0; j < Math.min(e.n, 3); j++) s += '<rect x="' + padL + '" y="' + (py + j * (ph + 2)) + '" width="' + pw + '" height="' + ph + '" rx="2" fill="' + DARK + '" stroke="' + DARKL + '"/>';
       s += '<text x="' + (padL + pw + 10) + '" y="' + (py + (Math.min(e.n, 3) * (ph + 2)) / 2 + 4) + '" font-size="13" fill="#5D7486">俯視：<tspan font-weight="bold" fill="' + DARKL + '">' + e.n + ' 片並排</tspan></text>';
     }
+    // 複排（一般那種同一層並排幾排）：下面多畫俯視圖，幾排就畫幾條（最多畫 4 條）
+    if (multi) {
+      var py2 = by + 38, pw2 = Math.min(120, W - padL - 150), shown = Math.min(e.rows, 4), ph2 = shown > 3 ? 9 : 13;
+      for (var j2 = 0; j2 < shown; j2++) s += '<rect x="' + padL + '" y="' + (py2 + j2 * (ph2 + 2)) + '" width="' + pw2 + '" height="' + ph2 + '" rx="2" fill="' + DARK + '" stroke="' + DARKL + '"/>';
+      s += '<text x="' + (padL + pw2 + 10) + '" y="' + (py2 + (shown * (ph2 + 2)) / 2 + 4) + '" font-size="13" fill="#5D7486">俯視：<tspan font-weight="bold" fill="' + DARKL + '">' + e.rows + ' 排並排</tspan></text>';
+    }
   }
   var w2 = mini ? padL + gw + padR : W;
   return '<svg viewBox="0 0 ' + w2 + ' ' + H + '" width="' + w2 + '" height="' + H + '" xmlns="http://www.w3.org/2000/svg" style="display:block;max-width:100%;height:auto">' + s + '</svg>';
 }
 function scafRange(e) { return e.from === e.to ? '第 ' + e.from + ' 層' : e.from + '～' + e.to + ' 層'; }
 /** 「踏板 6 片×183　框架 173×3 層　梯 7 支」 */
-function scafLine(e) { return '踏板 ' + e.n + ' 片×' + scafNum(e.len) + (e.kind === 'lift' ? '（並排）' : e.kind === 'stair' ? '（串連）' : '') + '　框架 ' + scafNum(e.h) + '×' + (e.to - e.from + 1) + ' 層' + (e.kind === 'stair' && e.lad !== '' ? '　梯 ' + e.lad + ' 支' : ''); }
+function scafLine(e) { return '踏板 ' + e.n + ' 片×' + scafNum(e.len) + ((e.rows || 1) > 1 ? '×' + e.rows + ' 排' : '') + (e.kind === 'lift' ? '（並排）' : e.kind === 'stair' ? '（串連）' : '') + '　框架 ' + scafNum(e.h) + '×' + (e.to - e.from + 1) + ' 層' + (e.kind === 'stair' && e.lad !== '' ? '　梯 ' + e.lad + ' 支' : ''); }
 /** 「面積＝（183×6）×（173×3）＝10.98 m × 5.19 m ＝ 56.99 m²」 */
 function scafAreaHtml(e) {
-  var k = e.to - e.from + 1;
+  var k = e.to - e.from + 1, rw = e.rows || 1;
   // 排成兩行（一行會折在很醜的地方；使用者 2026-11-21「你的每個排版都要漂亮不要東跳西跳」）
-  return '<div style="font-size:14px;color:var(--muted);white-space:nowrap">面積＝（' + scafNum(e.len) + '×' + e.n + '）×（' + scafNum(e.h) + '×' + k + '）</div>' +
-    '<div style="font-weight:bold;white-space:nowrap">＝' + scafNum(e.len * e.n / 100) + ' m × ' + scafNum(e.h * k / 100) + ' m ＝ <b style="font-size:19px;color:var(--navy)">' + scafNum(scafArea(e)) + ' m²</b></div>';
+  return '<div style="font-size:14px;color:var(--muted);white-space:nowrap">面積＝（' + scafNum(e.len) + '×' + e.n + (rw > 1 ? '×' + rw + ' 排' : '') + '）×（' + scafNum(e.h) + '×' + k + '）</div>' +
+    '<div style="font-weight:bold;white-space:nowrap">＝' + scafNum(e.len * e.n * rw / 100) + ' m × ' + scafNum(e.h * k / 100) + ' m ＝ <b style="font-size:19px;color:var(--navy)">' + scafNum(scafArea(e)) + ' m²</b></div>';
 }
 /** 施工架那一夾的第一層：兩個資料夾（幾筆、合計） */
 function renderScafRoot(M, list, right) {
@@ -3016,8 +3064,8 @@ function scafModal(m) {
     // 排法三格一樣大；數字欄位兩欄、每格一樣寬（原本「一片[ ]公分×[ ]片」「第[ ]層～第[ ]層」每一排的格子位置、寬度都不一樣）
     '<div class="label" style="margin-top:10px">排法</div>' + tgrid(3, SCAF_KINDS.map(function (k) { var a = twoLines(k[1]); return tcell('msmskind', k[0] || 'row', a[0], a[1], (m.kind || '') === k[0]); }).join('')) +
     '<div class="fg" style="margin-top:10px">' + fld('踏板一片（公分）', 'len', 5, '183') + fld('踏板幾片', 'n', 3, '6') + fld('框架一層（公分）', 'h', 5, '173') + fld('這一側總共幾層', 'total', 2, '自動') +
-    fld('從第幾層', 'from', 2, '1') + fld('到第幾層', 'to', 2, '3') + (m.kind === 'stair' ? fld('梯幾支', 'lad', 2, '自動') + '<div></div>' : '') + '</div>' +
-    '<div class="note" style="margin-top:4px">最下面是第 1 層。「總共幾層」不寫＝照這一側填過的最高層' + (m.kind === 'stair' ? '；「梯幾支」不寫＝層數−1' : '') + '。</div>' +
+    fld('從第幾層', 'from', 2, '1') + fld('到第幾層', 'to', 2, '3') + (m.kind === 'stair' ? fld('梯幾支', 'lad', 2, '自動') + '<div></div>' : !m.kind ? fld('並排幾排（複排）', 'rows', 1, '1') + '<div></div>' : '') + '</div>' +
+    '<div class="note" style="margin-top:4px">最下面是第 1 層。「總共幾層」不寫＝照這一側填過的最高層' + (m.kind === 'stair' ? '；「梯幾支」不寫＝層數−1' : !m.kind ? '；內＋外兩排就在「並排幾排」填 2（踏板幾片＝一排幾片）' : '') + '。</div>' +
     '<div id="smsfig" style="background:#F3F7FA;border-radius:12px;padding:10px 6px;margin-top:10px">' + scafFigHtml(m) + '</div>' +
     '<div class="label" style="margin-top:10px">備註（可以不寫）</div><textarea data-f="m.note" maxlength="100" placeholder="例：內+外" style="min-height:48px">' + esc(m.note) + '</textarea>' + smatPhotoHtml(m, true);
   if (t) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(matWho(t)) + '</div>' +
@@ -4695,7 +4743,7 @@ var ACT = {
     if (sub === 'scaf') {
       // 踏板長度、框架高度先帶這個工地上一筆填的（沒有就 183、173）
       var last = ((S.mat.items || []).filter(function (x) { return !!scafOf(x); }).sort(function (a, b) { return matLast(b) - matLast(a); })[0]), le = last ? scafOf(last) : null;
-      S.modal = { type: 'smats', folder: f, t: null, loc: '', kind: '', len: le ? scafNum(le.len) : '183', n: '', h: le ? scafNum(le.h) : '173', from: '1', to: '', total: '', lad: '', note: '', ask: false, busy: false, err: '', kept: [], removed: [], newPhotos: [], big: '' };
+      S.modal = { type: 'smats', folder: f, t: null, loc: '', kind: '', len: le ? scafNum(le.len) : '183', n: '', h: le ? scafNum(le.h) : '173', from: '1', to: '', total: '', lad: '', rows: '', note: '', ask: false, busy: false, err: '', kept: [], removed: [], newPhotos: [], big: '' };
       renderModal(); return;
     }
     S.modal = f === MAT_REBAR ? { type: 'smatr', folder: f, t: null, size: 0, shape: '直', d0: '', d1: '', d2: '', qty: '', note: '', ask: false, busy: false, err: '' }
@@ -4708,7 +4756,7 @@ var ACT = {
     if (!t.canEdit) { S.modal = { type: 'smatv', t: t, kept: (t.photos || []).slice(), newPhotos: [], big: '' }; renderModal(); return; }   // 別人寫的：只能看
     var se = hasScaf() ? scafOf(t) : null;
     if (se) {   // 施工架（踏板×框架）
-      S.modal = { type: 'smats', folder: t.folder, t: t, kind: se.kind, len: scafNum(se.len), n: String(se.n), h: scafNum(se.h), from: String(se.from), to: String(se.to), total: se.total ? String(se.total) : '', lad: se.lad === '' ? '' : String(se.lad), note: t.note || '', ask: false, busy: false, err: '' };
+      S.modal = { type: 'smats', folder: t.folder, t: t, kind: se.kind, len: scafNum(se.len), n: String(se.n), h: scafNum(se.h), from: String(se.from), to: String(se.to), total: se.total ? String(se.total) : '', lad: se.lad === '' ? '' : String(se.lad), rows: se.rows > 1 ? String(se.rows) : '', note: t.note || '', ask: false, busy: false, err: '' };
     } else if (t.folder === MAT_REBAR) {
       var p = String(t.spec || '').split('|'), sh = rebarShape(p[1]) || REBAR_SHAPES[0], d = String(p[2] || '').split(sh.s);
       S.modal = { type: 'smatr', folder: t.folder, t: t, size: Number(p[0]) || 0, shape: sh.n, d0: d[0] || '', d1: d[1] || '', d2: d[2] || '', qty: t.qty, note: t.note || '', ask: false, busy: false, err: '' };
