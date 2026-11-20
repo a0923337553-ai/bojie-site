@@ -449,7 +449,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/21e';
+var WEB_VERSION = '11/21f';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -2895,6 +2895,9 @@ function matSortHtml() {
 // 一筆的規格記在 spec：S|排法|踏板長度|片數|框架高度|從第幾層|到第幾層|這一側總共幾層(0＝自動)|梯幾支；品名、面積（數量）、單位 m² 是收件服務照規格寫的。
 // App 的 SiteScaf.kt 是同一套（scafOf／scafSpec／scafArea／畫法）。
 var SCAF = '施工架', SCAF_KINDS = [['', '一般（一排）'], ['stair', '樓梯（＋梯）'], ['lift', '電梯（並排）']];
+// 新增一筆施工架時「位置」下面固定給點的六個（使用者 2026-11-21 圈了那一排：「改成東南西北樓梯電梯」）：不再列「這個工地寫過的位置」。
+// 字照他自己寫的（東側、南側…）；別的位置（3F 女兒牆…）自己打。App 的 Scaf.LOCS 是同一份。
+var SCAF_LOCS = ['東側', '南側', '西側', '北側', '樓梯', '電梯'];
 function hasScaf() { return (!!S.s && Number(S.s.version) >= 56) || (!!S.mat && Number(S.mat.ver) >= 56); }
 /** 這一筆的施工架規格 → {kind, len, n, h, from, to, total, lad}；不是（舊的寫法、壁拉桿、別的資料夾）回 null */
 function scafOf(m) {
@@ -3043,11 +3046,11 @@ function scafFigHtml(m) {
 }
 /** 新增／改一筆施工架（踏板×框架）：位置、排法、踏板、框架、範圍、這一側總共幾層、（樓梯）梯幾支、備註、照片 */
 function scafModal(m) {
-  var t = m.t, locs = matLocs(), cur = String(m.loc || '').trim();
+  var t = m.t, locs = SCAF_LOCS, cur = String(m.loc || '').trim();
   // 一格：上面小字、下面輸入框（兩格並排一樣寬）
   function fld(label, key, max, ph) { return '<div><div class="fl">' + label + '</div><input type="text" inputmode="decimal" data-f="m.' + key + '" maxlength="' + max + '"' + (ph ? ' placeholder="' + ph + '"' : '') + ' value="' + esc(m[key]) + '"></div>'; }
   var h = '<h3>📁 施工架：' + (t ? '改這一筆' : '新增一筆') + '</h3>' +
-    locLabel('位置（要寫）') + '<input type="text" data-f="m.loc" maxlength="40" placeholder="例：東側、樓梯、電梯" value="' + esc(m.loc || '') + '">' +
+    '<div class="label">位置（要寫）</div><input type="text" data-f="m.loc" maxlength="40" placeholder="點下面的，或自己打" value="' + esc(m.loc || '') + '">' +
     locTiles(locs, cur) +
     // 排法三格一樣大；數字欄位兩欄、每格一樣寬（原本「一片[ ]公分×[ ]片」「第[ ]層～第[ ]層」每一排的格子位置、寬度都不一樣）
     '<div class="label" style="margin-top:10px">排法</div>' + tgrid(3, SCAF_KINDS.map(function (k) { var a = twoLines(k[1]); return tcell('msmskind', k[0] || 'row', a[0], a[1], (m.kind || '') === k[0]); }).join('')) +
