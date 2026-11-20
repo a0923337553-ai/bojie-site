@@ -49,6 +49,18 @@ button { font-family:inherit; cursor:pointer; color:inherit; }
 .chip { border:1.5px solid var(--line); background:#fff; border-radius:18px; padding:7px 14px; font-size:16px; white-space:nowrap; flex:none; }
 .chip.on { background:var(--teal); border-color:var(--teal); color:#fff; font-weight:bold; }
 .chip.small { padding:5px 11px; font-size:14.5px; }
+/* 匯出視窗「要匯出哪些」：整排的「全部」＋ 3×2 一樣大的格子（使用者 2026-11-21「排版要漂亮」：原本一顆一顆長短不一、排得亂） */
+.xall, .xcell { border:1.5px solid var(--line); background:#fff; color:var(--ink); border-radius:14px; margin:0; }
+.xall { display:block; width:100%; font-size:16.5px; font-weight:bold; padding:11px 0; }
+.xgrid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; margin-top:8px; }
+.xnote { margin-top:12px; font-size:14.5px; line-height:1.55; color:var(--muted); }
+.xnote b { display:inline-block; min-width:46px; color:var(--ink); }
+.xcell { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:9px 2px; min-height:60px; }
+.xcell b { font-size:16.5px; line-height:1.2; white-space:nowrap; }
+.xcell span { font-size:13px; color:var(--muted); line-height:1.2; }
+.xall.on, .xcell.on { background:var(--teal); border-color:var(--teal); color:#fff; }
+.xcell.on span { color:#fff; opacity:.9; }
+.xcell:disabled { opacity:.38; }
 .chip.add { background:var(--todo); border-color:var(--todo); color:#fff; font-weight:bold; }
 .chip.addl { background:#eef3fa; border-color:#b9c8de; color:var(--navy); font-weight:bold; }
 .chip[data-lp] { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
@@ -421,7 +433,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/21a';
+var WEB_VERSION = '11/21b';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -3073,11 +3085,14 @@ function smatExportModal(m) {
   if (m.done) return h + '<div style="font-size:16px;line-height:1.6">✅ 匯出好了：<b>' + esc(m.done) + '</b><br>在手機的「下載」（iPhone 是「檔案」App 的「下載項目」）。</div><div class="btns"><button data-act="mclose">關閉</button></div>';
   var v2 = hasMatExport2(), items = (S.mat && S.mat.items) || [];
   if (v2) {
-    h += '<div class="label">要匯出哪些？</div><div class="chips">' + chip('msmxpart', '', '全部 ' + items.length, !m.parts, true) + MAT_PARTS.map(function (p) {
-      var n = items.filter(function (x) { return matPartOf(x) === p[0]; }).length;
-      return n ? chip('msmxpart', p[0], p[1] + ' ' + n, !!m.parts && m.parts.indexOf(p[0]) >= 0, true) : '';
-    }).join('') + '</div>';
-    h += '<div class="sub" style="font-size:14.5px;line-height:1.5;margin-top:8px">照片會放在檔案裡。Excel：表頭有 ▼ 的欄可以篩選（那一欄有兩種以上不同的資料才有），點清單上的小張照片會跳到大張；PDF：一頁一張照片。</div>';
+    // 整排的「全部」＋ 六個資料夾固定排 3×2、每格一樣大（名稱＋幾筆；沒有東西的變淡、不能點）——使用者 2026-11-21「排版要漂亮」
+    h += '<div class="label">要匯出哪些？（可以點好幾個）</div>' +
+      '<button class="xall' + (!m.parts ? ' on' : '') + '" data-act="msmxpart" data-v="">' + (!m.parts ? '✓ ' : '') + '全部　' + items.length + ' 筆</button>' +
+      '<div class="xgrid">' + MAT_PARTS.map(function (p) {
+        var n = items.filter(function (x) { return matPartOf(x) === p[0]; }).length, on = !!m.parts && m.parts.indexOf(p[0]) >= 0;
+        return '<button class="xcell' + (on ? ' on' : '') + '" data-act="msmxpart" data-v="' + esc(p[0]) + '"' + (n ? '' : ' disabled') + '><b>' + (on ? '✓ ' : '') + esc(p[0]) + '</b><span>' + n + ' 筆</span></button>';
+      }).join('') + '</div>';
+    h += '<div class="xnote"><div><b>Excel</b>表頭 ▼ 可以篩選，點小張照片看大張</div><div><b>PDF</b>前面清單，後面一頁一張照片</div><div><b>照片</b>都放在檔案裡，有照片要等 20～40 秒</div></div>';
   } else h += '<div class="sub" style="font-size:15px;line-height:1.5">五個資料夾全部排成一張表（品名、數量、誰寫的、日期…）。要哪一種？</div>';
   if (m.busy) h += '<div style="font-size:16px;margin-top:12px">匯出中…（' + (v2 ? '有照片的話要等 20～40 秒' : '大約 10 秒') + '）</div>';
   else h += '<button class="big" style="margin-top:12px;background:#1E8E5A" data-act="msmxgo" data-v="xlsx">Excel（可以再改、算）</button>' +
