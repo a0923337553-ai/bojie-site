@@ -421,7 +421,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/20d';
+var WEB_VERSION = '11/20e';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -2995,18 +2995,42 @@ function matLeftHtml(m, mt) {
   var s = matLeftLine(m);
   return s ? '<div style="font-size:13px;font-weight:bold;color:' + (m.left === '用完' ? 'var(--red)' : '#00796B') + (mt ? ';margin-top:' + mt + 'px' : '') + '">' + esc(s) + '</div>' : '';
 }
-/** 匯出這個工地全部的（Excel／PDF）：收件服務做好傳回來，存到手機的「下載」 */
+// 匯出（收件服務第 57 版，使用者 2026-11-20「匯出的excel跟pdf都有照片可以看」「excel照片可以透過點擊照片放大看細節」「可以讓使用者選擇要匯出哪個或者全部」）：
+// 可以勾要哪幾個資料夾（施工架那一夾分「施工架」「壁拉桿」，跟收件服務 SMAT_PARTS 同一份）；照片放在檔案裡；施工架的示意圖在這裡畫成圖一起送過去。
+var MAT_PARTS = [['鋼筋', '鋼筋'], ['施工架', '施工架（踏板×框架）'], ['壁拉桿', '壁拉桿'], ['模板', '模板'], ['材料', '材料'], ['其他', '其他']];
+function hasMatExport2() { return (!!S.s && Number(S.s.version) >= 57) || (!!S.mat && Number(S.mat.ver) >= 57); }
+function matPartOf(m) { return m.folder === SCAF ? (matSub(m) === 'tie' ? '壁拉桿' : '施工架') : m.folder; }
+/** 示意圖畫成 png（base64；畫不出來回 null）：SVG → 圖 → 兩倍大的白底畫布 */
+function scafFigPng(m) {
+  return new Promise(function (ok) {
+    var e = scafOf(m); if (!e) { ok(null); return; }
+    var svg = scafSvg(scafCtx(e, String(m.loc || '').trim(), m.id), 300).replace('style="display:block;', 'style="font-family:sans-serif;display:block;'), img = new Image();
+    img.onload = function () {
+      try { var c = document.createElement('canvas'); c.width = img.width * 2; c.height = img.height * 2; var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height); ok(c.toDataURL('image/png').split(',')[1]); }
+      catch (x) { ok(null); }
+    };
+    img.onerror = function () { ok(null); };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+}
+/** 匯出這個工地的（Excel／PDF）：收件服務做好傳回來，存到手機的「下載」。m.parts＝勾了哪幾個資料夾（null＝全部） */
 function smatExportModal(m) {
   var h = '<h3>📤 匯出「' + esc(S.site) + '」的現場材料數量</h3>';
   if (m.done) return h + '<div style="font-size:16px;line-height:1.6">✅ 匯出好了：<b>' + esc(m.done) + '</b><br>在手機的「下載」（iPhone 是「檔案」App 的「下載項目」）。</div><div class="btns"><button data-act="mclose">關閉</button></div>';
-  h += '<div class="sub" style="font-size:15px;line-height:1.5">五個資料夾全部排成一張表（品名、數量、誰寫的、日期…）。要哪一種？</div>';
-  if (m.busy) h += '<div style="font-size:16px;margin-top:12px">匯出中…（大約 10 秒）</div>';
+  var v2 = hasMatExport2(), items = (S.mat && S.mat.items) || [];
+  if (v2) {
+    h += '<div class="label">要匯出哪些？</div><div class="chips">' + chip('msmxpart', '', '全部 ' + items.length, !m.parts, true) + MAT_PARTS.map(function (p) {
+      var n = items.filter(function (x) { return matPartOf(x) === p[0]; }).length;
+      return n ? chip('msmxpart', p[0], p[1] + ' ' + n, !!m.parts && m.parts.indexOf(p[0]) >= 0, true) : '';
+    }).join('') + '</div>';
+    h += '<div class="sub" style="font-size:14.5px;line-height:1.5;margin-top:8px">照片會放在檔案裡。Excel：點清單上的小張照片會跳到大張；PDF：一頁一張照片。</div>';
+  } else h += '<div class="sub" style="font-size:15px;line-height:1.5">五個資料夾全部排成一張表（品名、數量、誰寫的、日期…）。要哪一種？</div>';
+  if (m.busy) h += '<div style="font-size:16px;margin-top:12px">匯出中…（' + (v2 ? '有照片的話要等 20～40 秒' : '大約 10 秒') + '）</div>';
   else h += '<button class="big" style="margin-top:12px;background:#1E8E5A" data-act="msmxgo" data-v="xlsx">Excel（可以再改、算）</button>' +
     '<button class="big" style="background:#D9534F" data-act="msmxgo" data-v="pdf">PDF（直接看、傳給別人）</button>';
   if (m.err) h += '<div style="color:var(--red);font-size:14px;margin-top:6px">' + esc(m.err) + '</div>';
   return h + '<div class="btns"><button class="dim" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button></div>';
-}
-function smatPhotoHtml(m, edit) {
+}function smatPhotoHtml(m, edit) {
   if (!hasMatPhotos()) return '';
   var t = m.t, kept = m.kept || [], fresh = m.newPhotos || [], n = kept.length + fresh.length;
   if (!edit && !n) return '';
@@ -4542,11 +4566,25 @@ var ACT = {
   matsfromwork: function () { openMats('work'); },
   matsreload: function () { if (S.mat) { S.mat.err = ''; loadMats(); } },
   // 匯出這個工地（第 54 版）：先選 Excel／PDF → 收件服務做好傳回來 → 存到「下載」
-  matexport: function () { S.modal = { type: 'smatx', busy: false, err: '', done: '' }; renderModal(); },
+  matexport: function () { S.modal = { type: 'smatx', busy: false, err: '', done: '', parts: null }; renderModal(); },
+  // 匯出要哪幾個資料夾：點「全部」＝全部；點某一個＝勾／不勾（都不勾＝回到全部）
+  msmxpart: function (v) {
+    var m = S.modal; if (!m || m.type !== 'smatx' || m.busy) return;
+    if (!v) m.parts = null; else { var a = (m.parts || []).slice(), i = a.indexOf(v); if (i >= 0) a.splice(i, 1); else a.push(v); m.parts = a.length ? a : null; }
+    renderModal();
+  },
   msmxgo: function (fmt) {
     var m = S.modal; if (!m || m.type !== 'smatx' || m.busy) return;
     m.busy = true; m.err = ''; renderModal();
-    api('smat', { op: 'export', site: S.site, fmt: fmt === 'pdf' ? 'pdf' : 'xlsx' }).then(function (r) {
+    var req = { op: 'export', site: S.site, fmt: fmt === 'pdf' ? 'pdf' : 'xlsx' }, pre = Promise.resolve();
+    if (hasMatExport2()) {
+      if (m.parts) req.parts = m.parts.slice();
+      // 施工架的示意圖：這裡畫成圖送過去（最多 60 張）
+      var sc = ((S.mat && S.mat.items) || []).filter(function (x) { return !!scafOf(x) && (!m.parts || m.parts.indexOf('施工架') >= 0); }).slice(0, 60);
+      req.figs = {};
+      sc.forEach(function (x) { pre = pre.then(function () { return scafFigPng(x); }).then(function (b) { if (b) req.figs[x.id] = b; }); });
+    }
+    pre.then(function () { return api('smat', req); }).then(function (r) {
       var bin = atob(r.data), u8 = new Uint8Array(bin.length);
       for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
       saveBlob(new Blob([u8], { type: r.mime || 'application/octet-stream' }), r.name);
