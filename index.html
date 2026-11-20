@@ -450,7 +450,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/21j';
+var WEB_VERSION = '11/21k';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -3261,9 +3261,10 @@ function logItem(log, c) {
   var x = log.items.filter(function (i) { return canonCat(i.category) === c; })[0]; if (!x) return null;
   var people = Number(x.people) || 0, hours = x.hours || '1';
   var lines = (x.lines || []).map(function (l, i) {
-    if (l.full) return l.full;
+    var nt = String(l.note || '');   // 別家做的那一行後面註明〔川立 1車〕（2026-11-21）
+    if (l.full) return l.full + nt;
     var t = String(l.text || '').trim(); if (!t) return '';
-    return (i + 1) + '.' + t + (l.workers && l.workers.length ? '(' + l.workers.join('+') + ')' : '');
+    return (i + 1) + '.' + t + (l.workers && l.workers.length ? '(' + l.workers.join('+') + ')' : '') + nt;
   }).filter(Boolean);
   var qtyText = String(x.qtyText || '');   // 電腦（Excel）傳來、不是「人數*工時」的數量（例：2 台、2*1+2*0.625）
   // 第二組人數×工時（App 0.9.65 起，使用者 2026-11-11「工人沒有一起到場做」）：4*0.25+2*1
@@ -6039,10 +6040,13 @@ function dlLinesOf(i) {
   var src = i.lines || [];
   if (src.some(function (l) { return l && l.people !== undefined; })) return src;
   var tot = Array.isArray(i.total) ? i.total : [];
-  var ls = src.map(function (l, k) { var q = dlLineQty(tot[k]); return { text: l.text || '', workers: (l.workers || []).slice(), people: q ? q.people : 0, hours: q ? q.hours : '1' }; });
-  tot.slice(ls.length).forEach(function (s) { var q = dlLineQty(s); if (q) ls.push({ text: '', workers: [], people: q.people, hours: q.hours }); });
+  // 每個工項自己的廠商、單位（2026-11-21）：lv、lu 跟 total（或 lines）同順序，空的＝跟大項一樣；讀進來每一行都寫明自己的
+  var lv = Array.isArray(i.lv) ? i.lv : [], lu = Array.isArray(i.lu) ? i.lu : [], iv = dlIV(i), iu = dlIU(i);
+  var ls = src.map(function (l, k) { var q = dlLineQty(tot[k]); return { text: l.text || '', workers: (l.workers || []).slice(), people: q ? q.people : 0, hours: q ? q.hours : '1', vendor: lv[k] || iv, unit: lu[k] || iu }; });
+  var n0 = ls.length;
+  tot.slice(n0).forEach(function (s, k) { var q = dlLineQty(s); if (q) ls.push({ text: '', workers: [], people: q.people, hours: q.hours, vendor: lv[n0 + k] || iv, unit: lu[n0 + k] || iu }); });
   if (!ls.some(function (l) { return l.people > 0; }) && (+i.people > 0 || +i.people2 > 0)) {
-    var put = function (k, p, h) { while (ls.length <= k) ls.push({ text: '', workers: [], people: 0, hours: '1' }); ls[k].people = +p; ls[k].hours = String(h || '1'); };
+    var put = function (k, p, h) { while (ls.length <= k) ls.push({ text: '', workers: [], people: 0, hours: '1', vendor: iv, unit: iu }); ls[k].people = +p; ls[k].hours = String(h || '1'); };
     if (+i.people > 0) put(0, i.people, i.hours);
     if (+i.people2 > 0) put(+i.people > 0 ? 1 : 0, i.people2, i.hours2);
   }
@@ -6053,17 +6057,44 @@ function dlTidy(i) {
   var ls = dlLinesOf(i);
   return ls.filter(function (l) { return String(l.text || '').trim(); }).concat(ls.filter(function (l) { return !String(l.text || '').trim() && +l.people > 0; }));
 }
-function dlQty(i) { var g = dlTidy(i).filter(function (l) { return +l.people > 0; }); return g.length ? g.map(function (l) { return l.people + '*' + (l.hours || '1'); }).join('+') : String(i.qtyText || ''); }
+// ---- 每個工項自己的廠商、單位（使用者 2026-11-21「可以先選吊車再加組立，可以分開來寫」「因為有時候會同時很多廠商」；跟摺疊機 Model.kt 一樣）----
+// 大項那一格（Excel 只有一家）＝第一行那一家的數量；別家的行另外記在 lv／lu，內容後面註明〔川立 1車〕
+function dlIV(i) { return i.vendor != null ? String(i.vendor) : '柏捷'; }
+function dlIU(i) { return String(i.unit || '工'); }
+function dlLV(l) { return String(l.vendor == null ? '' : l.vendor).trim(); }
+/** 這個大項那一格是哪一家、什麼單位＝第一行的；沒有行＝大項自己記的 */
+function dlMain(i) { var f = dlTidy(i)[0]; return f && f.vendor !== undefined ? { v: dlLV(f), u: String(f.unit || dlIU(i)).trim() } : { v: dlIV(i).trim(), u: dlIU(i).trim() }; }
+function dlOther(m, l) { return l.vendor !== undefined && (dlLV(l) !== m.v || String(l.unit || m.u).trim() !== m.u); }
+function dlNum(x) { return String(Math.round(x * 100) / 100); }
+/** 別家那一行後面註明的字「〔川立 1車〕」（沒填數量＝「〔川立〕」）；同一家的＝空的 */
+function dlNote(m, l) {
+  if (!dlOther(m, l)) return '';
+  var h = parseFloat(l.hours || '1'), q = +l.people > 0 && isFinite(h) ? dlNum(+l.people * h) + String(l.unit || m.u).trim() : '';
+  return '〔' + [dlLV(l), q].filter(Boolean).join(' ') + '〕';
+}
+function dlQty(i) {
+  var m = dlMain(i), g = dlTidy(i).filter(function (l) { return +l.people > 0; });
+  return g.length ? g.filter(function (l) { return !dlOther(m, l); }).map(function (l) { return l.people + '*' + (l.hours || '1'); }).join('+') : String(i.qtyText || '');
+}
 function dlFilled(i) { return dlTidy(i).length > 0 || !!String(i.qtyText || '').trim(); }
 function dlFull(l, k) { var t = String(l.text || '').trim(); if (!t) return ''; var w = l.workers || []; return (k + 1) + '.' + t + (w.length ? '(' + w.join('+') + ')' : ''); }
 /** 存回雲端的樣子（跟摺疊機 toJson 一樣：qty、每行的 full 算好；空的行不寫） */
 function dlItemOut(i) {
   // 廠商不是柏捷：工人名字不存（2026-11-18「選擇柏捷廠商時才會出現他們的名字」）
-  var bj = isBojie(i.vendor), all = dlTidy(i), txt = all.filter(function (l) { return String(l.text || '').trim(); });
-  var g = all.filter(function (l) { return +l.people > 0; }), lm = g.length > 0, two = lm && g.length <= 2;
-  var o = { category: i.category, vendor: i.vendor || '柏捷', unit: i.unit || '工',
-    people: lm ? (two ? +g[0].people : 0) : 0, hours: lm && two ? String(g[0].hours || '1') : '1', qty: dlQty(i),
-    lines: txt.map(function (l, k) { var l2 = bj ? l : { text: l.text, workers: [] }; return { text: String(l.text).trim(), workers: l2.workers || [], full: dlFull(l2, k) }; }) };
+  var m = dlMain(i), all = dlTidy(i), txt = all.filter(function (l) { return String(l.text || '').trim(); });
+  // 舊版只認的那兩組：只放跟大項同一家的（別家的行記在 lv／lu）
+  var lm = all.some(function (l) { return +l.people > 0; }), g = all.filter(function (l) { return +l.people > 0 && !dlOther(m, l); }), two = lm && g.length <= 2 && g.length > 0;
+  var o = { category: i.category, vendor: m.v, unit: m.u || '工',
+    people: two ? +g[0].people : 0, hours: two ? String(g[0].hours || '1') : '1', qty: dlQty(i),
+    lines: txt.map(function (l, k) {
+      var l2 = isBojie(l.vendor === undefined ? m.v : l.vendor) ? l : { text: l.text, workers: [] };
+      var r = { text: String(l.text).trim(), workers: l2.workers || [], full: dlFull(l2, k) }, nt = dlNote(m, l); if (nt) r.note = nt; return r;
+    }) };
+  var each = lm ? all : txt;
+  if (each.some(function (l) { return dlOther(m, l); })) {
+    o.lv = each.map(function (l) { return l.vendor !== undefined && dlLV(l) !== m.v ? dlLV(l) : ''; });
+    o.lu = each.map(function (l) { var u = String(l.unit || m.u).trim(); return u !== m.u ? u : ''; });
+  }
   if (lm) {
     o.total = all.map(function (l) { return +l.people > 0 ? l.people + '*' + (l.hours || '1') : ''; });
     if (two && g.length === 2) { o.people2 = +g[1].people; o.hours2 = String(g[1].hours || '1'); }
@@ -6075,9 +6106,9 @@ function dlItemOut(i) {
 }
 /** 比「有沒有改」用：每一行的內容、工人、時間（雲端那份和正在編輯的算出來一樣＝沒改，不會被當成手機改過） */
 function dlItemKey(i) {
-  var all = dlTidy(i), lm = all.some(function (l) { return +l.people > 0; });
-  return JSON.stringify([i.category, i.vendor || '柏捷', i.unit || '工', lm ? '' : String(i.qtyText || ''),
-    all.map(function (l) { return [String(l.text || '').trim(), l.workers || [], +l.people || 0, +l.people > 0 ? String(l.hours || '1') : '']; })]);
+  var all = dlTidy(i), lm = all.some(function (l) { return +l.people > 0; }), m = dlMain(i);
+  return JSON.stringify([i.category, m.v, m.u || '工', lm ? '' : String(i.qtyText || ''),
+    all.map(function (l) { var o = dlOther(m, l); return [String(l.text || '').trim(), l.workers || [], +l.people || 0, +l.people > 0 ? String(l.hours || '1') : '', o ? dlLV(l) : '', o ? String(l.unit || '').trim() : '']; })]);
 }function dlMats(a) { return (a || []).filter(function (m) { return String(m.vendor || '').trim() || String(m.qty || '').trim(); }).map(function (m) { return { vendor: String(m.vendor || '').trim(), qty: String(m.qty || '').trim(), unit: String(m.unit || '').trim() }; }); }
 function dlPhotoKey(p) { return JSON.stringify([p.file, p.category, p.line || '', p.taken || '', p.src || '', p.vendor || '', p.kind || '']); }
 /** 這台改的記時間：改到的大項、天氣、材料、討論、照片；清空的大項、刪掉的照片記在 gone */
@@ -6378,14 +6409,25 @@ function dlItemPage(dl) {
 function dlLineFull(it, k) {
   var l = it.lines[k]; if (!l || !String(l.text || '').trim()) return '';
   var n = 0; for (var j = 0; j < k; j++) if (String(it.lines[j].text || '').trim()) n++;
-  return dlFull(isBojie(it.vendor) ? l : { text: l.text, workers: [] }, n);
+  return dlFull(isBojie(l.vendor === undefined ? it.vendor : l.vendor) ? l : { text: l.text, workers: [] }, n);
 }
 /** 每一行下面那一條：「1.2F 浴室牆面打底(王+吉)　＝ 2*1 工」 */
 function dlLineSum(it, k) {
   var l = it.lines[k], f = dlLineFull(it, k);
-  return (f || (k + 1) + '.（還沒寫內容）') + (+l.people > 0 ? '　＝ ' + l.people + '*' + (l.hours || '1') + ' ' + (it.unit || '工') : '　（還沒填人數）');
+  return (f || (k + 1) + '.（還沒寫內容）') + (+l.people > 0 ? '　＝ ' + l.people + '*' + (l.hours || '1') + ' ' + (l.unit || it.unit || '工') : '　（還沒填人數）');
 }
-function dlTotalText(it) { var q = dlQty(it); return '這個大項合計 ＝ ' + (q ? q + ' ' + (it.unit || '工') : '（還沒填人數）'); }
+/** 合計：同一家、同一個單位的加在一起；有別家就一家一段（2026-11-21） */
+function dlTotalText(it) {
+  var g = {}, order = [];
+  dlLinesOf(it).forEach(function (l) {
+    if (!(+l.people > 0)) return;
+    var k = (l.vendor === undefined ? dlIV(it).trim() : dlLV(l)) + '\u0001' + String(l.unit || dlIU(it)).trim();
+    if (!g[k]) { g[k] = []; order.push(k); } g[k].push(l.people + '*' + (l.hours || '1'));
+  });
+  if (!order.length) return '這個大項合計 ＝ ' + (it.qtyText ? it.qtyText + ' ' + dlIU(it) : '（還沒填人數）');
+  if (order.length === 1) return '這個大項合計 ＝ ' + g[order[0]].join('+') + ' ' + order[0].split('\u0001')[1];
+  return '這個大項今天有 ' + order.length + ' 種：' + order.map(function (k) { var p = k.split('\u0001'); return (p[0] || '（沒寫廠商）') + ' ' + g[k].join('+') + ' ' + p[1]; }).join('；') + '。Excel 那一格寫第 1 行那一家，別家的寫在那一行內容後面〔廠商 數量〕。';
+}
 /** 照片連的是那一行的全文：改了字、換了行號，照片跟著那一行走（拍照前、關掉這頁時做） */
 function dlRelink(dl) {
   var it = dl.cur; if (!it) return;
@@ -6400,23 +6442,25 @@ function dlItemEditor(dl, c) {
   // 工時那排：現在填的不在清單裡（拿掉了、電腦傳來的）也照樣顯示（跟摺疊機一樣）
   var hrs = function (cur) { cur = String(cur || ''); return cur && L.hours.indexOf(cur) < 0 ? L.hours.concat([cur]) : L.hours; };
   var h = '<div class="card dled">' + dlListErr(dl);
-  // 廠商、單位＝這個大項自己的清單（使用者 2026-11-21「放樣這些劃掉」）：在這裡加、拿掉只改這個大項
-  var kv = dlOwnKind('vendors', it.category), ku = dlOwnKind('units', it.category);
-  h += '<div class="note" style="margin:0 0 8px">廠商、單位只改「' + esc(canonCat(it.category)) + '」，別的大項不變。</div>';
-  h += '<div class="label">廠商</div><input type="text" data-df="iv" value="' + esc(it.vendor) + '" maxlength="30"><div class="chips" style="margin-top:6px">' + dlKindList(L, kv).map(function (v) { return dlChip('dliv', v, v, it.vendor === v, kv); }).join('') + dlAddChip(kv, 'iv') + '</div>';
-  h += '<div class="label" style="margin-top:10px">單位</div><div class="chips">' + dlKindList(L, ku).map(function (u) { return dlChip('dliu', u, u, it.unit === u, ku); }).join('') + dlAddChip(ku, 'iu') + '</div>';
+  // 廠商那一排＝這個案子、這個大項自己的清單；單位那一排＝這個大項自己的（使用者 2026-11-21「放樣這些劃掉」「不一定每個案子廠商會相同」）
+  var kv = dlOwnKind('vendors', it.category, dl.site), ku = dlOwnKind('units', it.category);
   // 2026-11-18：細項（每一行選一個，寫成「【泥作】…」）；工人名字只有廠商是柏捷才點
-  // 2026-11-19（②A）：每一行工作內容都獨立：自己的時間（人數×工時）、自己的照片；上面那塊「人數×工時」「第二組」搬進每一行
-  var subs = subsOf(it.category), bj = isBojie(it.vendor), photos = (dl.e.photos || []).filter(function (p) { return p.category === c; });
-  h += '<div class="note" style="margin-top:10px">工作內容（最多 3 行，跟 Excel 一樣）：每一行有自己的時間和照片。' + (bj ? '點名字＝誰做的。' : '廠商不是柏捷：不用點工人名字。') + '</div></div>';
+  // 2026-11-19（②A）：每一行工作內容都獨立：自己的時間（人數×工時）、自己的照片
+  // 2026-11-21：每一行是一個工項，再多自己的廠商、單位（「可以先選吊車再加組立，可以分開來寫」）
+  var subs = subsOf(it.category), photos = (dl.e.photos || []).filter(function (p) { return p.category === c; });
+  h += '<div class="note" style="margin:0">每一行是一個工項：自己的細項、廠商、單位、時間和照片（最多 3 行，跟 Excel 一樣）。每一排都可以按「＋ 新增」加新的、長按拿掉。</div></div>';
   it.lines.forEach(function (l, k) {
-    var sp = subs.length ? splitSub(it.category, l.text) : { sub: '', text: l.text };
+    var sp = subs.length ? splitSub(it.category, l.text) : { sub: '', text: l.text }, bj = isBojie(l.vendor);
     var shots = l.full0 ? photos.filter(function (p) { return p.line === l.full0; }) : [];
     h += '<div class="card mblock"><b style="font-size:17px;color:var(--navy)">第 ' + (k + 1) + ' 行</b>';
     if (subs.length) h += '<div class="subchips" style="margin:6px 0"><div class="label">細項</div><div class="chips">' +
       subs.map(function (x) { return chip('dlisub', k + '|' + x, x, sp.sub === x, true); }).join('') + (isOwner() ? '<button class="chip small" data-act="dlisubadd" data-v="' + k + '" style="border-style:dashed">＋ 新增</button>' : '') + '</div></div>';
+    h += '<div class="subchips" style="margin:6px 0;background:#F4F7FB"><div class="label">廠商</div><input type="text" data-df="lv.' + k + '" value="' + esc(l.vendor || '') + '" maxlength="30">' +
+      '<div class="chips" style="margin-top:6px">' + dlKindList(L, kv).map(function (v) { return dlChip('dllv', k + '|' + v, v, l.vendor === v, kv); }).join('') + dlAddChip(kv, 'lv.' + k) + '</div>' +
+      '<div class="label" style="margin-top:8px">單位</div><div class="chips">' + dlKindList(L, ku).map(function (u) { return dlChip('dllu', k + '|' + u, u, l.unit === u, ku); }).join('') + dlAddChip(ku, 'lu.' + k) + '</div></div>';
     h += '<input type="text" data-df="il.' + k + '" value="' + esc(sp.text) + '" placeholder="例：' + (subs.length ? '2F 浴室牆面打底' : '地梁綁紮（A 區）') + '" maxlength="80" style="margin-top:6px">';
     if (bj) h += '<div class="chips" style="margin-top:4px">' + L.workers.map(function (w) { return dlChip('dliw', k + '|' + w, w, (l.workers || []).indexOf(w) >= 0, 'workers'); }).join('') + dlAddChip('workers', 'iw.' + k) + '</div>';
+    else h += '<div class="note" style="margin-top:4px">廠商不是柏捷：不用點工人名字。</div>';
     h += '<div class="label" style="margin-top:8px">這一行的時間（人數 × 工時）</div><div class="row" style="gap:6px;flex-wrap:wrap"><input type="number" inputmode="numeric" min="0" max="99" data-df="lp.' + k + '" value="' + (+l.people || '') + '" placeholder="人數" style="max-width:90px"><span>×</span>' +
       hrs(l.hours).map(function (x) { return dlChip('dllh', k + '|' + x, x, String(l.hours || '1') === x, 'hours'); }).join('') + dlAddChip('hours', 'lh.' + k) + '</div>';
     h += '<div data-lsum="' + k + '" style="margin-top:6px;background:#EEF3FA;border-radius:8px;padding:5px 9px;font-weight:bold;color:var(--navy);font-size:15px">' + esc(dlLineSum(it, k)) + '</div>';
@@ -6433,13 +6477,14 @@ function dlItemEditor(dl, c) {
 }/** 材料／機具、與業主建築師討論（跟摺疊機一樣同一頁） */
 function dlMatsPage(dl) {
   var e = dl.e, L = dl.lists, mats = e.materials || [];
+  var km = dlOwnKind('vendors', DL_MATS, dl.site);   // 廠商＝這個案子材料／機具自己的清單（2026-11-21）；單位照舊共用
   var h = dlHead(dl, '材料/機具、討論', true) + '<div class="wrap form">';
   h += '<div class="card">' + dlListErr(dl) + '<div class="label">材料／機具（最多 9 筆）' + (e.materialsSrc === '電腦' ? PC_TAG : '') + '</div>';
   mats.forEach(function (m, i) {
     h += '<div class="mat"><input type="text" style="flex:1.5" data-df="mat.' + i + '.vendor" value="' + esc(m.vendor) + '" placeholder="廠商">' +
       '<input type="text" style="flex:.8" inputmode="decimal" data-df="mat.' + i + '.qty" value="' + esc(m.qty) + '" placeholder="數量">' +
       '<input type="text" style="flex:.7" data-df="mat.' + i + '.unit" value="' + esc(m.unit) + '" placeholder="單位"></div>' +
-      '<div class="chips" style="margin-bottom:4px">' + L.vendors.map(function (v) { return dlChip('dlmv', i + '|' + v, v, m.vendor === v, 'vendors'); }).join('') + dlAddChip('vendors', 'mv.' + i) + '</div>' +
+      '<div class="chips" style="margin-bottom:4px">' + dlKindList(L, km).map(function (v) { return dlChip('dlmv', i + '|' + v, v, m.vendor === v, km); }).join('') + dlAddChip(km, 'mv.' + i) + '</div>' +
       '<div class="chips">' + L.units.map(function (u) { return dlChip('dlmu', i + '|' + u, u, m.unit === u, 'units'); }).join('') + dlAddChip('units', 'mu.' + i) + '</div>' +
       '<button class="link red" data-act="dlmdel" data-v="' + i + '">刪掉這筆</button>';
   });
@@ -6562,13 +6607,15 @@ ACT.dlopen = function (c) {
   var it = dlItemOf(dl, c), L = dl.lists;
   // 還沒填過的大項先選哪一顆（2026-11-21，跟 App firstPick 一樣）：柏捷／工還在這個大項的清單裡就照舊；被拿掉了選清單第一個；廠商清單空的就先空著
   var pick1 = function (v, own, blankOk) { return own.indexOf(v) >= 0 ? v : own.length ? own[0] : blankOk ? '' : v; };
-  var cur = it ? dlCopy(it) : { category: c, vendor: pick1('柏捷', dlKindList(L, dlOwnKind('vendors', c)), true), unit: pick1('工', dlKindList(L, dlOwnKind('units', c)), false), people: 0, hours: L.hours.indexOf('1') >= 0 ? '1' : L.hours[0] || '1', lines: [] };
+  var cur = it ? dlCopy(it) : { category: c, vendor: pick1('柏捷', dlKindList(L, dlOwnKind('vendors', c, dl.site)), true), unit: pick1('工', dlKindList(L, dlOwnKind('units', c)), false), people: 0, hours: L.hours.indexOf('1') >= 0 ? '1' : L.hours[0] || '1', lines: [] };
   // 每一行帶自己的人數×工時（2026-11-19）：雲端那份從 total 來，以前整個大項的兩組放第 1、2 行（數量一樣）
+  // 每一行帶自己的廠商、單位（2026-11-21）：大項的＝第一行的；空白的行先跟第一行同一家
   var defH = L.hours.indexOf('1') >= 0 ? '1' : L.hours[0] || '1';
-  cur.lines = (it ? dlLinesOf(it) : []).map(function (l) { return { text: l.text || '', workers: (l.workers || []).slice(), people: +l.people || 0, hours: +l.people > 0 ? String(l.hours || '1') : defH }; });
+  if (it) { var m0 = dlMain(it); cur.vendor = m0.v; cur.unit = m0.u || '工'; }
+  cur.lines = (it ? dlLinesOf(it) : []).map(function (l) { return { text: l.text || '', workers: (l.workers || []).slice(), people: +l.people || 0, hours: +l.people > 0 ? String(l.hours || '1') : defH, vendor: l.vendor === undefined ? cur.vendor : String(l.vendor == null ? '' : l.vendor), unit: String(l.unit || cur.unit) }; });
   if (cur.lines.some(function (l) { return l.people > 0; })) { cur.people = 0; cur.people2 = 0; cur.qtyText = ''; }
-  delete cur.total; delete cur.hours2;
-  while (cur.lines.length < 3) cur.lines.push({ text: '', workers: [], people: 0, hours: defH });
+  delete cur.total; delete cur.hours2; delete cur.lv; delete cur.lu;
+  while (cur.lines.length < 3) cur.lines.push({ text: '', workers: [], people: 0, hours: defH, vendor: cur.lines.length ? cur.lines[0].vendor : cur.vendor, unit: cur.lines.length ? cur.lines[0].unit : cur.unit });
   cur.lines.forEach(function (l, k) { l.full0 = dlLineFull(cur, k); });   // 存檔那時候這一行的全文：這一行的照片連的就是它
   dl.open = c; dl.cur = cur; dl.two = false;
   dl.y = window.scrollY; dl.view = 'item'; render(); window.scrollTo(0, 0);   // 另外一頁填（跟摺疊機一樣）
@@ -6580,6 +6627,9 @@ ACT.dlclear = function () {
 };
 // 每一行的工時（2026-11-19）；這一行的拍照、相簿：先把照片連到這一行現在的全文
 ACT.dllh = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; var p = v.split('|'), l = dl.cur.lines[+p[0]]; if (!l) return; l.hours = p.slice(1).join('|'); dlTouch(); render(); };
+// 每一行（工項）自己的廠商、單位（2026-11-21）
+ACT.dllv = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; var p = v.split('|'), l = dl.cur.lines[+p[0]]; if (!l) return; l.vendor = p.slice(1).join('|'); dlTouch(); render(); };
+ACT.dllu = function (v) { var dl = S.dl; if (!dl || !dl.cur) return; var p = v.split('|'), l = dl.cur.lines[+p[0]]; if (!l) return; l.unit = p.slice(1).join('|'); dlTouch(); render(); };
 function dlLineShoot(k, cam) {
   var dl = S.dl; if (!dl || !dl.cur) return; dlRelink(dl);
   var f = dlLineFull(dl.cur, +k); if (!f) return;
@@ -6624,10 +6674,24 @@ ACT.dlmu = function (v) { var dl = S.dl, p = v.split('|'); if (!dl) return; dl.e
 var DL_KINDS = { vendors: '廠商', units: '單位', hours: '工時', workers: '工人' };
 // 每個大項自己的廠商／單位（使用者 2026-11-21「放樣這些劃掉」）：kind 寫成「vendors@放樣工程」，清單在 dl.lists.own；
 // 還沒分開的大項＝大家共用的那一份。在大項裡加、拿掉只改那個大項（寫法跟 App CustomLists.addIn／removeIn 一樣）；材料／機具那一排還是共用的
+// 廠商再照案子分（同一天：「不一定每個案子廠商會相同」「該案新增的廠商不會不見除非刪除」）：kind＝「vendors@放樣工程@品基」；
+// 這個案子還沒有自己的＝先照大項那一份（vendors@放樣工程）＝再沒有就共用的。材料／機具那一頁的廠商當成大項「材料機具」存。
+var DL_MATS = '材料機具';
 function dlKindBase(kind) { return String(kind || '').split('@')[0]; }
-function dlKindCat(kind) { var i = String(kind || '').indexOf('@'); return i > 0 ? String(kind).slice(i + 1) : ''; }
-function dlOwnKind(kind, cat) { return kind + '@' + canonCat(cat); }
-function dlKindList(L, kind) { var o = dlKindCat(kind) && L && L.own ? L.own[kind] : null; return o || (L && L[dlKindBase(kind)]) || []; }
+function dlKindCat(kind) { return String(kind || '').split('@')[1] || ''; }
+function dlKindSite(kind) { return String(kind || '').split('@').slice(2).join('@'); }
+function dlOwnKind(kind, cat, site) { return kind + '@' + canonCat(cat) + (site ? '@' + site : ''); }
+function dlKindList(L, kind) {
+  var own = (L && L.own) || {}, cat = dlKindCat(kind), base = dlKindBase(kind);
+  return (cat && own[kind]) || (cat && own[base + '@' + cat]) || (L && L[base]) || [];
+}
+/** 視窗上怎麼叫這一排：「品基・放樣工程」「放樣工程」「品基的材料／機具」 */
+function dlKindLabel(kind) { var c = dlKindCat(kind), s = dlKindSite(kind); return c === DL_MATS ? (s ? s + '的' : '') + '材料／機具' : (s ? s + '・' : '') + c; }
+function dlKindNote(kind) {
+  var c = dlKindCat(kind), s = dlKindSite(kind);
+  if (c === DL_MATS) return '只改這個案子的材料／機具，別的案子、各大項的廠商不變。';
+  return s ? '只改「' + s + '」這個案子的「' + c + '」，別的案子、別的大項不變。' : '只改「' + c + '」，別的大項不變。';
+}
 function dlChip(act, v, label, on, kind) {
   return '<button class="chip small' + (on ? ' on' : '') + '" data-act="' + act + '" data-v="' + esc(v) + '" data-lp="' + esc(kind) + '" data-lv="' + esc(label) + '">' + esc(label) + '</button>';
 }
@@ -6638,19 +6702,19 @@ function dlAddNote(m) {
   var num = m.kind === 'hours', t = String(m.name || '').trim(), cat = dlKindCat(m.kind), dup = t && S.dl && S.dl.lists && dlKindList(S.dl.lists, m.kind).indexOf(num ? String(+t) : t) >= 0;
   if (num && t && !dlAddOk(m)) return '工時要打數字，例如 0.25、1.5';
   var rm = '不要的：長按那個名字' + (IOS ? '' : '（電腦也可以按右鍵）') + '就能拿掉。';
-  if (cat) return dup ? '「' + cat + '」已經有了，按「加入」就是選它。' : '只加在「' + cat + '」，別的大項不會多出來；摺疊機同步後也會有。' + rm;
+  if (cat) return dup ? '「' + dlKindLabel(m.kind) + '」已經有了，按「加入」就是選它。' : dlKindNote(m.kind).replace(/^只改/, '只加在').replace(/不變。$/, '不會多出來。') + '摺疊機同步後也會有。' + rm;
   return dup ? '清單已經有了，按「加入」就是選它。' : '加了以後每一天、每個工地都會出現；摺疊機同步後也會有。' + rm;
 }
 function dlAddModal(m) {
   var num = m.kind === 'hours', cat = dlKindCat(m.kind);
-  return '<h3>' + (cat ? '「' + esc(cat) + '」' : '') + '新增' + DL_KINDS[dlKindBase(m.kind)] + '</h3>' +
+  return '<h3>' + (cat ? '「' + esc(dlKindLabel(m.kind)) + '」' : '') + '新增' + DL_KINDS[dlKindBase(m.kind)] + '</h3>' +
     '<input type="text" id="dladdin" data-f="m.name" maxlength="' + (dlKindBase(m.kind) === 'vendors' ? 30 : 12) + '"' + (num ? ' inputmode="decimal"' : '') + ' enterkeyhint="done" autocomplete="off" placeholder="' + (num ? '例如 0.25、1.5' : '輸入名稱') + '" value="' + esc(m.name) + '">' +
     '<div class="note" id="mmsg" style="margin-top:6px">' + esc(dlAddNote(m)) + '</div>' +
     '<button class="big" style="margin-top:12px" id="msave" data-act="dladdok"' + (dlAddOk(m) ? '' : ' disabled') + '>加入</button><button class="ghost" data-act="mclose">取消</button>';
 }
 function dlRmModal(m) {
   var cat = dlKindCat(m.kind);
-  return '<h3>' + (cat ? '「' + esc(cat) + '」拿掉' : '從清單拿掉') + '「' + esc(m.name) + '」？</h3><div style="font-size:15.5px;line-height:23px;margin:4px 0 14px">' + (cat ? '只改「' + esc(cat) + '」，別的大項不變。' : '') + '已經寫進日誌的不會改，只是以後這排不再出現。要再用時按「＋ 新增」加回來就好。</div>' +
+  return '<h3>' + (cat ? '「' + esc(dlKindLabel(m.kind)) + '」拿掉' : '從清單拿掉') + '「' + esc(m.name) + '」？</h3><div style="font-size:15.5px;line-height:23px;margin:4px 0 14px">' + (cat ? esc(dlKindNote(m.kind)) : '') + '已經寫進日誌的不會改，只是以後這排不再出現。要再用時按「＋ 新增」加回來就好。</div>' +
     '<button class="ghost red" data-act="dlrmok">拿掉</button><button class="ghost" data-act="mclose">不要</button>';
 }
 ACT.dladd = function (v) {
@@ -6673,7 +6737,8 @@ ACT.dladdok = function () {
 function dlPickAdded(dl, ctx, v) {
   if (String(ctx).indexOf('lh.') === 0) { var lhl = dl.cur && dl.cur.lines[+String(ctx).split('.')[1]]; if (lhl) lhl.hours = v; return; }   // 每一行的工時（2026-11-19）
   var p = String(ctx || '').split('.'), it = dl.cur, mats = (dl.e && dl.e.materials) || [];
-  if (p[0] === 'iv' && it) it.vendor = v;
+  if ((p[0] === 'lv' || p[0] === 'lu') && it) { var ll = it.lines[+p[1]]; if (!ll) return; ll[p[0] === 'lv' ? 'vendor' : 'unit'] = v; }
+  else if (p[0] === 'iv' && it) it.vendor = v;
   else if (p[0] === 'iu' && it) it.unit = v;
   else if (p[0] === 'ih' && it) it.hours = v;
   else if (p[0] === 'ih2' && it) it.hours2 = v;
@@ -7500,6 +7565,7 @@ document.addEventListener('input', function (ev) {
   if (k === 'ntext' || k === 'nother') { if (dl.note) { if (k === 'ntext') { dl.note.text = v; dl.note.err = ''; } else dl.note.other = v; } return; }   // 記一筆：按「存」才算
   if (k === 'disc') dl.e.discussion = v;
   else if (k === 'iv' && dl.cur) dl.cur.vendor = v;
+  else if (k.indexOf('lv.') === 0 && dl.cur) { var lvl = dl.cur.lines[+k.split('.')[1]]; if (lvl) lvl.vendor = v; }   // 這一行的廠商（2026-11-21）
   else if (k.indexOf('lp.') === 0 && dl.cur) { var lpl = dl.cur.lines[+k.split('.')[1]]; if (lpl) { lpl.people = Math.max(0, Math.min(99, parseInt(v, 10) || 0)); if (lpl.people > 0) { dl.cur.people = 0; dl.cur.people2 = 0; dl.cur.qtyText = ''; } } }
   else if (k.indexOf('il.') === 0 && dl.cur) {
     // 有細項的大項：框裡打的是細項後面的字，【細項】留著（2026-11-18）
