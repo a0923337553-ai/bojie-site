@@ -421,7 +421,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/20e';
+var WEB_VERSION = '11/20f';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -3023,7 +3023,7 @@ function smatExportModal(m) {
       var n = items.filter(function (x) { return matPartOf(x) === p[0]; }).length;
       return n ? chip('msmxpart', p[0], p[1] + ' ' + n, !!m.parts && m.parts.indexOf(p[0]) >= 0, true) : '';
     }).join('') + '</div>';
-    h += '<div class="sub" style="font-size:14.5px;line-height:1.5;margin-top:8px">照片會放在檔案裡。Excel：點清單上的小張照片會跳到大張；PDF：一頁一張照片。</div>';
+    h += '<div class="sub" style="font-size:14.5px;line-height:1.5;margin-top:8px">照片會放在檔案裡。Excel：表頭的 ▼ 可以篩選，點清單上的小張照片會跳到大張；PDF：一頁一張照片。</div>';
   } else h += '<div class="sub" style="font-size:15px;line-height:1.5">五個資料夾全部排成一張表（品名、數量、誰寫的、日期…）。要哪一種？</div>';
   if (m.busy) h += '<div style="font-size:16px;margin-top:12px">匯出中…（' + (v2 ? '有照片的話要等 20～40 秒' : '大約 10 秒') + '）</div>';
   else h += '<button class="big" style="margin-top:12px;background:#1E8E5A" data-act="msmxgo" data-v="xlsx">Excel（可以再改、算）</button>' +
