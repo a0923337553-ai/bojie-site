@@ -433,7 +433,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/21b';
+var WEB_VERSION = '11/21c';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -3081,7 +3081,8 @@ function scafFigPng(m) {
 }
 /** 匯出這個工地的（Excel／PDF）：收件服務做好傳回來，存到手機的「下載」。m.parts＝勾了哪幾個資料夾（null＝全部） */
 function smatExportModal(m) {
-  var h = '<h3>📤 匯出「' + esc(S.site) + '」的現場材料數量</h3>';
+  // 標題固定一行，工地寫在下面（工地名字長的時候標題才不會折成兩行；使用者 2026-11-21「排版要漂亮」）
+  var h = '<h3>📤 匯出現場材料數量</h3><div style="font-size:15.5px;font-weight:bold;margin:-4px 0 10px">工地：' + esc(S.site) + '</div>';
   if (m.done) return h + '<div style="font-size:16px;line-height:1.6">✅ 匯出好了：<b>' + esc(m.done) + '</b><br>在手機的「下載」（iPhone 是「檔案」App 的「下載項目」）。</div><div class="btns"><button data-act="mclose">關閉</button></div>';
   var v2 = hasMatExport2(), items = (S.mat && S.mat.items) || [];
   if (v2) {
@@ -3092,7 +3093,7 @@ function smatExportModal(m) {
         var n = items.filter(function (x) { return matPartOf(x) === p[0]; }).length, on = !!m.parts && m.parts.indexOf(p[0]) >= 0;
         return '<button class="xcell' + (on ? ' on' : '') + '" data-act="msmxpart" data-v="' + esc(p[0]) + '"' + (n ? '' : ' disabled') + '><b>' + (on ? '✓ ' : '') + esc(p[0]) + '</b><span>' + n + ' 筆</span></button>';
       }).join('') + '</div>';
-    h += '<div class="xnote"><div><b>Excel</b>表頭 ▼ 可以篩選，點小張照片看大張</div><div><b>PDF</b>前面清單，後面一頁一張照片</div><div><b>照片</b>都放在檔案裡，有照片要等 20～40 秒</div></div>';
+    h += '<div class="xnote"><div><b>Excel</b>可以篩選，點照片看大張</div><div><b>PDF</b>清單＋一頁一張照片</div><div><b>照片</b>有照片要等 20～40 秒</div></div>';
   } else h += '<div class="sub" style="font-size:15px;line-height:1.5">五個資料夾全部排成一張表（品名、數量、誰寫的、日期…）。要哪一種？</div>';
   if (m.busy) h += '<div style="font-size:16px;margin-top:12px">匯出中…（' + (v2 ? '有照片的話要等 20～40 秒' : '大約 10 秒') + '）</div>';
   else h += '<button class="big" style="margin-top:12px;background:#1E8E5A" data-act="msmxgo" data-v="xlsx">Excel（可以再改、算）</button>' +
