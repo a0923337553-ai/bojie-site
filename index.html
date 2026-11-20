@@ -444,7 +444,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/21g';
+var WEB_VERSION = '11/21h';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -804,7 +804,7 @@ function tcell(act, v, title, sub, on) {
 }
 /** 名稱拆成兩行：「工作筋-馬騎筋」→ [工作筋, 馬騎筋]、「梁箍筋(一組)」「一般（一排）」→ [梁箍筋, 一組]；短的第二行是空的（App 的 shapeTwoLines） */
 function twoLines(n) { var m = /^([^\-(（]+)[\-(（](.+?)[)）]?$/.exec(String(n)); return m ? [m[1], m[2]] : [String(n), '']; }
-/** 施工架新增一筆「位置」下面固定的六格（SCAF_LOCS）：三欄一樣大、兩排 */
+/** 「位置」下面固定的六格（SCAF_LOCS；施工架新增一筆、施工架那一夾的新增數量）：三欄一樣大、兩排 */
 function locTiles(locs, cur) { return locs.length ? tgrid(3, locs.slice(0, 6).map(function (l) { return tcell('msmloc', l, l, '', cur === l); }).join('')) : ''; }
 function chip(act, v, label, on, small) {
   return '<button class="chip' + (on ? ' on' : '') + (small ? ' small' : '') + '" data-act="' + act + '" data-v="' + esc(v) + '">' + esc(label) + '</button>';
@@ -2639,9 +2639,13 @@ function matSortByName(list) {
 function hasMatLoc() { return (!!S.s && Number(S.s.version) >= 55) || (!!S.mat && Number(S.mat.ver) >= 55); }
 // 下面原本列「這個工地寫過的位置」給人點；2026-11-21 使用者圈了材料視窗的那一排：「不需要可以拿掉」→ 拿掉了：
 // 材料、壁拉桿、模板、其他、鋼筋都只留這一格自己打。施工架（踏板×框架）的視窗是固定六個（SCAF_LOCS）。
+// 施工架那一夾的新增數量（壁拉桿那種，m.type＝smat）：下面跟施工架新增一筆一樣固定六個（SCAF_LOCS）——
+// 使用者 2026-11-21 圈了「施工架：新增數量」的那一排說「改成東南西北樓梯電梯」。
 function smatLocHtml(m) {
   if (!hasMatLoc()) return '';
-  return '<div class="label" style="margin-top:10px">位置（放哪裡、用在哪裡…可以不寫）</div><input type="text" data-f="m.loc" maxlength="40" placeholder="例：2F 版、南側、樓梯" value="' + esc(m.loc || '') + '">';
+  var six = m.type === 'smat' && m.folder === SCAF;
+  return '<div class="label" style="margin-top:10px">位置（放哪裡、用在哪裡…可以不寫）</div><input type="text" data-f="m.loc" maxlength="40" placeholder="' + (six ? '點下面的，或自己打' : '例：2F 版、南側、樓梯') + '" value="' + esc(m.loc || '') + '">' +
+    (six ? locTiles(SCAF_LOCS, String(m.loc || '').trim()) : '');
 }
 function matLocLine(m, px) { return m.loc ? '<div style="font-size:' + (px || 14.5) + 'px;font-weight:bold;color:var(--navy)">📍 ' + esc(m.loc) + '</div>' : ''; }
 
