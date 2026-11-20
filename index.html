@@ -61,6 +61,17 @@ button { font-family:inherit; cursor:pointer; color:inherit; }
 .xall.on, .xcell.on { background:var(--teal); border-color:var(--teal); color:#fff; }
 .xcell.on span { color:#fff; opacity:.9; }
 .xcell:disabled { opacity:.38; }
+/* 一樣大的格子排成幾欄（位置、單位、號數、形式、排法都用這個；使用者 2026-11-21「你的每個排版都要漂亮不要東跳西跳」：不要長短不一、自動換行的小標籤） */
+.tg { display:grid; gap:6px; margin-top:6px; }
+.tc { border:1.5px solid var(--line); background:#fff; color:var(--ink); border-radius:11px; margin:0; padding:4px 2px; min-height:38px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; overflow:hidden; }
+.tc b { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; line-height:1.25; }
+.tc span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11.5px; color:var(--muted); line-height:1.2; }
+.tc.two, .tg.tall .tc { min-height:48px; }   /* tall＝這一組有的格子是兩行：全部一樣高 */
+.tc.on { background:var(--teal); border-color:var(--teal); color:#fff; } .tc.on span { color:#fff; }
+/* 兩欄一樣寬的輸入格：上面小字寫是什麼，下面輸入框 */
+.fg { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-top:8px; }
+.fg .fl { font-size:13px; color:var(--muted); margin-bottom:3px; white-space:nowrap; }
+.fg input { width:100%; box-sizing:border-box; text-align:center; font-size:19px; font-weight:bold; }
 .chip.add { background:var(--todo); border-color:var(--todo); color:#fff; font-weight:bold; }
 .chip.addl { background:#eef3fa; border-color:#b9c8de; color:var(--navy); font-weight:bold; }
 .chip[data-lp] { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
@@ -433,7 +444,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/21c';
+var WEB_VERSION = '11/21d';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -785,6 +796,16 @@ function loadFeed(fresh) {
 }
 
 // ---------- 畫面 ----------
+/** 一樣大的格子排成 cols 欄（cells＝tcell(...) 接起來的字） */
+function tgrid(cols, cells, tall) { return '<div class="tg' + (tall ? ' tall' : '') + '" style="grid-template-columns:repeat(' + cols + ',minmax(0,1fr))">' + cells + '</div>'; }
+/** 一格：title（最多一行，太長用…）、sub（第二行小字，可以沒有）；on＝選到的 */
+function tcell(act, v, title, sub, on) {
+  return '<button class="tc' + (sub ? ' two' : '') + (on ? ' on' : '') + '" data-act="' + act + '" data-v="' + esc(v) + '"><b>' + esc(title) + '</b>' + (sub ? '<span>' + esc(sub) + '</span>' : '') + '</button>';
+}
+/** 名稱拆成兩行：「工作筋-馬騎筋」→ [工作筋, 馬騎筋]、「梁箍筋(一組)」「一般（一排）」→ [梁箍筋, 一組]；短的第二行是空的（App 的 shapeTwoLines） */
+function twoLines(n) { var m = /^([^\-(（]+)[\-(（](.+?)[)）]?$/.exec(String(n)); return m ? [m[1], m[2]] : [String(n), '']; }
+/** 這個工地用過的位置：三欄一樣大，最多兩排 */
+function locTiles(locs, cur) { return locs.length ? tgrid(3, locs.slice(0, 6).map(function (l) { return tcell('msmloc', l, l, '', cur === l); }).join('')) : ''; }
 function chip(act, v, label, on, small) {
   return '<button class="chip' + (on ? ' on' : '') + (small ? ' small' : '') + '" data-act="' + act + '" data-v="' + esc(v) + '">' + esc(label) + '</button>';
 }
@@ -2628,7 +2649,7 @@ function smatLocHtml(m) {
   if (!hasMatLoc()) return '';
   var locs = matLocs(), cur = String(m.loc || '').trim();
   return '<div class="label" style="margin-top:10px">位置（放哪裡、用在哪裡…可以不寫）</div><input type="text" data-f="m.loc" maxlength="40" placeholder="例：2F 版、南側、樓梯" value="' + esc(m.loc || '') + '">' +
-    (locs.length ? '<div class="chips" style="margin-top:6px">' + locs.map(function (l) { return chip('msmloc', l, l, cur === l, true); }).join('') + '</div>' : '');
+    locTiles(locs, cur);
 }
 function matLocLine(m, px) { return m.loc ? '<div style="font-size:' + (px || 14.5) + 'px;font-weight:bold;color:var(--navy)">📍 ' + esc(m.loc) + '</div>' : ''; }
 
@@ -2931,7 +2952,9 @@ function scafLine(e) { return '踏板 ' + e.n + ' 片×' + scafNum(e.len) + (e.k
 /** 「面積＝（183×6）×（173×3）＝10.98 m × 5.19 m ＝ 56.99 m²」 */
 function scafAreaHtml(e) {
   var k = e.to - e.from + 1;
-  return '面積＝（' + scafNum(e.len) + '×' + e.n + '）×（' + scafNum(e.h) + '×' + k + '）＝' + scafNum(e.len * e.n / 100) + ' m × ' + scafNum(e.h * k / 100) + ' m ＝ <b style="font-size:19px;color:var(--navy)">' + scafNum(scafArea(e)) + ' m²</b>';
+  // 排成兩行（一行會折在很醜的地方；使用者 2026-11-21「你的每個排版都要漂亮不要東跳西跳」）
+  return '<div style="font-size:14px;color:var(--muted);white-space:nowrap">面積＝（' + scafNum(e.len) + '×' + e.n + '）×（' + scafNum(e.h) + '×' + k + '）</div>' +
+    '<div style="font-weight:bold;white-space:nowrap">＝' + scafNum(e.len * e.n / 100) + ' m × ' + scafNum(e.h * k / 100) + ' m ＝ <b style="font-size:19px;color:var(--navy)">' + scafNum(scafArea(e)) + ' m²</b></div>';
 }
 /** 施工架那一夾的第一層：兩個資料夾（幾筆、合計） */
 function renderScafRoot(M, list, right) {
@@ -2985,16 +3008,17 @@ function scafFigHtml(m) {
 }
 /** 新增／改一筆施工架（踏板×框架）：位置、排法、踏板、框架、範圍、這一側總共幾層、（樓梯）梯幾支、備註、照片 */
 function scafModal(m) {
-  var t = m.t, locs = matLocs(), cur = String(m.loc || '').trim(), num = 'type="text" inputmode="decimal" style="width:74px;flex:none;text-align:center;font-size:19px;font-weight:bold"';
+  var t = m.t, locs = matLocs(), cur = String(m.loc || '').trim();
+  // 一格：上面小字、下面輸入框（兩格並排一樣寬）
+  function fld(label, key, max, ph) { return '<div><div class="fl">' + label + '</div><input type="text" inputmode="decimal" data-f="m.' + key + '" maxlength="' + max + '"' + (ph ? ' placeholder="' + ph + '"' : '') + ' value="' + esc(m[key]) + '"></div>'; }
   var h = '<h3>📁 施工架：' + (t ? '改這一筆' : '新增一筆') + '</h3>' +
     '<div class="label">位置（要寫）</div><input type="text" data-f="m.loc" maxlength="40" placeholder="例：東側、樓梯、電梯" value="' + esc(m.loc || '') + '">' +
-    (locs.length ? '<div class="chips" style="margin-top:6px">' + locs.map(function (l) { return chip('msmloc', l, l, cur === l, true); }).join('') + '</div>' : '') +
-    '<div class="label" style="margin-top:10px">排法</div><div class="chips">' + SCAF_KINDS.map(function (k) { return chip('msmskind', k[0] || 'row', k[1], (m.kind || '') === k[0], true); }).join('') + '</div>' +
-    '<div class="label" style="margin-top:10px">踏板</div><div class="row" style="font-size:16px">一片 <input ' + num + ' data-f="m.len" maxlength="5" value="' + esc(m.len) + '"> 公分 × <input ' + num + ' data-f="m.n" maxlength="3" placeholder="6" value="' + esc(m.n) + '"> 片</div>' +
-    '<div class="label" style="margin-top:10px">框架</div><div class="row" style="font-size:16px">一層 <input ' + num + ' data-f="m.h" maxlength="5" value="' + esc(m.h) + '"> 公分</div>' +
-    '<div class="label" style="margin-top:10px">範圍（最下面是第 1 層）</div><div class="row" style="font-size:16px">第 <input ' + num + ' data-f="m.from" maxlength="2" placeholder="1" value="' + esc(m.from) + '"> 層 ～ 第 <input ' + num + ' data-f="m.to" maxlength="2" placeholder="3" value="' + esc(m.to) + '"> 層</div>' +
-    '<div class="row" style="font-size:16px;margin-top:8px">這一側總共 <input ' + num + ' data-f="m.total" maxlength="2" placeholder="自動" value="' + esc(m.total) + '"> 層</div><div class="note" style="margin-top:2px">不寫＝照這一側填過的最高層。</div>' +
-    (m.kind === 'stair' ? '<div class="label" style="margin-top:10px">梯</div><div class="row" style="font-size:16px"><input ' + num + ' data-f="m.lad" maxlength="2" placeholder="自動" value="' + esc(m.lad) + '"> 支<span class="sub" style="font-size:13px">（不寫＝層數−1）</span></div>' : '') +
+    locTiles(locs, cur) +
+    // 排法三格一樣大；數字欄位兩欄、每格一樣寬（原本「一片[ ]公分×[ ]片」「第[ ]層～第[ ]層」每一排的格子位置、寬度都不一樣）
+    '<div class="label" style="margin-top:10px">排法</div>' + tgrid(3, SCAF_KINDS.map(function (k) { var a = twoLines(k[1]); return tcell('msmskind', k[0] || 'row', a[0], a[1], (m.kind || '') === k[0]); }).join('')) +
+    '<div class="fg" style="margin-top:10px">' + fld('踏板一片（公分）', 'len', 5, '183') + fld('踏板幾片', 'n', 3, '6') + fld('框架一層（公分）', 'h', 5, '173') + fld('這一側總共幾層', 'total', 2, '自動') +
+    fld('從第幾層', 'from', 2, '1') + fld('到第幾層', 'to', 2, '3') + (m.kind === 'stair' ? fld('梯幾支', 'lad', 2, '自動') + '<div></div>' : '') + '</div>' +
+    '<div class="note" style="margin-top:4px">最下面是第 1 層。「總共幾層」不寫＝照這一側填過的最高層' + (m.kind === 'stair' ? '；「梯幾支」不寫＝層數−1' : '') + '。</div>' +
     '<div id="smsfig" style="background:#F3F7FA;border-radius:12px;padding:10px 6px;margin-top:10px">' + scafFigHtml(m) + '</div>' +
     '<div class="label" style="margin-top:10px">備註（可以不寫）</div><textarea data-f="m.note" maxlength="100" placeholder="例：內+外" style="min-height:48px">' + esc(m.note) + '</textarea>' + smatPhotoHtml(m, true);
   if (t) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(matWho(t)) + '</div>' +
@@ -3135,7 +3159,7 @@ function smatViewModal(m) {
     '<b style="font-size:21px;color:var(--navy);white-space:nowrap">' + esc((t.qty + ' ' + (t.unit || '')).trim()) + '</b></div>';
   if (sh) h += '<div style="background:#F3F7FA;border-radius:12px;padding:10px 4px;margin-top:8px">' + rebarFigSvg(sh.n, String(p[2] || '').split(sh.s)) + '</div>';
   var se = scafOf(t);   // 施工架：示意圖、踏板×框架、面積怎麼算的
-  if (se) h += '<div style="background:#F3F7FA;border-radius:12px;padding:10px 6px;margin-top:8px">' + scafSvg(scafCtx(se, String(t.loc || '').trim(), t.id), 300) + '<div style="font-size:14.5px;line-height:1.5;margin-top:6px;padding:0 6px">' + esc(scafLine(se)) + '<br>' + scafAreaHtml(se) + '</div></div>';
+  if (se) h += '<div style="background:#F3F7FA;border-radius:12px;padding:10px 6px;margin-top:8px">' + scafSvg(scafCtx(se, String(t.loc || '').trim(), t.id), 300) + '<div style="font-size:14.5px;line-height:1.5;margin-top:6px;padding:0 6px">' + '<div>' + esc(scafLine(se)) + '</div>' + scafAreaHtml(se) + '</div></div>';
   if (t.loc) h += '<div style="margin-top:8px">' + matLocLine(t, 16) + '</div>';
   if (t.note) h += '<div style="font-size:16px;line-height:22px;margin-top:' + (t.loc ? 2 : 8) + 'px">' + esc(t.note) + '</div>';
   h += '<div class="sub" style="margin-top:6px;font-size:13px">' + esc(matWho(t)) + '</div>' + matLeftHtml(t, 4) + smatPhotoHtml(m, false) +
@@ -3145,9 +3169,9 @@ function smatViewModal(m) {
 /** 鋼筋那一夾：新增／改一筆現場餘料（號數 #3～#11、形式、尺寸、支數；換形式＝尺寸那幾格跟著換） */
 function smatRebarModal(m) {
   var t = m.t, sh = rebarShape(m.shape) || REBAR_SHAPES[0], i;
-  var h = '<h3>📁 鋼筋：' + (t ? '改這一筆' : '新增現場餘料') + '</h3><div class="label">號數</div><div class="chips">';
-  for (i = 3; i <= 11; i++) h += chip('msmsize', String(i), '#' + i, Number(m.size) === i, true);
-  h += '</div><div class="label" style="margin-top:10px">形式</div><div class="chips">' + REBAR_SHAPES.map(function (s) { return chip('msmshape', s.n, s.n, s.n === sh.n, true); }).join('') + '</div>' +
+  var h = '<h3>📁 鋼筋：' + (t ? '改這一筆' : '新增現場餘料') + '</h3><div class="label">號數</div>', sz = '';
+  for (i = 3; i <= 11; i++) sz += tcell('msmsize', String(i), '#' + i, '', Number(m.size) === i);
+  h += tgrid(5, sz) + '<div class="label" style="margin-top:10px">形式</div>' + tgrid(4, REBAR_SHAPES.map(function (s) { var a = twoLines(s.n); return tcell('msmshape', s.n, a[0], a[1], s.n === sh.n); }).join(''), true) +
     // 形狀圖：填的數字直接標在圖上（跟電腦的現場餘料一樣）
     '<div id="smrfig" style="background:#F3F7FA;border-radius:12px;padding:10px 4px;margin-top:8px">' + rebarFigSvg(sh.n, [m.d0, m.d1, m.d2]) + '</div>' +
     '<div class="label" style="margin-top:10px">尺寸（公分）</div><div class="row" style="align-items:flex-end;gap:4px">';
@@ -3172,9 +3196,9 @@ function smatModal(m) {
   var h = '<h3>📁 ' + esc(m.folder) + '：' + (t ? '改這一筆' : '新增數量') + '</h3>' +
     '<div class="label">品名（要寫）</div><input type="text" data-f="m.name" maxlength="40" placeholder="' + ph + '" value="' + esc(m.name) + '">' +
     '<div class="label" style="margin-top:10px">數量（要寫）</div><div class="row">' +
-    '<input type="text" inputmode="decimal" data-f="m.qty" maxlength="20" placeholder="120" style="flex:1.2;min-width:0;font-size:20px;font-weight:bold" value="' + esc(m.qty) + '">' +
-    '<input type="text" id="smunit" data-f="m.unit" maxlength="10" placeholder="單位" style="flex:1;min-width:0" value="' + esc(m.unit) + '"></div>' +
-    '<div class="chips" style="margin-top:6px">' + units.map(function (u) { return chip('msmunit', u, u, m.unit === u, true); }).join('') + '</div>' + smatLocHtml(m) +
+    '<input type="text" inputmode="decimal" data-f="m.qty" maxlength="20" placeholder="120" style="flex:1.2;min-width:0;height:50px;box-sizing:border-box;font-size:20px;font-weight:bold" value="' + esc(m.qty) + '">' +
+    '<input type="text" id="smunit" data-f="m.unit" maxlength="10" placeholder="單位" style="flex:1;min-width:0;height:50px;box-sizing:border-box;font-size:18px" value="' + esc(m.unit) + '"></div>' +
+    tgrid(units.length, units.map(function (u) { return tcell('msmunit', u, u, '', m.unit === u); }).join('')) + smatLocHtml(m) +
     '<div class="label" style="margin-top:10px">' + (hasMatLoc() ? '備註（規格、怎麼算…可以不寫）' : '備註（放哪裡、規格…可以不寫）') + '</div><textarea data-f="m.note" maxlength="100" placeholder="' + (hasMatLoc() ? '例：一片 183、一層 173' : '例：1F 東側') + '" style="min-height:56px">' + esc(m.note) + '</textarea>' + smatPhotoHtml(m, true);
   if (t) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(matWho(t)) + '</div>' +
     (m.ask ? '<div style="color:var(--red);font-weight:bold;font-size:14px;margin-top:10px">確定要刪掉這一筆嗎？大家都看不到了。</div>' : '') +
