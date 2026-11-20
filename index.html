@@ -421,7 +421,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/20a';
+var WEB_VERSION = '11/20b';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -2543,8 +2543,170 @@ function natCmp(a, b) {
 }
 function matSortByName(list) {
   return list.slice().sort(function (a, b) {
-    return natCmp(String(a.name || '').trim(), String(b.name || '').trim()) || natCmp(String(a.note || '').trim(), String(b.note || '').trim()) || matLast(b) - matLast(a);
+    return natCmp(String(a.name || '').trim(), String(b.name || '').trim()) || natCmp(String(a.loc || '').trim(), String(b.loc || '').trim()) ||
+      natCmp(String(a.note || '').trim(), String(b.note || '').trim()) || matLast(b) - matLast(a);
   });
+}
+// 位置（收件服務第 55 版，使用者 2026-11-20「在備注前面新增位置的選項可以填寫」）：備註前面多一格，自己打，或點下面這個工地用過的位置（再點一次＝清掉）。
+// 有沒有這一格：登入時收件服務的版本，或讀清單時它回的 ver（收件服務剛換成第 55 版、這支手機還沒重新登入也馬上有）
+function hasMatLoc() { return (!!S.s && Number(S.s.version) >= 55) || (!!S.mat && Number(S.mat.ver) >= 55); }
+/** 這個工地用過的位置（每一夾都算），新的在前，最多 8 個 */
+function matLocs() {
+  var seen = {}, out = [];
+  ((S.mat && S.mat.items) || []).slice().sort(function (a, b) { return matLast(b) - matLast(a); }).forEach(function (x) {
+    var l = String(x.loc || '').trim(); if (l && !seen[l] && out.length < 8) { seen[l] = 1; out.push(l); }
+  });
+  return out;
+}
+function smatLocHtml(m) {
+  if (!hasMatLoc()) return '';
+  var locs = matLocs(), cur = String(m.loc || '').trim();
+  return '<div class="label" style="margin-top:10px">位置（放哪裡、用在哪裡…可以不寫）</div><input type="text" data-f="m.loc" maxlength="40" placeholder="例：2F 版、南側、樓梯" value="' + esc(m.loc || '') + '">' +
+    (locs.length ? '<div class="chips" style="margin-top:6px">' + locs.map(function (l) { return chip('msmloc', l, l, cur === l, true); }).join('') + '</div>' : '');
+}
+function matLocLine(m, px) { return m.loc ? '<div style="font-size:' + (px || 14.5) + 'px;font-weight:bold;color:var(--navy)">📍 ' + esc(m.loc) + '</div>' : ''; }
+
+// 在照片上畫記號（使用者 2026-11-20「照片我可以新增進來後可以編輯（像是框選範圍）提醒在講述哪裡」「樓梯照這樣畫」；跟 App 的 PhotoMarkDialog、fitRect、markBox、markLine、burnMarks 同一套）。
+/** 照片照比例放進 w×h（置中、不裁）：[左, 上, 寬, 高] */
+function fitRect(w, h, iw, ih) {
+  if (!(w > 0 && h > 0 && iw > 0 && ih > 0)) return [0, 0, 0, 0];
+  var s = Math.min(w / iw, h / ih);
+  return [(w - iw * s) / 2, (h - ih * s) / 2, iw * s, ih * s];
+}
+/** 手指從 (x0,y0) 拖到 (x1,y1) → 照片上的框 [左, 上, 右, 下]（0～1；超出照片的切掉）；太小的（不小心點一下）回 null */
+function markBox(x0, y0, x1, y1, r) {
+  if (!(r[2] > 0 && r[3] > 0)) return null;
+  function nx(x) { return Math.max(0, Math.min(1, (x - r[0]) / r[2])); }
+  function ny(y) { return Math.max(0, Math.min(1, (y - r[1]) / r[3])); }
+  var l = Math.min(nx(x0), nx(x1)), rt = Math.max(nx(x0), nx(x1)), t = Math.min(ny(y0), ny(y1)), b = Math.max(ny(y0), ny(y1));
+  return rt - l < 0.03 || b - t < 0.03 ? null : [l, t, rt, b];
+}
+var MARK_RED = '#E53935';
+/**
+ * 手畫的一筆：畫面上的點 [x,y,x,y…] → 照片上的點（0～1；畫到照片外面的貼在邊上）。
+ * 幾乎沒動（點一下）＝一個圓點（只留一個點）；整筆都在照片外面、沒有點回 null。
+ */
+function markLine(xy, r) {
+  if (!(r[2] > 0 && r[3] > 0) || xy.length < 2) return null;
+  var inside = false, out = [], i;
+  for (i = 0; i + 1 < xy.length; i += 2) {
+    var fx = (xy[i] - r[0]) / r[2], fy = (xy[i + 1] - r[1]) / r[3];
+    if (fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1) inside = true;
+    var x = Math.max(0, Math.min(1, fx)), y = Math.max(0, Math.min(1, fy));
+    if (out.length < 2 || out[out.length - 2] !== x || out[out.length - 1] !== y) out.push(x, y);
+  }
+  if (!inside) return null;
+  var x0 = 1, x1 = 0, y0 = 1, y1 = 0;
+  for (i = 0; i < out.length; i += 2) { x0 = Math.min(x0, out[i]); x1 = Math.max(x1, out[i]); y0 = Math.min(y0, out[i + 1]); y1 = Math.max(y1, out[i + 1]); }
+  return x1 - x0 < 0.008 && y1 - y0 < 0.008 ? [out[0], out[1]] : out;
+}
+/** 線多粗（照片上的點數）：跟著照片大小，長邊 1000 的照片大約 9；手畫的字縮成小圖也看得到 */
+function markStroke(w, h) { return Math.max(4, Math.max(w, h) / 110); }
+/** 把一筆記號畫上去：m＝{box:true, p:[左,上,右,下]}（框）或 {p:[x,y,x,y…]}（手畫的線；只有一個點＝圓點），都是 0～1；r＝照片在畫布上的位置、lw＝線寬 */
+function drawMark(g, m, r, lw) {
+  var p = m.p;
+  g.strokeStyle = MARK_RED; g.fillStyle = MARK_RED; g.lineWidth = lw; g.lineJoin = 'round'; g.lineCap = 'round';
+  if (m.box) { g.strokeRect(r[0] + p[0] * r[2], r[1] + p[1] * r[3], (p[2] - p[0]) * r[2], (p[3] - p[1]) * r[3]); return; }
+  g.beginPath();
+  if (p.length < 4) { g.arc(r[0] + p[0] * r[2], r[1] + p[1] * r[3], lw * 0.9, 0, Math.PI * 2); g.fill(); return; }
+  g.moveTo(r[0] + p[0] * r[2], r[1] + p[1] * r[3]);
+  for (var i = 2; i + 1 < p.length; i += 2) g.lineTo(r[0] + p[i] * r[2], r[1] + p[i + 1] * r[3]);
+  g.stroke();
+}
+/** 把記號畫進照片（紅色，線寬跟畫面上看到的一樣）→ 跟 shrink() 一樣的 {name, url, data}；壓到 560 KB 以下（收件服務一張最多 600 KB） */
+function burnMarks(img, marks) {
+  var w = img.naturalWidth, h = img.naturalHeight, c = document.createElement('canvas'); c.width = w; c.height = h;
+  var g = c.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+  marks.forEach(function (m) { drawMark(g, m, [0, 0, w, h], markStroke(w, h)); });
+  var q = 0.85, du = c.toDataURL('image/jpeg', q);
+  while (du.length * 3 / 4 > 560 * 1024 && q > 0.45) { q -= 0.1; du = c.toDataURL('image/jpeg', q); }
+  return { name: 'web_' + Date.now() + '_mark.jpg', url: du, data: du.split(',')[1] };
+}
+/**
+ * 滿版的畫記號畫面（蓋在視窗上面；使用者傳了一張自己手寫 1～7 標樓梯的照片「樓梯照這樣畫」）。下面選筆：
+ * 「✏️ 手畫」（預設）＝手指（滑鼠）怎麼畫就怎麼留：寫數字、畫箭頭、圈起來；「▭ 框」＝拖出一個方框。都是紅色。
+ * 復原＝拿掉最後一筆、清除＝全部拿掉；完成 → onDone(畫好的那一張 {name,url,data})；什麼都沒畫、取消＝什麼都不做。src＝那張照片（data: 網址）。
+ */
+function openMark(src, onDone) {
+  closeMark();
+  var ov = document.createElement('div'); ov.id = 'markov';
+  ov.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:99999;background:#10181F;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
+  var bt = 'margin:0;width:auto;border-radius:14px;font-weight:bold;font-size:15px;padding:7px 12px;white-space:nowrap;', seg = 'margin:0;width:auto;border:0;border-radius:0;font-weight:bold;font-size:15px;padding:7px 12px;white-space:nowrap;';
+  ov.innerHTML = '<div style="display:flex;align-items:center;gap:6px;padding:8px 8px;background:linear-gradient(90deg,var(--teal),var(--navy));color:#fff">' +
+    '<button id="mkx" style="' + bt + 'background:transparent;border:0;color:#fff;font-size:26px;padding:0 12px">‹</button>' +
+    '<div style="flex:1;min-width:0"><div style="font-size:18px;font-weight:bold">在照片上畫記號</div><div id="mkhint" style="font-size:12px;color:#DDF2F0"></div></div>' +
+    '<button id="mkok" style="' + bt + 'background:#fff;border:0;color:var(--teal);font-size:16px;padding:7px 16px">完成</button></div>' +
+    '<div id="mkbox" style="flex:1;min-height:0;position:relative;touch-action:none"><canvas id="mkcv" style="position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none"></canvas></div>' +
+    '<div style="background:#fff;padding:10px 12px 4px;display:flex;align-items:center;gap:8px">' +
+    '<div style="display:inline-flex;flex:none;border:1.5px solid ' + MARK_RED + ';border-radius:16px;overflow:hidden"><button id="mkpen" style="' + seg + '">✏️ 手畫</button><button id="mkrect" style="' + seg + '">▭ 框</button></div>' +
+    '<div style="flex:1"></div>' +
+    '<button id="mkundo" style="' + bt + 'background:#fff;border:1.5px solid var(--navy);color:var(--navy)">↩ 復原</button>' +
+    '<button id="mkclr" style="' + bt + 'background:#fff;border:1.5px solid var(--navy);color:var(--navy)">清除</button></div>' +
+    '<div id="mkn" style="background:#fff;padding:2px 12px 10px;font-size:12.5px;color:var(--muted);line-height:1.4"></div>';
+  document.body.appendChild(ov);
+  var cv = ov.querySelector('#mkcv'), box = ov.querySelector('#mkbox'), img = new Image(), marks = [], cur = null, ready = false;
+  var K = { marks: marks, img: img, boxTool: false }; MARKST = K;
+  function rect() { return fitRect(box.clientWidth, box.clientHeight, img.naturalWidth, img.naturalHeight); }
+  function draw() {
+    var d = window.devicePixelRatio || 1, w = box.clientWidth, h = box.clientHeight;
+    if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) { cv.width = Math.round(w * d); cv.height = Math.round(h * d); }
+    var g = cv.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, w, h);
+    ov.querySelector('#mkhint').textContent = K.boxTool ? '拖一下＝一個紅框' : '用手指寫、畫（數字、箭頭、圈）';
+    [['mkpen', false], ['mkrect', true]].forEach(function (o) { var b = ov.querySelector('#' + o[0]), on = K.boxTool === o[1]; b.style.background = on ? MARK_RED : '#fff'; b.style.color = on ? '#fff' : MARK_RED; });
+    ov.querySelector('#mkn').textContent = (marks.length ? '畫了 ' + marks.length + ' 筆。' : '還沒畫。') + '按「完成」會存成一張畫好記號的照片（原本那張換掉）。畫錯了按「復原」。';
+    var has = marks.length > 0;
+    ['mkundo', 'mkclr'].forEach(function (id) { var b = ov.querySelector('#' + id); b.disabled = !has; b.style.opacity = has ? 1 : 0.4; });
+    if (!ready) return;
+    var r = rect(); g.drawImage(img, r[0], r[1], r[2], r[3]);
+    // 畫面上的線寬照比例算：看起來多粗，畫進照片就是多粗
+    var lw = Math.max(2, markStroke(img.naturalWidth, img.naturalHeight) * r[2] / img.naturalWidth);
+    marks.forEach(function (m) { drawMark(g, m, r, lw); });
+    if (cur && cur.length >= 2) {   // 正在畫的那一筆（還沒放開）：淡一點
+      var live = K.boxTool ? (cur.length >= 4 ? { box: true, p: markBox(cur[0], cur[1], cur[2], cur[3], r) } : null) : { p: markLine(cur, r) };
+      if (live && live.p) { g.globalAlpha = 0.7; drawMark(g, live, r, lw); g.globalAlpha = 1; }
+    }
+  }
+  K.draw = draw;
+  function pt(e) { var b = box.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; }
+  cv.addEventListener('pointerdown', function (e) { if (!ready) return; e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (x) { } cur = pt(e); draw(); });
+  cv.addEventListener('pointermove', function (e) {
+    if (!cur) return; e.preventDefault();
+    var p = pt(e); if (K.boxTool) { cur[2] = p[0]; cur[3] = p[1]; } else cur.push(p[0], p[1]);
+    draw();
+  });
+  function up(e) {
+    if (!cur) return;
+    if (e && e.type === 'pointerup') {
+      var p = pt(e), r = rect(), m;
+      if (K.boxTool) { m = markBox(cur[0], cur[1], p[0], p[1], r); if (m) marks.push({ box: true, p: m }); }
+      else { cur.push(p[0], p[1]); m = markLine(cur, r); if (m) marks.push({ p: m }); }
+    }
+    cur = null; draw();
+  }
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  K.resize = function () { draw(); }; window.addEventListener('resize', K.resize);
+  ov.querySelector('#mkx').onclick = closeMark;
+  ov.querySelector('#mkpen').onclick = function () { K.boxTool = false; draw(); };
+  ov.querySelector('#mkrect').onclick = function () { K.boxTool = true; draw(); };
+  ov.querySelector('#mkundo').onclick = function () { marks.pop(); draw(); };
+  ov.querySelector('#mkclr').onclick = function () { marks.length = 0; draw(); };
+  ov.querySelector('#mkok').onclick = function () {
+    if (!ready || !marks.length) { closeMark(); return; }
+    var p; try { p = burnMarks(img, marks); } catch (e) { p = null; }
+    closeMark();
+    if (p) onDone(p);
+  };
+  img.onload = function () { ready = true; draw(); };
+  img.onerror = function () { closeMark(); };
+  img.src = src;
+  draw();
+}
+var MARKST = null;
+function closeMark() {
+  var ov = document.getElementById('markov');
+  if (MARKST && MARKST.resize) window.removeEventListener('resize', MARKST.resize);
+  MARKST = null;
+  if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
 }
 /** 清單怎麼排：照名稱（預設）或照時間（最新的在上面）；記在這支手機 */
 function matByName() { return (S.matSort || LS.get('matSort')) !== 'time'; }
@@ -2583,7 +2745,7 @@ function renderMats() {
   h += list.map(function (m) {
     return '<div class="row" style="padding:8px 0;align-items:center" data-act="matedit" data-v="' + esc(m.id) + '">' +
       (rebar && m.spec ? rebarFigSvg(String(m.spec).split('|')[1], null, true) : '') + '<div class="grow" style="min-width:0">' +
-      '<div style="font-size:18px;font-weight:bold;line-height:24px">' + esc(m.name) + '</div>' +
+      '<div style="font-size:18px;font-weight:bold;line-height:24px">' + esc(m.name) + '</div>' + matLocLine(m) +
       (m.note ? '<div class="sub" style="font-size:14px">' + esc(m.note) + '</div>' : '') +
       '<div style="font-size:12.5px;color:#8A9BA8">' + esc(matWho(m)) + (m.photos && m.photos.length ? '　📷 ' + m.photos.length : '') + '</div>' + matLeftHtml(m) + '</div>' +
       '<b style="font-size:19px;color:var(--navy);white-space:nowrap">' + esc((m.qty + ' ' + (m.unit || '')).trim()) + '</b>' +
@@ -2626,11 +2788,13 @@ function smatPhotoHtml(m, edit) {
   if (!edit && !n) return '';
   var box = 'position:relative;width:72px;height:72px', img = 'width:72px;height:72px;object-fit:cover;border-radius:10px;background:#EAF0F4;display:block';
   var x = 'position:absolute;top:-5px;right:-5px;width:24px;height:24px;border:0;border-radius:12px;background:rgba(38,50,56,.85);color:#fff;font-size:13px;font-weight:bold;padding:0';
-  var h = '<div class="label" style="margin-top:10px">' + (edit ? '照片（可以不放，最多 ' + MAT_MAX_PHOTOS + ' 張）' : '照片（點了看大張）') + '</div>';
+  var h = '<div class="label" style="margin-top:10px">' + (edit ? '照片（最多 ' + MAT_MAX_PHOTOS + ' 張；點照片可以畫記號）' : '照片（點了看大張）') + '</div>';
   if (m.big) {
     var bn = /^n:/.test(m.big) ? fresh[Number(m.big.slice(2))] : null;
     h += '<div data-act="msmpview" data-v="" style="margin-bottom:8px;border-radius:10px;overflow:hidden;background:#EAF0F4;min-height:80px">' +
       (bn ? '<img src="' + bn.url + '" style="width:100%;display:block" alt="">' : '<img data-sid="' + esc(t.id + '|' + m.big) + '" style="width:100%;display:block" alt="">') + '</div>';
+    // 可以改的時候：在這一張上面畫記號（使用者 2026-11-20「提醒在講述哪裡」「樓梯照這樣畫」）
+    if (edit) h += '<button class="ghost" style="margin:0 0 10px" data-act="msmmark"' + (m.busy ? ' disabled' : '') + '>✏️ 畫記號（用手指寫、畫，或框起來）</button>';
   }
   h += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
   kept.forEach(function (pid) {
@@ -2652,7 +2816,8 @@ function smatViewModal(m) {
   var h = '<h3>📁 ' + esc(t.folder) + '</h3><div class="row"><b class="grow" style="font-size:20px;line-height:26px">' + esc(t.name) + '</b>' +
     '<b style="font-size:21px;color:var(--navy);white-space:nowrap">' + esc((t.qty + ' ' + (t.unit || '')).trim()) + '</b></div>';
   if (sh) h += '<div style="background:#F3F7FA;border-radius:12px;padding:10px 4px;margin-top:8px">' + rebarFigSvg(sh.n, String(p[2] || '').split(sh.s)) + '</div>';
-  if (t.note) h += '<div style="font-size:16px;line-height:22px;margin-top:8px">' + esc(t.note) + '</div>';
+  if (t.loc) h += '<div style="margin-top:8px">' + matLocLine(t, 16) + '</div>';
+  if (t.note) h += '<div style="font-size:16px;line-height:22px;margin-top:' + (t.loc ? 2 : 8) + 'px">' + esc(t.note) + '</div>';
   h += '<div class="sub" style="margin-top:6px;font-size:13px">' + esc(matWho(t)) + '</div>' + matLeftHtml(t, 4) + smatPhotoHtml(m, false) +
     '<div class="note" style="margin-top:10px">這一筆是 ' + esc(t.by) + ' 寫的，只有他（或開發者）可以改。</div>';
   return h + '<div class="btns"><button data-act="mclose">關閉</button></div>';
@@ -2670,8 +2835,8 @@ function smatRebarModal(m) {
     '<label style="flex:1;min-width:0"><span style="display:block;font-size:13px;color:var(--muted)">' + esc(sh.l[i]) + '</span>' +
     '<input type="text" inputmode="decimal" data-f="m.d' + i + '" maxlength="6" placeholder="' + sh.h[i] + '" style="font-size:19px;font-weight:bold" value="' + esc(m['d' + i] || '') + '"></label>';
   h += '</div><div class="label" style="margin-top:10px">支數</div><div class="row"><input type="text" inputmode="numeric" data-f="m.qty" maxlength="4" placeholder="12" style="flex:1;min-width:0;font-size:20px;font-weight:bold" value="' + esc(m.qty) + '">' +
-    '<span style="flex:1;font-size:18px">支</span></div>' +
-    '<div class="label" style="margin-top:10px">備註（放哪裡…可以不寫）</div><textarea data-f="m.note" maxlength="100" placeholder="例：1F 東側" style="min-height:48px">' + esc(m.note) + '</textarea>' + smatPhotoHtml(m, true) +
+    '<span style="flex:1;font-size:18px">支</span></div>' + smatLocHtml(m) +
+    '<div class="label" style="margin-top:10px">' + (hasMatLoc() ? '備註（可以不寫）' : '備註（放哪裡…可以不寫）') + '</div><textarea data-f="m.note" maxlength="100" placeholder="' + (hasMatLoc() ? '例：切剩的、有點鏽' : '例：1F 東側') + '" style="min-height:48px">' + esc(m.note) + '</textarea>' + smatPhotoHtml(m, true) +
     '<div id="mmsg" style="color:var(--warn);font-size:13px;margin-top:6px">' + esc(rebarModalMiss(m)) + '</div>' + (t ? matLeftHtml(t, 6) : '');
   if (t) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(matWho(t)) + '</div>' +
     (m.ask ? '<div style="color:var(--red);font-weight:bold;font-size:14px;margin-top:10px">確定要刪掉這一筆嗎？大家都看不到了。</div>' : '') +
@@ -2689,8 +2854,8 @@ function smatModal(m) {
     '<div class="label" style="margin-top:10px">數量（要寫）</div><div class="row">' +
     '<input type="text" inputmode="decimal" data-f="m.qty" maxlength="20" placeholder="120" style="flex:1.2;min-width:0;font-size:20px;font-weight:bold" value="' + esc(m.qty) + '">' +
     '<input type="text" id="smunit" data-f="m.unit" maxlength="10" placeholder="單位" style="flex:1;min-width:0" value="' + esc(m.unit) + '"></div>' +
-    '<div class="chips" style="margin-top:6px">' + units.map(function (u) { return chip('msmunit', u, u, m.unit === u, true); }).join('') + '</div>' +
-    '<div class="label" style="margin-top:10px">備註（放哪裡、規格…可以不寫）</div><textarea data-f="m.note" maxlength="100" placeholder="例：1F 東側" style="min-height:56px">' + esc(m.note) + '</textarea>' + smatPhotoHtml(m, true);
+    '<div class="chips" style="margin-top:6px">' + units.map(function (u) { return chip('msmunit', u, u, m.unit === u, true); }).join('') + '</div>' + smatLocHtml(m) +
+    '<div class="label" style="margin-top:10px">' + (hasMatLoc() ? '備註（規格、怎麼算…可以不寫）' : '備註（放哪裡、規格…可以不寫）') + '</div><textarea data-f="m.note" maxlength="100" placeholder="' + (hasMatLoc() ? '例：一片 183、一層 173' : '例：1F 東側') + '" style="min-height:56px">' + esc(m.note) + '</textarea>' + smatPhotoHtml(m, true);
   if (t) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(matWho(t)) + '</div>' +
     (m.ask ? '<div style="color:var(--red);font-weight:bold;font-size:14px;margin-top:10px">確定要刪掉這一筆嗎？大家都看不到了。</div>' : '') +
     '<button class="tdel' + (m.ask ? ' strong' : '') + '" style="margin:' + (m.ask ? '6' : '10') + 'px 0 0" data-act="msmdel">' + (m.ask ? '🗑 確定刪除' : '🗑 刪除這一筆') + '</button>';
@@ -3809,7 +3974,7 @@ function loadMats(keep) {
   var M = S.mat, site = S.site; M.busy = '讀取中…'; renderSoft();
   return api('smat', { op: 'list', site: site }).then(function (r) {
     if (S.site !== site || S.mat !== M) return;
-    M.items = r.items || []; MATCACHE[site] = M.items; M.busy = ''; M.err = keep || ''; renderSoft();
+    M.items = r.items || []; M.ver = Number(r.ver) || 0; MATCACHE[site] = M.items; M.busy = ''; M.err = keep || ''; renderSoft();
   }).catch(function (e) { M.busy = ''; var m = failMsg(e); if (m) { M.err = keep || ('讀不到：' + m); renderSoft(); } });
 }
 function findMat(id) { return ((S.mat && S.mat.items) || []).filter(function (m) { return m.id === id; })[0]; }
@@ -4166,7 +4331,7 @@ var ACT = {
     var f = S.mat && S.mat.folder; if (!f) return;
     S.modal = f === MAT_REBAR ? { type: 'smatr', folder: f, t: null, size: 0, shape: '直', d0: '', d1: '', d2: '', qty: '', note: '', ask: false, busy: false, err: '' }
       : { type: 'smat', folder: f, t: null, name: '', qty: '', unit: '', note: '', ask: false, busy: false, err: '' };
-    S.modal.kept = []; S.modal.removed = []; S.modal.newPhotos = []; S.modal.big = '';
+    S.modal.kept = []; S.modal.removed = []; S.modal.newPhotos = []; S.modal.big = ''; S.modal.loc = '';
     renderModal();
   },
   matedit: function (id) {
@@ -4176,8 +4341,23 @@ var ACT = {
       var p = String(t.spec || '').split('|'), sh = rebarShape(p[1]) || REBAR_SHAPES[0], d = String(p[2] || '').split(sh.s);
       S.modal = { type: 'smatr', folder: t.folder, t: t, size: Number(p[0]) || 0, shape: sh.n, d0: d[0] || '', d1: d[1] || '', d2: d[2] || '', qty: t.qty, note: t.note || '', ask: false, busy: false, err: '' };
     } else S.modal = { type: 'smat', folder: t.folder, t: t, name: t.name, qty: t.qty, unit: t.unit || '', note: t.note || '', ask: false, busy: false, err: '' };
-    S.modal.kept = (t.photos || []).slice(); S.modal.removed = []; S.modal.newPhotos = []; S.modal.big = '';
+    S.modal.kept = (t.photos || []).slice(); S.modal.removed = []; S.modal.newPhotos = []; S.modal.big = ''; S.modal.loc = t.loc || '';
     renderModal();
+  },
+  // 位置：點這個工地用過的（再點一次＝清掉）
+  msmloc: function (v) { var m = S.modal; if (!m || (m.type !== 'smat' && m.type !== 'smatr') || m.busy) return; m.loc = String(m.loc || '').trim() === v ? '' : v; renderModal(); },
+  // 在點開的那一張照片上畫記號：畫好＝換成有記號的那一張（剛拍剛選的原地換；雲端上的＝存檔時舊的拿掉、有記號的當新的一張傳上去）
+  msmmark: function () {
+    var m = S.modal; if (!m || !m.big || !m.newPhotos || !m.removed || m.busy) return;
+    var big = m.big, fresh = /^n:/.test(big), i = fresh ? Number(big.slice(2)) : -1;
+    var src = fresh ? (m.newPhotos[i] && m.newPhotos[i].url) : (m.t && S.photos['s:' + m.t.id + '|' + big]);
+    if (!src || src === 'loading') { m.err = '這張照片還在讀，等一下再按。'; renderModal(); return; }
+    openMark(src, function (p) {
+      if (S.modal !== m) return;
+      if (fresh) m.newPhotos[i] = p;
+      else { m.kept = m.kept.filter(function (x) { return x !== big; }); m.removed.push(big); m.newPhotos.push(p); i = m.newPhotos.length - 1; }
+      m.big = 'n:' + i; m.err = ''; renderModal();
+    });
   },
   // 照片：拍照、相簿、拿掉、點了看大張（再點一次收起來）
   msmcam: function () { var m = S.modal; if (m && smatPhotoRoom(m) > 0) pickPhoto('smat', true); },
@@ -4192,12 +4372,15 @@ var ACT = {
     var m = S.modal; if (!m || (m.type !== 'smat' && m.type !== 'smatr') || !modalOk(m)) return;
     var t = m.t, f = m.type === 'smatr' ? { name: '', qty: String(Number(m.qty)), unit: '', note: String(m.note || '').trim(), spec: rebarModalSpec(m) }
       : { name: m.name.trim(), qty: m.qty.trim(), unit: String(m.unit || '').trim(), note: String(m.note || '').trim(), spec: '' };
-    var same = t && f.qty === t.qty && f.note === (t.note || '') && (m.type === 'smatr' ? f.spec === (t.spec || '') : f.name === t.name && f.unit === (t.unit || ''));
+    // 位置（第 55 版）：收件服務還沒有的時候不送（送了也沒地方存）
+    var locOn = hasMatLoc(), loc = String(m.loc || '').trim().slice(0, 40);
+    var same = t && f.qty === t.qty && f.note === (t.note || '') && (!locOn || loc === (t.loc || '')) && (m.type === 'smatr' ? f.spec === (t.spec || '') : f.name === t.name && f.unit === (t.unit || ''));
     var del = (m.removed || []).slice(), fresh = (m.newPhotos || []).slice();
     if (same && !del.length && !fresh.length) { closeModal(); return; }
     m.busy = true; m.err = ''; renderModal();
     var req = t ? { op: 'edit', id: t.id } : { op: 'add', site: S.site, folder: m.folder };
     req.name = f.name; req.qty = f.qty; req.unit = f.unit; req.note = f.note; req.spec = f.spec;
+    if (locOn) req.loc = loc;
     // 字先存（沒改就不用送），照片再一張一張：先拿掉要拿掉的、再傳新的；照片沒傳上去要講清楚「字存好了」
     (same ? Promise.resolve({ id: t.id }) : api('smat', req)).then(function (r) {
       var id = t ? t.id : r.id, step = Promise.resolve(), sent = 0;
