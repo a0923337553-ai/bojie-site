@@ -421,7 +421,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/19h';
+var WEB_VERSION = '11/20a';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -2522,6 +2522,40 @@ function matFolderLine(f, list) {
   var who = last.editAt > last.at ? todoWhen(last.editBy, last.editAt, '') : todoWhen(last.by, last.at, '');
   return list.length + ' 筆 ・ 最後 ' + who.trim();
 }
+// 清單照名稱排（使用者 2026-11-20「我想要它可以照名稱排列」；跟 App 的 matSortByName／naturalCompare 同一套）：
+// 同一個品名排在一起；品名一樣比備註（2F版、3F版、10F版照數字）；再一樣，新的在前。中文照筆畫，字裡面的數字照大小比（#4 在 #10 前面）。
+var MAT_COLL = null;
+function natCmp(a, b) {
+  if (!MAT_COLL) { try { MAT_COLL = new Intl.Collator('zh-Hant-TW'); } catch (e) { MAT_COLL = { compare: function (x, y) { return x < y ? -1 : x > y ? 1 : 0; } }; } }
+  function dg(c) { return c >= '0' && c <= '9'; }
+  var i = 0, j = 0;
+  while (i < a.length && j < b.length) {
+    var da = dg(a.charAt(i)), db = dg(b.charAt(j)), i2 = i, j2 = j, r;
+    while (i2 < a.length && dg(a.charAt(i2)) === da) i2++;
+    while (j2 < b.length && dg(b.charAt(j2)) === db) j2++;
+    if (da && db) { var x = a.slice(i, i2).replace(/^0+/, ''), y = b.slice(j, j2).replace(/^0+/, ''); r = x.length !== y.length ? x.length - y.length : x < y ? -1 : x > y ? 1 : 0; }
+    else if (da !== db) r = da ? -1 : 1;   // 數字排在字前面
+    else r = MAT_COLL.compare(a.slice(i, i2), b.slice(j, j2));
+    if (r) return r;
+    i = i2; j = j2;
+  }
+  return (a.length - i) - (b.length - j);
+}
+function matSortByName(list) {
+  return list.slice().sort(function (a, b) {
+    return natCmp(String(a.name || '').trim(), String(b.name || '').trim()) || natCmp(String(a.note || '').trim(), String(b.note || '').trim()) || matLast(b) - matLast(a);
+  });
+}
+/** 清單怎麼排：照名稱（預設）或照時間（最新的在上面）；記在這支手機 */
+function matByName() { return (S.matSort || LS.get('matSort')) !== 'time'; }
+function matSortHtml() {
+  var byName = matByName();
+  return '<div style="display:inline-flex;flex:none;border:1px solid var(--navy);border-radius:16px;overflow:hidden">' +
+    [['照名稱', 'name'], ['照時間', 'time']].map(function (o) {
+      var on = (o[1] === 'name') === byName;
+      return '<button data-act="matsort" data-v="' + o[1] + '" style="margin:0;width:auto;border:0;border-radius:0;padding:5px 14px;font-size:14px;font-weight:700;background:' + (on ? 'var(--navy)' : '#fff') + ';color:' + (on ? '#fff' : 'var(--navy)') + '">' + o[0] + '</button>';
+    }).join('') + '</div>';
+}
 function renderMats() {
   var M = S.mat || (S.mat = { from: 'site', items: null, busy: '', err: '', folder: '' }), items = M.items, f = M.folder, right = M.busy || '⟳ 更新', h;
   if (!f) {
@@ -2539,11 +2573,12 @@ function renderMats() {
   }
   var rebar = f === MAT_REBAR;
   var list = (items || []).filter(function (m) { return m.folder === f; });
-  list.sort(function (a, b) { return matLast(b) - matLast(a); });
+  if (matByName()) list = matSortByName(list); else list.sort(function (a, b) { return matLast(b) - matLast(a); });
   h = topBar('📁 ' + f + '・' + S.site, 'matsroot', right, 'matsreload') + '<div class="wrap">';
   h += '<button class="big" style="background:' + MAT_COLORS[f] + '" data-act="matadd">' + (rebar ? '＋ 新增鋼筋（現場餘料）' : '＋ 新增數量') + '</button>';
   if (M.err) h += '<div class="err">' + esc(M.err) + '</div>';
-  h += '<div class="card"><div class="label">' + (items ? list.length + ' 筆' : '讀取中…') + '</div>';
+  // 右邊「照名稱｜照時間」：兩筆以上才有得排
+  h += '<div class="card"><div class="row" style="margin-bottom:4px"><div class="label grow" style="margin:0">' + (items ? list.length + ' 筆' : '讀取中…') + '</div>' + (list.length > 1 ? matSortHtml() : '') + '</div>';
   if (items && !list.length) h += '<div class="sub" style="font-size:15px;padding:8px 0;line-height:1.5">' + (rebar ? '還沒有。現場剩下的鋼筋按上面「＋ 新增鋼筋」填：號數、形式、尺寸、幾支。' : '這一夾還沒有東西，按上面「＋ 新增數量」。') + '</div>';
   h += list.map(function (m) {
     return '<div class="row" style="padding:8px 0;align-items:center" data-act="matedit" data-v="' + esc(m.id) + '">' +
@@ -4126,6 +4161,7 @@ var ACT = {
     }).catch(function (e) { m.busy = false; var x = failMsg(e); if (x && S.modal === m) { m.err = '沒有匯出：' + x; renderModal(); } });
   },
   matfolder: function (v) { if (!S.mat) return; S.mat.folder = v; S.mat.err = ''; render(); window.scrollTo(0, 0); },
+  matsort: function (v) { S.matSort = v === 'time' ? 'time' : 'name'; LS.set('matSort', S.matSort); render(); },
   matadd: function () {
     var f = S.mat && S.mat.folder; if (!f) return;
     S.modal = f === MAT_REBAR ? { type: 'smatr', folder: f, t: null, size: 0, shape: '直', d0: '', d1: '', d2: '', qty: '', note: '', ask: false, busy: false, err: '' }
