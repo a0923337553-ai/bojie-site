@@ -421,7 +421,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/20b';
+var WEB_VERSION = '11/20c';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -816,7 +816,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smatv: smatViewModal, smatx: smatExportModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smats: scafModal, smatv: smatViewModal, smatx: smatExportModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -2613,6 +2613,31 @@ function drawMark(g, m, r, lw) {
   for (var i = 2; i + 1 < p.length; i += 2) g.lineTo(r[0] + p[i] * r[2], r[1] + p[i + 1] * r[3]);
   g.stroke();
 }
+/**
+ * 手指按到哪一個框（使用者 2026-11-20「這個紅框可以拖曳」；跟 App 的 boxGrab／boxDrag 同一套）：從最後畫的往前找，
+ * 先看有沒有按在角落（slop 以內）→ {i, corner 0 左上／1 右上／2 左下／3 右下}，再看是不是按在框裡面 → corner −1（整個拖著走）；都不是回 null（＝畫新的框）
+ */
+function boxGrab(marks, x, y, r, slop) {
+  if (!(r[2] > 0 && r[3] > 0)) return null;
+  for (var i = marks.length - 1; i >= 0; i--) {
+    var m = marks[i]; if (!m.box) continue;
+    var l = r[0] + m.p[0] * r[2], t = r[1] + m.p[1] * r[3], rt = r[0] + m.p[2] * r[2], b = r[1] + m.p[3] * r[3], xs = [l, rt, l, rt], ys = [t, t, b, b];
+    for (var c = 0; c < 4; c++) if (Math.abs(x - xs[c]) <= slop && Math.abs(y - ys[c]) <= slop) return { i: i, corner: c, x: x, y: y, box: m.p.slice() };
+    if (x >= l && x <= rt && y >= t && y <= b) return { i: i, corner: -1, x: x, y: y, box: m.p.slice() };
+  }
+  return null;
+}
+/** 拖到 (x,y) 以後那個框：按在裡面＝整個移動（大小不變、不超出照片）；按在角落＝那個角跟著走、對角不動（不會小於照片的 3%） */
+function boxDrag(g, x, y, r) {
+  if (!(r[2] > 0 && r[3] > 0)) return g.box.slice();
+  function cl(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  var dx = (x - g.x) / r[2], dy = (y - g.y) / r[3], b = g.box, min = 0.03;
+  if (g.corner < 0) { var w = b[2] - b[0], h = b[3] - b[1], l = cl(b[0] + dx, 0, Math.max(0, 1 - w)), t = cl(b[1] + dy, 0, Math.max(0, 1 - h)); return [l, t, l + w, t + h]; }
+  var L = b[0], T = b[1], R = b[2], B = b[3];
+  if (g.corner === 0 || g.corner === 2) L = cl(b[0] + dx, 0, R - min); else R = cl(b[2] + dx, L + min, 1);
+  if (g.corner === 0 || g.corner === 1) T = cl(b[1] + dy, 0, B - min); else B = cl(b[3] + dy, T + min, 1);
+  return [L, T, R, B];
+}
 /** 把記號畫進照片（紅色，線寬跟畫面上看到的一樣）→ 跟 shrink() 一樣的 {name, url, data}；壓到 560 KB 以下（收件服務一張最多 600 KB） */
 function burnMarks(img, marks) {
   var w = img.naturalWidth, h = img.naturalHeight, c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -2651,7 +2676,7 @@ function openMark(src, onDone) {
     var d = window.devicePixelRatio || 1, w = box.clientWidth, h = box.clientHeight;
     if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) { cv.width = Math.round(w * d); cv.height = Math.round(h * d); }
     var g = cv.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, w, h);
-    ov.querySelector('#mkhint').textContent = K.boxTool ? '拖一下＝一個紅框' : '用手指寫、畫（數字、箭頭、圈）';
+    ov.querySelector('#mkhint').textContent = K.boxTool ? '拖一下＝紅框；按住框可以移動、拉角改大小' : '用手指寫、畫（數字、箭頭、圈）';
     [['mkpen', false], ['mkrect', true]].forEach(function (o) { var b = ov.querySelector('#' + o[0]), on = K.boxTool === o[1]; b.style.background = on ? MARK_RED : '#fff'; b.style.color = on ? '#fff' : MARK_RED; });
     ov.querySelector('#mkn').textContent = (marks.length ? '畫了 ' + marks.length + ' 筆。' : '還沒畫。') + '按「完成」會存成一張畫好記號的照片（原本那張換掉）。畫錯了按「復原」。';
     var has = marks.length > 0;
@@ -2661,6 +2686,11 @@ function openMark(src, onDone) {
     // 畫面上的線寬照比例算：看起來多粗，畫進照片就是多粗
     var lw = Math.max(2, markStroke(img.naturalWidth, img.naturalHeight) * r[2] / img.naturalWidth);
     marks.forEach(function (m) { drawMark(g, m, r, lw); });
+    // 選「框」的時候每個框四個角有小圓點：看得出可以拉
+    if (K.boxTool) marks.forEach(function (m) {
+      if (!m.box) return;
+      [[0, 1], [2, 1], [0, 3], [2, 3]].forEach(function (q) { g.beginPath(); g.arc(r[0] + m.p[q[0]] * r[2], r[1] + m.p[q[1]] * r[3], 6, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 2; g.strokeStyle = MARK_RED; g.stroke(); });
+    });
     if (cur && cur.length >= 2) {   // 正在畫的那一筆（還沒放開）：淡一點
       var live = K.boxTool ? (cur.length >= 4 ? { box: true, p: markBox(cur[0], cur[1], cur[2], cur[3], r) } : null) : { p: markLine(cur, r) };
       if (live && live.p) { g.globalAlpha = 0.7; drawMark(g, live, r, lw); g.globalAlpha = 1; }
@@ -2668,13 +2698,21 @@ function openMark(src, onDone) {
   }
   K.draw = draw;
   function pt(e) { var b = box.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; }
-  cv.addEventListener('pointerdown', function (e) { if (!ready) return; e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (x) { } cur = pt(e); draw(); });
+  var grab = null;   // 選「框」的時候按在已經畫好的紅框上：拖著移動／拉角改大小
+  cv.addEventListener('pointerdown', function (e) {
+    if (!ready) return; e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (x) { }
+    var p = pt(e); grab = K.boxTool ? boxGrab(marks, p[0], p[1], rect(), 26) : null;
+    if (!grab) cur = p;
+    draw();
+  });
   cv.addEventListener('pointermove', function (e) {
+    if (grab) { e.preventDefault(); var q = pt(e); marks[grab.i].p = boxDrag(grab, q[0], q[1], rect()); draw(); return; }
     if (!cur) return; e.preventDefault();
     var p = pt(e); if (K.boxTool) { cur[2] = p[0]; cur[3] = p[1]; } else cur.push(p[0], p[1]);
     draw();
   });
   function up(e) {
+    if (grab) { grab = null; draw(); return; }
     if (!cur) return;
     if (e && e.type === 'pointerup') {
       var p = pt(e), r = rect(), m;
@@ -2718,6 +2756,177 @@ function matSortHtml() {
       return '<button data-act="matsort" data-v="' + o[1] + '" style="margin:0;width:auto;border:0;border-radius:0;padding:5px 14px;font-size:14px;font-weight:700;background:' + (on ? 'var(--navy)' : '#fff') + ';color:' + (on ? '#fff' : 'var(--navy)') + '">' + o[0] + '</button>';
     }).join('') + '</div>';
 }
+// ===== 施工架那一夾：兩個資料夾（施工架＝踏板×框架、壁拉桿）＋示意圖＋面積（收件服務第 56 版） =====
+// 使用者 2026-11-20：「施工架計算方式是（踏板長度×片數）x(框架高度×層數）就是面積」「施工架裡面有兩種資料夾：施工架、壁拉桿」
+// 「踏板×框架幫我畫示意圖」「假如東側有六層，示意圖要畫出六層，對應的 1～3 層用深色，其他層用淺色」
+// 「電梯…是並聯排，因為電梯是矩形的」「樓梯是兩片串連，還要另外加梯」；問過都選 A：電梯並排也照 2 片算面積、示意圖照草圖。
+// 一筆的規格記在 spec：S|排法|踏板長度|片數|框架高度|從第幾層|到第幾層|這一側總共幾層(0＝自動)|梯幾支；品名、面積（數量）、單位 m² 是收件服務照規格寫的。
+// App 的 SiteScaf.kt 是同一套（scafOf／scafSpec／scafArea／畫法）。
+var SCAF = '施工架', SCAF_KINDS = [['', '一般（一排）'], ['stair', '樓梯（＋梯）'], ['lift', '電梯（並排）']];
+function hasScaf() { return (!!S.s && Number(S.s.version) >= 56) || (!!S.mat && Number(S.mat.ver) >= 56); }
+/** 這一筆的施工架規格 → {kind, len, n, h, from, to, total, lad}；不是（舊的寫法、壁拉桿、別的資料夾）回 null */
+function scafOf(m) {
+  var p = String((m && m.spec) || '').split('|'); if (!m || m.folder !== SCAF || p[0] !== 'S' || p.length < 8) return null;
+  var e = { kind: p[1] === 'stair' || p[1] === 'lift' ? p[1] : '', len: Number(p[2]), n: Number(p[3]), h: Number(p[4]), from: Number(p[5]), to: Number(p[6]), total: Number(p[7]) || 0, lad: p[8] === undefined || p[8] === '' ? '' : Number(p[8]) };
+  return e.len > 0 && e.n >= 1 && e.h > 0 && e.from >= 1 && e.to >= e.from ? e : null;
+}
+/** 視窗裡填的 → 規格字串；還沒填完、填錯回 ''。why＝true 回「還差什麼」那句話 */
+function scafSpec(e, why) {
+  function num(v, max, dec) { var t = String(v == null ? '' : v).trim(); if (!(dec ? /^\d+(\.\d)?$/ : /^\d+$/).test(t)) return NaN; var x = Number(t); return x >= 1 && x <= max ? x : NaN; }
+  var len = num(e.len, 999, true), n = num(e.n, 999), h = num(e.h, 999, true), from = num(e.from, 99), to = num(e.to, 99);
+  var tt = String(e.total == null ? '' : e.total).trim(), total = tt === '' || tt === '0' ? 0 : num(tt, 99), lt = String(e.lad == null ? '' : e.lad).trim();
+  var kind = e.kind === 'stair' || e.kind === 'lift' ? e.kind : '';
+  var miss = isNaN(len) ? '踏板一片幾公分還沒寫' : isNaN(n) ? '踏板幾片還沒寫' : isNaN(h) ? '框架一層幾公分還沒寫' : isNaN(from) || isNaN(to) ? '範圍第幾層到第幾層還沒寫' :
+    to < from ? '範圍：後面那一層要比前面大' : isNaN(total) || (total && total < to) ? '「這一側總共幾層」不能比範圍小' : kind === 'stair' && lt !== '' && !/^\d{1,2}$/.test(lt) ? '梯幾支要寫數字' : '';
+  if (why) return miss;
+  // 樓梯沒寫梯幾支：先帶 層數−1（使用者的樓梯 8 層、梯 7 支）
+  return miss ? '' : ['S', kind, len, n, h, from, to, total, kind === 'stair' ? (lt === '' ? Math.max(0, to - from) : Number(lt)) : ''].join('|');
+}
+/** 面積（m²）＝（踏板長度×片數）×（框架高度×層數）；長度、高度是公分。電梯並排也照片數算（使用者選 A） */
+function scafArea(e) { return Math.round((e.len * e.n / 100) * (e.h * (e.to - e.from + 1) / 100) * 100) / 100; }
+function scafNum(v) { return (Math.round(v * 100) / 100).toFixed(2).replace(/\.?0+$/, ''); }
+/** 施工架那一夾裡的哪一個資料夾：scaf＝施工架（新的填法；還有舊的寫法先留在這）、tie＝壁拉桿（品名有「壁拉桿」的） */
+function matSub(m) { return scafOf(m) ? 'scaf' : /壁拉桿/.test(String(m.name || '')) ? 'tie' : 'scaf'; }
+/** 數量都是數字、單位一樣 → 「・合計 52 支」；不然不寫 */
+function matQtySum(list) {
+  if (!list.length) return ''; var u = list[0].unit || '', s = 0;
+  for (var i = 0; i < list.length; i++) { var q = String(list[i].qty || '').trim(); if (!/^\d+(\.\d+)?$/.test(q) || (list[i].unit || '') !== u) return ''; s += Number(q); }
+  return ' ・ 合計 ' + scafNum(s) + (u ? ' ' + u : '');
+}
+/** 示意圖要用的：這一筆 e（位置 loc）＋同一個位置別筆的範圍（淺色那幾層畫它的片數）＋這一側總共幾層（自己填的，或同位置填過的最高層） */
+function scafCtx(e, loc, selfId) {
+  var others = [], total = Math.max(e.total || 0, e.to);
+  ((S.mat && S.mat.items) || []).forEach(function (x) { var o = scafOf(x); if (o && x.id !== selfId && String(x.loc || '').trim() === loc) { others.push(o); total = Math.max(total, o.to, o.total || 0); } });
+  return { kind: e.kind, len: e.len, n: e.n, h: e.h, from: e.from, to: e.to, lad: e.lad, total: total, others: others };
+}
+/**
+ * 示意圖（正面圖）：一格＝一片踏板 × 一層框架，最下面是第 1 層；這一筆的範圍深色、這一側其他層淺色。
+ * 樓梯：每一層一支梯（黃線，都往同一個方向斜，左右兩片交錯）；電梯：正面只有 1 片寬，下面多畫俯視圖（幾片並排成矩形）。mini＝清單上的小圖（沒有字）。
+ */
+function scafSvg(e, W, mini) {
+  W = W || 320;
+  var par = e.kind === 'lift', k = e.to - e.from + 1, T = Math.max(e.total || 0, e.to), t;
+  function face(x) { return x.kind === 'lift' ? 1 : x.n; }
+  function at(t) { if (t >= e.from && t <= e.to) return e; return (e.others || []).filter(function (x) { return t >= x.from && t <= x.to; })[0] || null; }
+  var maxC = face(e); for (t = 1; t <= T; t++) { var o = at(t); if (o) maxC = Math.max(maxC, face(o)); }
+  var padL = mini ? 2 : 30, padR = mini ? 2 : 92, padT = mini ? 2 : 8, padB = mini ? 2 : (par ? 92 : 40), maxH = mini ? 64 : 330;
+  var cw = Math.min(mini ? 14 : 46, (W - padL - padR) / maxC), ch = cw * e.h / e.len;
+  if (ch * T > maxH) { ch = maxH / T; cw = ch * e.len / e.h; }
+  var gw = cw * maxC, gh = ch * T, H = padT + gh + padB, s = '', sw = mini ? 0.8 : 1.5;
+  var DARK = '#4F6BD8', DARKL = '#2F47A8', LIGHT = '#E9EDFB', LIGHTL = '#B9C3EC', fs = Math.max(8, Math.min(13, ch * 0.8));
+  for (t = T; t >= 1; t--) {
+    var y = padT + (T - t) * ch, o2 = at(t), on = t >= e.from && t <= e.to, c = o2 ? face(o2) : face(e);
+    for (var i = 0; i < c; i++) {
+      var x = padL + i * cw;
+      s += '<rect x="' + x + '" y="' + y + '" width="' + cw + '" height="' + ch + '" fill="' + (on ? DARK : LIGHT) + '" stroke="' + (on ? DARKL : LIGHTL) + '" stroke-width="' + sw + '"/>';
+      if (!mini) s += '<path d="M' + x + ' ' + y + 'L' + (x + cw) + ' ' + (y + ch) + 'M' + (x + cw) + ' ' + y + 'L' + x + ' ' + (y + ch) + '" stroke="' + (on ? 'rgba(255,255,255,.35)' : '#D5DCF6') + '" stroke-width="1"/>';
+    }
+    // 樓梯的梯（使用者 2026-11-20 在圖上畫給我看兩次）：每一層一支，斜的方向都一樣（左上到右下，不是之字形），
+    // 一層在右邊那片、上一層在左邊那片，交錯著排（最下面那層在右邊）；從這一筆最下面那一層往上畫「梯幾支」那麼多支（沒寫＝層數−1）
+    var st = o2 || e;
+    if (st.kind === 'stair' && t - st.from < (st.lad === '' || st.lad == null ? st.to - st.from : st.lad)) {
+      var sx = padL + ((t - st.from) % 2 === 0 ? (c - 1) * cw : 0);
+      s += '<path d="M' + sx + ' ' + y + 'L' + (sx + cw) + ' ' + (y + ch) + '" stroke="' + (on ? '#FFC400' : '#E6D08A') + '" stroke-width="' + (mini ? 1.6 : on ? 4 : 3) + '" stroke-linecap="round"/>';
+    }
+    // 層數的字：格子太矮的時候只寫最下面、最上面和這一筆的頭尾
+    if (!mini && (ch >= 12 || t === 1 || t === T || t === e.from || t === e.to))
+      s += '<text x="' + (padL - 7) + '" y="' + (y + ch / 2 + fs * 0.36) + '" text-anchor="end" font-size="' + fs + '" fill="' + (on ? '#183B56' : '#9AA7B5') + '"' + (on ? ' font-weight="bold"' : '') + '>' + t + '</text>';
+  }
+  if (!mini) {
+    var y0 = padT + (T - e.to) * ch, y1 = padT + (T - e.from + 1) * ch, bx2 = padL + gw + 10, my = Math.max(22, (y0 + y1) / 2);
+    s += '<path d="M' + bx2 + ' ' + y0 + 'h8M' + bx2 + ' ' + y1 + 'h8M' + (bx2 + 4) + ' ' + y0 + 'V' + y1 + '" stroke="' + DARKL + '" stroke-width="2" fill="none"/>' +
+      '<text x="' + (bx2 + 14) + '" y="' + (my - 4) + '" font-size="14" font-weight="bold" fill="' + DARKL + '">' + (e.from === e.to ? '第 ' + e.from + ' 層' : e.from + '～' + e.to + ' 層') + '</text>' +
+      '<text x="' + (bx2 + 14) + '" y="' + (my + 14) + '" font-size="12.5" fill="#5D7486">' + e.h + '×' + k + '＝' + scafNum(e.h * k) + '</text>';
+    var fw = cw * face(e), by = padT + gh + 8;
+    s += '<path d="M' + padL + ' ' + by + 'v8M' + (padL + fw) + ' ' + by + 'v8M' + padL + ' ' + (by + 4) + 'H' + (padL + fw) + '" stroke="' + DARKL + '" stroke-width="2" fill="none"/>' +
+      '<text x="' + padL + '" y="' + (by + 26) + '" font-size="13" fill="#5D7486"><tspan font-weight="bold" fill="' + DARKL + '">' + (par ? '正面 1 片寬' : e.n + ' 片') + '</tspan>　' + (par ? e.len : e.len + '×' + e.n + '＝' + scafNum(e.len * e.n)) + '</text>';
+    if (par) {
+      var py = by + 40, pw = Math.min(120, W - padL - 150), ph = 13;
+      for (var j = 0; j < Math.min(e.n, 3); j++) s += '<rect x="' + padL + '" y="' + (py + j * (ph + 2)) + '" width="' + pw + '" height="' + ph + '" rx="2" fill="' + DARK + '" stroke="' + DARKL + '"/>';
+      s += '<text x="' + (padL + pw + 10) + '" y="' + (py + (Math.min(e.n, 3) * (ph + 2)) / 2 + 4) + '" font-size="13" fill="#5D7486">俯視：<tspan font-weight="bold" fill="' + DARKL + '">' + e.n + ' 片並排</tspan></text>';
+    }
+  }
+  var w2 = mini ? padL + gw + padR : W;
+  return '<svg viewBox="0 0 ' + w2 + ' ' + H + '" width="' + w2 + '" height="' + H + '" xmlns="http://www.w3.org/2000/svg" style="display:block;max-width:100%;height:auto">' + s + '</svg>';
+}
+function scafRange(e) { return e.from === e.to ? '第 ' + e.from + ' 層' : e.from + '～' + e.to + ' 層'; }
+/** 「踏板 6 片×183　框架 173×3 層　梯 7 支」 */
+function scafLine(e) { return '踏板 ' + e.n + ' 片×' + scafNum(e.len) + (e.kind === 'lift' ? '（並排）' : e.kind === 'stair' ? '（串連）' : '') + '　框架 ' + scafNum(e.h) + '×' + (e.to - e.from + 1) + ' 層' + (e.kind === 'stair' && e.lad !== '' ? '　梯 ' + e.lad + ' 支' : ''); }
+/** 「面積＝（183×6）×（173×3）＝10.98 m × 5.19 m ＝ 56.99 m²」 */
+function scafAreaHtml(e) {
+  var k = e.to - e.from + 1;
+  return '面積＝（' + scafNum(e.len) + '×' + e.n + '）×（' + scafNum(e.h) + '×' + k + '）＝' + scafNum(e.len * e.n / 100) + ' m × ' + scafNum(e.h * k / 100) + ' m ＝ <b style="font-size:19px;color:var(--navy)">' + scafNum(scafArea(e)) + ' m²</b>';
+}
+/** 施工架那一夾的第一層：兩個資料夾（幾筆、合計） */
+function renderScafRoot(M, list, right) {
+  var sc = list.filter(function (m) { return matSub(m) === 'scaf'; }), tie = list.filter(function (m) { return matSub(m) === 'tie'; }), area = 0, old = 0;
+  sc.forEach(function (m) { var e = scafOf(m); if (e) area += scafArea(e); else old++; });
+  var h = topBar('📁 ' + SCAF + '・' + S.site, 'matsroot', right, 'matsreload') + '<div class="wrap">';
+  if (M.err) h += '<div class="err">' + esc(M.err) + '</div>';
+  if (!M.items && !M.err) h += '<div class="sub" style="font-size:15px;margin:0 4px 10px">讀取中…</div>';
+  function tile(v, name, line) { return '<button class="tile" data-act="matsub" data-v="' + v + '"><span class="em" style="background:' + MAT_COLORS[SCAF] + '29">📁</span><span class="grow"><b>' + name + '</b><span class="sub" style="display:block;font-size:14px">' + esc(line) + '</span></span><span class="arrow">›</span></button>'; }
+  h += tile('scaf', '施工架（踏板×框架）', sc.length ? sc.length + ' 筆' + (sc.length > old ? ' ・ 合計 ' + scafNum(area) + ' m²' : '') + (old ? ' ・ 舊的寫法 ' + old + ' 筆' : '') : '還沒有，點進去新增');
+  h += tile('tie', '壁拉桿', tie.length ? tie.length + ' 筆' + matQtySum(tie) : '還沒有，點進去新增');
+  return h + '<div class="note" style="padding:0 4px">施工架：填踏板幾片、框架幾層，會自動算面積、畫示意圖。壁拉桿：填位置、幾支。</div></div>';
+}
+function scafRowHtml(m, e) {
+  var c = scafCtx(e, String(m.loc || '').trim(), m.id);
+  // 第一行：位置＋第幾層（左）、面積（右）；下面幾行用整個寬度（手機窄，面積放右邊一整欄會把字擠成兩行）
+  return '<div class="row" style="padding:8px 0;align-items:center" data-act="matedit" data-v="' + esc(m.id) + '"><div style="flex:none;width:60px;display:flex;justify-content:center">' + scafSvg(c, 60, true) + '</div>' +
+    '<div class="grow" style="min-width:0"><div style="display:flex;align-items:baseline;gap:6px"><div style="flex:1;min-width:0;font-size:17.5px;font-weight:bold;line-height:24px">' + esc(m.loc || '（沒寫位置）') + '　' + scafRange(e) + '</div>' +
+    '<b style="font-size:18px;color:var(--navy);white-space:nowrap">' + scafNum(scafArea(e)) + ' m²</b></div>' +
+    '<div class="sub" style="font-size:14px">' + esc(scafLine(e)) + '</div>' + (m.note ? '<div class="sub" style="font-size:14px">' + esc(m.note) + '</div>' : '') +
+    '<div style="font-size:12.5px;color:#8A9BA8">' + esc(matWho(m)) + (m.photos && m.photos.length ? '　📷 ' + m.photos.length : '') + '</div></div>' +
+    (m.canEdit ? '<span style="font-size:22px;color:var(--line)">›</span>' : '') + '</div>';
+}
+/** 施工架（踏板×框架）那一夾的清單：新的填法每一筆有小示意圖、面積，上面有合計；舊的寫法（還沒轉的）排在下面 */
+function renderScafList(M, list, right) {
+  var rows = list.filter(function (m) { return matSub(m) === 'scaf'; }), sc = rows.filter(function (m) { return !!scafOf(m); }), old = rows.filter(function (m) { return !scafOf(m); }), area = 0;
+  sc.forEach(function (m) { area += scafArea(scafOf(m)); });
+  if (matByName()) sc.sort(function (a, b) { return natCmp(String(a.loc || '').trim(), String(b.loc || '').trim()) || scafOf(a).from - scafOf(b).from || matLast(b) - matLast(a); });
+  else sc.sort(function (a, b) { return matLast(b) - matLast(a); });
+  old = matByName() ? matSortByName(old) : old.sort(function (a, b) { return matLast(b) - matLast(a); });
+  var h = topBar('📁 施工架（踏板×框架）', 'matssub', right, 'matsreload') + '<div class="wrap">';
+  h += '<button class="big" style="background:' + MAT_COLORS[SCAF] + '" data-act="smatadd">＋ 新增施工架（踏板×框架）</button>';
+  if (M.err) h += '<div class="err">' + esc(M.err) + '</div>';
+  h += '<div class="card"><div class="row" style="margin-bottom:4px"><div class="label grow" style="margin:0">' + (M.items ? sc.length + ' 筆' + (sc.length ? ' ・ 合計 <b style="color:var(--navy);font-size:16px">' + scafNum(area) + ' m²</b>' : '') : '讀取中…') + '</div>' + (sc.length > 1 ? matSortHtml() : '') + '</div>';
+  if (M.items && !sc.length) h += '<div class="sub" style="font-size:15px;padding:8px 0;line-height:1.5">還沒有。按上面「＋ 新增施工架」填：位置、踏板幾片、框架、第幾層到第幾層。</div>';
+  h += sc.map(function (m) { return scafRowHtml(m, scafOf(m)); }).join('<div class="div"></div>') + '</div>';
+  if (old.length) {
+    h += '<div class="card"><div class="label">舊的寫法 ' + old.length + ' 筆（沒有示意圖、不算進合計）</div>' + old.map(function (m) {
+      return '<div class="row" style="padding:8px 0;align-items:center" data-act="matedit" data-v="' + esc(m.id) + '"><div class="grow" style="min-width:0"><div style="font-size:17px;font-weight:bold;line-height:23px">' + esc(m.name) + '</div>' + matLocLine(m) +
+        (m.note ? '<div class="sub" style="font-size:14px">' + esc(m.note) + '</div>' : '') + '<div style="font-size:12.5px;color:#8A9BA8">' + esc(matWho(m)) + (m.photos && m.photos.length ? '　📷 ' + m.photos.length : '') + '</div></div>' +
+        '<b style="font-size:18px;color:var(--navy);white-space:nowrap">' + esc((m.qty + ' ' + (m.unit || '')).trim()) + '</b>' + (m.canEdit ? '<span style="font-size:22px;color:var(--line)">›</span>' : '') + '</div>';
+    }).join('<div class="div"></div>') + '</div>';
+  }
+  return h + '<div class="note" style="padding:0 4px">面積＝（踏板長度×片數）×（框架高度×層數）。示意圖深色＝這一筆的範圍，淺色＝這一側其他層。點自己寫的那一筆可以改、加照片或刪掉。</div></div>';
+}
+/** 視窗裡那張示意圖＋面積（填的數字一改就重畫）；還沒填完＝寫還差什麼 */
+function scafFigHtml(m) {
+  var sp = scafSpec(m), e = sp ? scafOf({ folder: SCAF, spec: sp }) : null;
+  if (!e) return '<div class="sub" style="font-size:14px;padding:6px 8px;color:var(--warn)">' + esc(scafSpec(m, true)) + '</div>';
+  return scafSvg(scafCtx(e, String(m.loc || '').trim(), m.t && m.t.id), 300) + '<div style="font-size:14.5px;line-height:1.5;margin-top:6px;padding:0 6px">' + scafAreaHtml(e) + '</div>';
+}
+/** 新增／改一筆施工架（踏板×框架）：位置、排法、踏板、框架、範圍、這一側總共幾層、（樓梯）梯幾支、備註、照片 */
+function scafModal(m) {
+  var t = m.t, locs = matLocs(), cur = String(m.loc || '').trim(), num = 'type="text" inputmode="decimal" style="width:74px;flex:none;text-align:center;font-size:19px;font-weight:bold"';
+  var h = '<h3>📁 施工架：' + (t ? '改這一筆' : '新增一筆') + '</h3>' +
+    '<div class="label">位置（要寫）</div><input type="text" data-f="m.loc" maxlength="40" placeholder="例：東側、樓梯、電梯" value="' + esc(m.loc || '') + '">' +
+    (locs.length ? '<div class="chips" style="margin-top:6px">' + locs.map(function (l) { return chip('msmloc', l, l, cur === l, true); }).join('') + '</div>' : '') +
+    '<div class="label" style="margin-top:10px">排法</div><div class="chips">' + SCAF_KINDS.map(function (k) { return chip('msmskind', k[0] || 'row', k[1], (m.kind || '') === k[0], true); }).join('') + '</div>' +
+    '<div class="label" style="margin-top:10px">踏板</div><div class="row" style="font-size:16px">一片 <input ' + num + ' data-f="m.len" maxlength="5" value="' + esc(m.len) + '"> 公分 × <input ' + num + ' data-f="m.n" maxlength="3" placeholder="6" value="' + esc(m.n) + '"> 片</div>' +
+    '<div class="label" style="margin-top:10px">框架</div><div class="row" style="font-size:16px">一層 <input ' + num + ' data-f="m.h" maxlength="5" value="' + esc(m.h) + '"> 公分</div>' +
+    '<div class="label" style="margin-top:10px">範圍（最下面是第 1 層）</div><div class="row" style="font-size:16px">第 <input ' + num + ' data-f="m.from" maxlength="2" placeholder="1" value="' + esc(m.from) + '"> 層 ～ 第 <input ' + num + ' data-f="m.to" maxlength="2" placeholder="3" value="' + esc(m.to) + '"> 層</div>' +
+    '<div class="row" style="font-size:16px;margin-top:8px">這一側總共 <input ' + num + ' data-f="m.total" maxlength="2" placeholder="自動" value="' + esc(m.total) + '"> 層</div><div class="note" style="margin-top:2px">不寫＝照這一側填過的最高層。</div>' +
+    (m.kind === 'stair' ? '<div class="label" style="margin-top:10px">梯</div><div class="row" style="font-size:16px"><input ' + num + ' data-f="m.lad" maxlength="2" placeholder="自動" value="' + esc(m.lad) + '"> 支<span class="sub" style="font-size:13px">（不寫＝層數−1）</span></div>' : '') +
+    '<div id="smsfig" style="background:#F3F7FA;border-radius:12px;padding:10px 6px;margin-top:10px">' + scafFigHtml(m) + '</div>' +
+    '<div class="label" style="margin-top:10px">備註（可以不寫）</div><textarea data-f="m.note" maxlength="100" placeholder="例：內+外" style="min-height:48px">' + esc(m.note) + '</textarea>' + smatPhotoHtml(m, true);
+  if (t) h += '<div class="sub" style="margin-top:6px;font-size:12.5px">' + esc(matWho(t)) + '</div>' +
+    (m.ask ? '<div style="color:var(--red);font-weight:bold;font-size:14px;margin-top:10px">確定要刪掉這一筆嗎？大家都看不到了。</div>' : '') +
+    '<button class="tdel' + (m.ask ? ' strong' : '') + '" style="margin:' + (m.ask ? '6' : '10') + 'px 0 0" data-act="msmdel">' + (m.ask ? '🗑 確定刪除' : '🗑 刪除這一筆') + '</button>';
+  if (m.err) h += '<div style="color:var(--red);font-size:14px;margin-top:6px">' + esc(m.err) + '</div>';
+  return h + '<div class="btns"><button class="dim" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button><button id="msave" data-act="msmsave"' + (modalOk(m) ? '' : ' disabled') + '>' + (m.busy ? '存檔中…' : t ? '存檔' : '加入') + '</button></div>';
+}
 function renderMats() {
   var M = S.mat || (S.mat = { from: 'site', items: null, busy: '', err: '', folder: '' }), items = M.items, f = M.folder, right = M.busy || '⟳ 更新', h;
   if (!f) {
@@ -2735,13 +2944,18 @@ function renderMats() {
   }
   var rebar = f === MAT_REBAR;
   var list = (items || []).filter(function (m) { return m.folder === f; });
+  // 施工架那一夾（第 56 版）：先分兩個資料夾（施工架＝踏板×框架、壁拉桿），點進去才是清單
+  var sub = f === SCAF && hasScaf() ? (M.sub || '') : null;
+  if (sub === '') return renderScafRoot(M, list, right);
+  if (sub === 'scaf') return renderScafList(M, list, right);
+  if (sub === 'tie') list = list.filter(function (m) { return matSub(m) === 'tie'; });
   if (matByName()) list = matSortByName(list); else list.sort(function (a, b) { return matLast(b) - matLast(a); });
-  h = topBar('📁 ' + f + '・' + S.site, 'matsroot', right, 'matsreload') + '<div class="wrap">';
-  h += '<button class="big" style="background:' + MAT_COLORS[f] + '" data-act="matadd">' + (rebar ? '＋ 新增鋼筋（現場餘料）' : '＋ 新增數量') + '</button>';
+  h = topBar('📁 ' + (sub === 'tie' ? '壁拉桿' : f) + '・' + S.site, sub === 'tie' ? 'matssub' : 'matsroot', right, 'matsreload') + '<div class="wrap">';
+  h += '<button class="big" style="background:' + MAT_COLORS[f] + '" data-act="smatadd">' + (rebar ? '＋ 新增鋼筋（現場餘料）' : sub === 'tie' ? '＋ 新增壁拉桿' : '＋ 新增數量') + '</button>';
   if (M.err) h += '<div class="err">' + esc(M.err) + '</div>';
   // 右邊「照名稱｜照時間」：兩筆以上才有得排
-  h += '<div class="card"><div class="row" style="margin-bottom:4px"><div class="label grow" style="margin:0">' + (items ? list.length + ' 筆' : '讀取中…') + '</div>' + (list.length > 1 ? matSortHtml() : '') + '</div>';
-  if (items && !list.length) h += '<div class="sub" style="font-size:15px;padding:8px 0;line-height:1.5">' + (rebar ? '還沒有。現場剩下的鋼筋按上面「＋ 新增鋼筋」填：號數、形式、尺寸、幾支。' : '這一夾還沒有東西，按上面「＋ 新增數量」。') + '</div>';
+  h += '<div class="card"><div class="row" style="margin-bottom:4px"><div class="label grow" style="margin:0">' + (items ? list.length + ' 筆' + (sub === 'tie' ? matQtySum(list) : '') : '讀取中…') + '</div>' + (list.length > 1 ? matSortHtml() : '') + '</div>';
+  if (items && !list.length) h += '<div class="sub" style="font-size:15px;padding:8px 0;line-height:1.5">' + (rebar ? '還沒有。現場剩下的鋼筋按上面「＋ 新增鋼筋」填：號數、形式、尺寸、幾支。' : sub === 'tie' ? '還沒有壁拉桿，按上面「＋ 新增壁拉桿」。' : '這一夾還沒有東西，按上面「＋ 新增數量」。') + '</div>';
   h += list.map(function (m) {
     return '<div class="row" style="padding:8px 0;align-items:center" data-act="matedit" data-v="' + esc(m.id) + '">' +
       (rebar && m.spec ? rebarFigSvg(String(m.spec).split('|')[1], null, true) : '') + '<div class="grow" style="min-width:0">' +
@@ -2816,6 +3030,8 @@ function smatViewModal(m) {
   var h = '<h3>📁 ' + esc(t.folder) + '</h3><div class="row"><b class="grow" style="font-size:20px;line-height:26px">' + esc(t.name) + '</b>' +
     '<b style="font-size:21px;color:var(--navy);white-space:nowrap">' + esc((t.qty + ' ' + (t.unit || '')).trim()) + '</b></div>';
   if (sh) h += '<div style="background:#F3F7FA;border-radius:12px;padding:10px 4px;margin-top:8px">' + rebarFigSvg(sh.n, String(p[2] || '').split(sh.s)) + '</div>';
+  var se = scafOf(t);   // 施工架：示意圖、踏板×框架、面積怎麼算的
+  if (se) h += '<div style="background:#F3F7FA;border-radius:12px;padding:10px 6px;margin-top:8px">' + scafSvg(scafCtx(se, String(t.loc || '').trim(), t.id), 300) + '<div style="font-size:14.5px;line-height:1.5;margin-top:6px;padding:0 6px">' + esc(scafLine(se)) + '<br>' + scafAreaHtml(se) + '</div></div>';
   if (t.loc) h += '<div style="margin-top:8px">' + matLocLine(t, 16) + '</div>';
   if (t.note) h += '<div style="font-size:16px;line-height:22px;margin-top:' + (t.loc ? 2 : 8) + 'px">' + esc(t.note) + '</div>';
   h += '<div class="sub" style="margin-top:6px;font-size:13px">' + esc(matWho(t)) + '</div>' + matLeftHtml(t, 4) + smatPhotoHtml(m, false) +
@@ -3200,6 +3416,7 @@ function modalOk(m) {
   if (m.type === 'pouredit') return !m.busy && !pourEditProblem(m);
   if (m.type === 'smat') return !m.busy && !!String(m.name || '').trim() && !!String(m.qty || '').trim();
   if (m.type === 'smatr') return !m.busy && !rebarModalMiss(m);
+  if (m.type === 'smats') return !m.busy && !!String(m.loc || '').trim() && !!scafSpec(m);
   return true;
 }
 
@@ -4055,7 +4272,8 @@ var ACT = {
   tologin: function () { S.route = 'login'; S.err = ''; render(); },
   nav: function (v) {
     if (v === 'sheetsroot') { S.sheetFolder = ''; go('sheets'); return; }   // 從資料夾回施工單清單
-    if (v === 'matsroot') { if (S.mat) { S.mat.folder = ''; S.mat.err = ''; } go('mats'); return; }   // 現場材料數量：從資料夾回五個資料夾
+    if (v === 'matsroot') { if (S.mat) { S.mat.folder = ''; S.mat.sub = ''; S.mat.err = ''; } go('mats'); return; }   // 現場材料數量：從資料夾回五個資料夾
+    if (v === 'matssub') { if (S.mat) { S.mat.sub = ''; S.mat.err = ''; } go('mats'); return; }   // 施工架：從「施工架／壁拉桿」那一夾回兩個資料夾
     if (v === 'site') S.sheetFolder = '';
     if (v === 'work' || v === 'site' || v === 'hub' || v === 'pours' || v === 'sheets') { if (S.busy) return; go(v); if (v === 'work') refresh(); }
     else go(v);
@@ -4325,19 +4543,31 @@ var ACT = {
       if (S.modal === m) { m.busy = false; m.done = r.name; renderModal(); }
     }).catch(function (e) { m.busy = false; var x = failMsg(e); if (x && S.modal === m) { m.err = '沒有匯出：' + x; renderModal(); } });
   },
-  matfolder: function (v) { if (!S.mat) return; S.mat.folder = v; S.mat.err = ''; render(); window.scrollTo(0, 0); },
+  matfolder: function (v) { if (!S.mat) return; S.mat.folder = v; S.mat.sub = ''; S.mat.err = ''; render(); window.scrollTo(0, 0); },
+  matsub: function (v) { if (!S.mat) return; S.mat.sub = v === 'tie' ? 'tie' : 'scaf'; S.mat.err = ''; render(); window.scrollTo(0, 0); },
   matsort: function (v) { S.matSort = v === 'time' ? 'time' : 'name'; LS.set('matSort', S.matSort); render(); },
-  matadd: function () {
+  // （以前叫 matadd，跟施工人員「＋ 新增材料/機具」那顆同名，後寫的蓋掉前面的，那顆從 11/19 起按了沒反應 → 2026-11-20 改名）
+  smatadd: function () {
     var f = S.mat && S.mat.folder; if (!f) return;
+    var sub = f === SCAF && hasScaf() ? S.mat.sub : '';
+    if (sub === 'scaf') {
+      // 踏板長度、框架高度先帶這個工地上一筆填的（沒有就 183、173）
+      var last = ((S.mat.items || []).filter(function (x) { return !!scafOf(x); }).sort(function (a, b) { return matLast(b) - matLast(a); })[0]), le = last ? scafOf(last) : null;
+      S.modal = { type: 'smats', folder: f, t: null, loc: '', kind: '', len: le ? scafNum(le.len) : '183', n: '', h: le ? scafNum(le.h) : '173', from: '1', to: '', total: '', lad: '', note: '', ask: false, busy: false, err: '', kept: [], removed: [], newPhotos: [], big: '' };
+      renderModal(); return;
+    }
     S.modal = f === MAT_REBAR ? { type: 'smatr', folder: f, t: null, size: 0, shape: '直', d0: '', d1: '', d2: '', qty: '', note: '', ask: false, busy: false, err: '' }
-      : { type: 'smat', folder: f, t: null, name: '', qty: '', unit: '', note: '', ask: false, busy: false, err: '' };
+      : { type: 'smat', folder: f, t: null, name: sub === 'tie' ? '壁拉桿' : '', qty: '', unit: sub === 'tie' ? '支' : '', note: '', ask: false, busy: false, err: '' };
     S.modal.kept = []; S.modal.removed = []; S.modal.newPhotos = []; S.modal.big = ''; S.modal.loc = '';
     renderModal();
   },
   matedit: function (id) {
     var t = findMat(id); if (!t) return;
     if (!t.canEdit) { S.modal = { type: 'smatv', t: t, kept: (t.photos || []).slice(), newPhotos: [], big: '' }; renderModal(); return; }   // 別人寫的：只能看
-    if (t.folder === MAT_REBAR) {
+    var se = hasScaf() ? scafOf(t) : null;
+    if (se) {   // 施工架（踏板×框架）
+      S.modal = { type: 'smats', folder: t.folder, t: t, kind: se.kind, len: scafNum(se.len), n: String(se.n), h: scafNum(se.h), from: String(se.from), to: String(se.to), total: se.total ? String(se.total) : '', lad: se.lad === '' ? '' : String(se.lad), note: t.note || '', ask: false, busy: false, err: '' };
+    } else if (t.folder === MAT_REBAR) {
       var p = String(t.spec || '').split('|'), sh = rebarShape(p[1]) || REBAR_SHAPES[0], d = String(p[2] || '').split(sh.s);
       S.modal = { type: 'smatr', folder: t.folder, t: t, size: Number(p[0]) || 0, shape: sh.n, d0: d[0] || '', d1: d[1] || '', d2: d[2] || '', qty: t.qty, note: t.note || '', ask: false, busy: false, err: '' };
     } else S.modal = { type: 'smat', folder: t.folder, t: t, name: t.name, qty: t.qty, unit: t.unit || '', note: t.note || '', ask: false, busy: false, err: '' };
@@ -4345,7 +4575,9 @@ var ACT = {
     renderModal();
   },
   // 位置：點這個工地用過的（再點一次＝清掉）
-  msmloc: function (v) { var m = S.modal; if (!m || (m.type !== 'smat' && m.type !== 'smatr') || m.busy) return; m.loc = String(m.loc || '').trim() === v ? '' : v; renderModal(); },
+  msmloc: function (v) { var m = S.modal; if (!m || (m.type !== 'smat' && m.type !== 'smatr' && m.type !== 'smats') || m.busy) return; m.loc = String(m.loc || '').trim() === v ? '' : v; renderModal(); },
+  // 施工架的排法：一般（一排）／樓梯（＋梯）／電梯（並排）
+  msmskind: function (v) { var m = S.modal; if (!m || m.type !== 'smats' || m.busy) return; m.kind = v === 'stair' || v === 'lift' ? v : ''; renderModal(); },
   // 在點開的那一張照片上畫記號：畫好＝換成有記號的那一張（剛拍剛選的原地換；雲端上的＝存檔時舊的拿掉、有記號的當新的一張傳上去）
   msmmark: function () {
     var m = S.modal; if (!m || !m.big || !m.newPhotos || !m.removed || m.busy) return;
@@ -4369,12 +4601,12 @@ var ACT = {
   msmsize: function (v) { var m = S.modal; if (!m || m.type !== 'smatr') return; m.size = Number(v); renderModal(); },
   msmshape: function (v) { var m = S.modal; if (!m || m.type !== 'smatr' || !rebarShape(v)) return; m.shape = v; renderModal(); },
   msmsave: function () {
-    var m = S.modal; if (!m || (m.type !== 'smat' && m.type !== 'smatr') || !modalOk(m)) return;
-    var t = m.t, f = m.type === 'smatr' ? { name: '', qty: String(Number(m.qty)), unit: '', note: String(m.note || '').trim(), spec: rebarModalSpec(m) }
+    var m = S.modal; if (!m || (m.type !== 'smat' && m.type !== 'smatr' && m.type !== 'smats') || !modalOk(m)) return;
+    var t = m.t, f = m.type === 'smats' ? { name: '', qty: '', unit: '', note: String(m.note || '').trim(), spec: scafSpec(m) } : m.type === 'smatr' ? { name: '', qty: String(Number(m.qty)), unit: '', note: String(m.note || '').trim(), spec: rebarModalSpec(m) }
       : { name: m.name.trim(), qty: m.qty.trim(), unit: String(m.unit || '').trim(), note: String(m.note || '').trim(), spec: '' };
     // 位置（第 55 版）：收件服務還沒有的時候不送（送了也沒地方存）
     var locOn = hasMatLoc(), loc = String(m.loc || '').trim().slice(0, 40);
-    var same = t && f.qty === t.qty && f.note === (t.note || '') && (!locOn || loc === (t.loc || '')) && (m.type === 'smatr' ? f.spec === (t.spec || '') : f.name === t.name && f.unit === (t.unit || ''));
+    var same = t && (m.type === 'smats' || f.qty === t.qty) && f.note === (t.note || '') && (!locOn || loc === (t.loc || '')) && (m.type === 'smats' ? f.spec === (t.spec || '') : m.type === 'smatr' ? f.spec === (t.spec || '') : f.name === t.name && f.unit === (t.unit || ''));
     var del = (m.removed || []).slice(), fresh = (m.newPhotos || []).slice();
     if (same && !del.length && !fresh.length) { closeModal(); return; }
     m.busy = true; m.err = ''; renderModal();
@@ -4393,7 +4625,7 @@ var ACT = {
     }, function (e) { m.busy = false; var x = failMsg(e); if (x) { m.err = '沒有存到：' + x; renderModal(); } });
   },
   msmdel: function () {
-    var m = S.modal; if (!m || (m.type !== 'smat' && m.type !== 'smatr') || !m.t || m.busy) return;
+    var m = S.modal; if (!m || (m.type !== 'smat' && m.type !== 'smatr' && m.type !== 'smats') || !m.t || m.busy) return;
     if (!m.ask) { m.ask = true; renderModal(); return; }
     var id = m.t.id, M = S.mat; closeModal();
     if (M && M.items) { M.items = M.items.filter(function (x) { return x.id !== id; }); MATCACHE[S.site] = M.items; M.busy = '刪除中…'; render(); }
@@ -4550,6 +4782,7 @@ document.addEventListener('input', function (ev) {
     if (mm && m.type === 'omat') mm.textContent = modalOk(m) ? '' : '要填廠商或數量';
     if (mm && m.type === 'smatr') mm.textContent = rebarModalMiss(m);   // 現場材料數量・鋼筋：還差什麼
     var fg = $('smrfig'); if (fg && m.type === 'smatr') fg.innerHTML = rebarFigSvg(m.shape, [m.d0, m.d1, m.d2]);   // 圖上的數字跟著換
+    var sf = $('smsfig'); if (sf && m.type === 'smats') sf.innerHTML = scafFigHtml(m);   // 施工架：示意圖、面積跟著填的數字換
     return;
   }
   var d = S.d; if (!d) return;
