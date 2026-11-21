@@ -450,7 +450,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/21k';
+var WEB_VERSION = '11/21l';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -6973,6 +6973,30 @@ function lpEval(raw) {
 function lpQty(it) { var a = []; if (+it.people > 0) a.push(it.people + '*' + (it.hours || '1')); if (+it.people2 > 0) a.push(it.people2 + '*' + (it.hours2 || '1')); return a.join('+') || String(it.qtyText || ''); }
 function lpFull(it) { return (it.lines || []).map(function (l, i) { var t = String(l.text || '').trim(); if (!t) return ''; var w = l.workers || []; return (i + 1) + '.' + t + (w.length ? '(' + w.join('+') + ')' : ''); }).filter(Boolean); }
 function lpFilled(it) { return +it.people > 0 || +it.people2 > 0 || lpFull(it).length > 0 || !!String(it.qtyText || ''); }
+// ---- 分開寫廠商（2026-11-21；日誌存的 lv／lu／total，見 dlMain／dlOther）----
+/** 別家那幾行：[{vendor, unit, q}]（q＝數量算出來的數字，沒填＝null） */
+function lpOthers(it) {
+  if (!Array.isArray(it.lv) && !Array.isArray(it.lu)) return [];
+  var m = dlMain(it);
+  return dlTidy(it).filter(function (l) { return dlOther(m, l); }).map(function (l) {
+    var h = parseFloat(l.hours || '1');
+    return { vendor: dlLV(l), unit: String(l.unit || m.u).trim(), q: +l.people > 0 && isFinite(h) ? +l.people * h : null };
+  });
+}
+/** 這個大項要不要拆成一列一家：{rows: [{vendor, unit, qty}]（跟 lines 同一列）, lines}；沒有別家＝null */
+function lpSplit(it) {
+  if (!Array.isArray(it.lv) && !Array.isArray(it.lu)) return null;
+  var m = dlMain(it), all = dlTidy(it);
+  if (!all.some(function (l) { return dlOther(m, l); })) return null;
+  var n = 0;
+  return {
+    rows: all.map(function (l, k) {
+      if (k === 0) return { vendor: m.v, unit: m.u, qty: lpQty(it) };
+      return dlOther(m, l) ? { vendor: dlLV(l), unit: String(l.unit || m.u).trim(), qty: +l.people > 0 ? l.people + '*' + (l.hours || '1') : '' } : { vendor: '', unit: '', qty: '' };
+    }),
+    lines: all.map(function (l) { var t = String(l.text || '').trim(); if (!t) return ''; var w = l.workers || []; n++; return n + '.' + t + (w.length ? '(' + w.join('+') + ')' : ''); })
+  };
+}
 function lpItem(log, cat) { return (log.items || []).filter(function (x) { return canonCat(x.category) === cat; })[0] || { category: cat, vendor: '柏捷', unit: '工', people: 0, hours: '1', lines: [{ text: '' }] }; }
 function lpMats(a) { return (a || []).map(function (m) { return { vendor: String(m.vendor || ''), qty: String(m.qty || ''), unit: String(m.unit || '') }; }).filter(function (m) { return m.vendor.trim() || m.qty.trim(); }); }
 // ---- 施工人員傳的（收件服務 export；照片在 files） ----
@@ -7034,6 +7058,8 @@ function lpBook(logs, byDay, cats, confirmedOnly) {
       if (cw.length) { if (!vendor.trim()) vendor = '柏捷'; if (!unit.trim()) unit = '工'; qty = lpWithWorkers(a, vendor, unit, qty, cw); }
       var v = lpEval(qty);
       if (v != null && vendor.trim()) (rows[c] = rows[c] || []).push({ d: d, vendor: vendor.trim(), unit: unit.trim(), q: v });
+      // 分開寫廠商（2026-11-21，Excel 那一格拆成一列一家以後也是一列一列加）：別家那幾行各自算進自己那一家
+      if (filled) lpOthers(a).forEach(function (o) { if (o.q != null && o.vendor) (rows[c] = rows[c] || []).push({ d: d, vendor: o.vendor, unit: o.unit, q: o.q }); });
       var o = cw.reduce(function (s, w) { return s + (lpHours(w.otH) || 0); }, 0) / LPD.HPD;
       if (o > 0) (ot[c] = ot[c] || []).push({ d: d, v: o });
     });
@@ -7053,7 +7079,13 @@ function lpBuild(log, date, site, company, cats, dayWs, confirmedOnly, book, pho
   var rows = cats.map(function (cat) {
     var a = lpItem(log, cat), cw = ws.filter(function (w) { return w.category === cat; });
     var vendor = '', unit = '', qty = '', lines = [];
-    if (lpFilled(a)) { vendor = String(a.vendor || '柏捷'); unit = String(a.unit || '工'); qty = lpQty(a); lines = lpFull(a); }
+    var split = null;
+    if (lpFilled(a)) {
+      vendor = String(a.vendor || '柏捷'); unit = String(a.unit || '工'); qty = lpQty(a); lines = lpFull(a);
+      // 分開寫廠商（使用者 2026-11-21「A：分開寫廠商」）：這個大項有別家 → 那一格拆成一列一家（第一列＝原本那一家）
+      var sp = lpSplit(a);
+      if (sp) { split = sp.rows; lines = sp.lines; vendor = String(a.vendor == null ? '' : a.vendor); }
+    }
     if (cw.length) {
       if (!vendor.trim()) vendor = '柏捷'; if (!unit.trim()) unit = '工';
       qty = lpWithWorkers(a, vendor, unit, qty, cw);
@@ -7065,7 +7097,8 @@ function lpBuild(log, date, site, company, cats, dayWs, confirmedOnly, book, pho
       ot = '加班：' + otWs.map(function (w) { return w.name + ' ' + lpNum(lpHours(w.otH)) + ' 小時'; }).join('、') + '＝' + lpFmt(sum) + ' 工' + (book ? '（加班累計 ' + lpFmt(book.otTotal(cat, date)) + ' 工）' : '');
     }
     var room = ot ? 2 : 3, fit = lines.length <= room ? lines : lines.slice(0, room - 1).concat([lines.slice(room - 1).join('；')]);
-    return { category: cat, vendor: vendor, unit: unit, qty: qty, lines: fit, cum: book ? book.text(cat, date) : '', ot: ot,
+    if (split) { split = split.slice(0, 3); split[0] = { vendor: vendor, unit: unit, qty: qty }; }   // 第一列：施工人員的工數已經加進 qty
+    return { category: cat, vendor: vendor, unit: unit, qty: qty, lines: fit, cum: book ? book.text(cat, date) : '', ot: ot, split: split,
       head: !vendor.trim() ? '' : !qty.trim() ? vendor : vendor + '-' + qty + unit };
   });
   var heads = {}; rows.forEach(function (r) { heads[r.category] = r.head; });
@@ -7130,8 +7163,13 @@ function lpRender(L, pages) {
   c(7, 0, 51, 2, '', { top: false });
   L.rows.slice(0, 11).forEach(function (row, k) {
     var r = 7 + 3 * k;
-    c(r, 3, r + 2, 3, row.category); c(r, 4, r + 2, 5, row.vendor); c(r, 6, r + 2, 6, (row.vendor.trim() || row.qty.trim()) ? row.unit : '');
-    c(r, 7, r + 2, 7, row.qty); c(r, 8, r + 2, 8, row.cum, { size: 10, fill: LPD.PEACH });
+    c(r, 3, r + 2, 3, row.category);
+    if (!row.split) { c(r, 4, r + 2, 5, row.vendor); c(r, 6, r + 2, 6, (row.vendor.trim() || row.qty.trim()) ? row.unit : ''); c(r, 7, r + 2, 7, row.qty); }
+    else for (var si = 0; si < 3; si++) {   // 拆成一列一家（跟 Excel 一樣）
+      var ss = row.split[si] || { vendor: '', unit: '', qty: '' };
+      c(r + si, 4, r + si, 5, ss.vendor); c(r + si, 6, r + si, 6, (String(ss.vendor).trim() || String(ss.qty).trim()) ? ss.unit : ''); c(r + si, 7, r + si, 7, ss.qty);
+    }
+    c(r, 8, r + 2, 8, row.cum, { size: 10, fill: LPD.PEACH });
     for (var i = 0; i < 3; i++) { var red = row.ot && i === row.lines.length; c(r + i, 9, r + i, 18, red ? row.ot : (row.lines[i] || ''), { align: 0, color: red ? LPD.RED : null }); }
   });
   c(40, 3, 48, 3, '材料/機具');
