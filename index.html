@@ -74,6 +74,12 @@ button { font-family:inherit; cursor:pointer; color:inherit; }
 .tc span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11.5px; color:var(--muted); line-height:1.2; }
 .tc.two, .tg.tall .tc { min-height:48px; }   /* tall＝這一組有的格子是兩行：全部一樣高 */
 .tc.on { background:var(--teal); border-color:var(--teal); color:#fff; } .tc.on span { color:#fff; }
+/* 誰看得到哪個資料夾（開發者設定；第 65 版）：左邊資料夾名稱，右邊公司、施工人員各一格，每格一樣大 */
+.vgrid { display:grid; grid-template-columns:92px minmax(0, 1fr) minmax(0, 1fr); gap:7px; align-items:center; }
+.vgrid .vh { text-align:center; font-size:15px; font-weight:bold; color:var(--navy); padding-bottom:1px; }
+.vgrid .vn { font-size:16.5px; font-weight:bold; white-space:nowrap; }
+.vgrid .tc { min-height:44px; }
+.tc.off { background:#FDECEC; border-color:#E9A5A6; color:#C62828; }
 /* 兩欄一樣寬的輸入格：上面小字寫是什麼，下面輸入框 */
 .fg { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-top:8px; }
 .fg .fl { font-size:13px; color:var(--muted); margin-bottom:3px; white-space:nowrap; }
@@ -450,7 +456,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/21l';
+var WEB_VERSION = '11/21m';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -886,7 +892,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smats: scafModal, smatv: smatViewModal, smatx: smatExportModal, wmerge: wmergeModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smats: scafModal, smatv: smatViewModal, smatx: smatExportModal, smatvis: smatVisModal, wmerge: wmergeModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -2572,7 +2578,36 @@ var MAT_COLORS = { '鋼筋': '#16A6A0', '施工架': '#4F6BD8', '模板': '#B779
 var MAT_UNITS = { '施工架': ['組', '片', '支', '個', '層'], '模板': ['片', '支', '才', 'm²', '組'], '材料': ['包', '噸', '支', '片', '箱', '桶', 'm³'], '其他': ['個', '組', '式', '支', '箱'] };
 var MATCACHE = {};   // 工地 → 上次讀到的（工地頁那一格的「共 N 筆」、回來先顯示舊的）
 function hasMats() { return !!S.s && Number(S.s.version) >= 52; }
-function matLine(site) { var c = MATCACHE[site]; return (c && c.length ? '共 ' + c.length + ' 筆 ・ ' : '') + '鋼筋、施工架、模板、材料、其他'; }
+function matLine(site) { var c = MATCACHE[site], fs = matFolders(); return (c && c.length ? '共 ' + c.length + ' 筆 ・ ' : '') + (fs.length ? fs.join('、') : '目前沒有開放的資料夾'); }
+// 第 65 版（使用者 2026-11-21「施工人員跟公司不可以匯出功能，然後開發者可以設定哪些可以讓公司或者施工人員看到」）
+var MAT_VIS_ROLES = ['公司', '施工人員'];
+/** 這個人看不到的資料夾（開發者設定的，每個工地一樣）：讀過清單＝照清單回的，還沒讀＝照登入時給的 */
+function matHide() { var M = S.mat; return (M && M.hideFolders) || (S.s && S.s.smatHide) || []; }
+function matFolders() { var hd = matHide(); return MAT_FOLDERS.filter(function (x) { return hd.indexOf(x) < 0; }); }
+/** 可不可以匯出：開發者、老闆、主任（收件服務第 65 版起照它回的；更舊的照角色） */
+function matCanExport() {
+  var M = S.mat;
+  if (M && M.canExport != null) return M.canExport === true;
+  if (S.s && S.s.smatExport != null) return S.s.smatExport === true;
+  return !!S.s && ['管理者', '老闆', '主任'].indexOf(S.s.role) >= 0;
+}
+/** 開發者那一頁下面的一行：現在誰看不到什麼 */
+function matVisLine(vis) {
+  return MAT_VIS_ROLES.map(function (r) { var a = MAT_FOLDERS.filter(function (x) { return ((vis || {})[r] || []).indexOf(x) >= 0; }); return r + '：' + (a.length ? '看不到 ' + a.join('、') : '全部看得到'); }).join('　');
+}
+/** 設定誰看得到（只有開發者）：m.vis＝{公司: [看不到的資料夾…], 施工人員: […]}；點一格切換，按存檔才送出去 */
+function smatVisModal(m) {
+  var h = '<h3>👁 誰看得到哪個資料夾</h3><div class="sub" style="font-size:14.5px;line-height:1.5;margin:-4px 0 12px">點一下切換，按「存檔」才算數。<br>每個工地都一樣。</div>';
+  h += '<div class="vgrid"><span></span>' + MAT_VIS_ROLES.map(function (r) { return '<span class="vh">' + esc(r) + '</span>'; }).join('') + MAT_FOLDERS.map(function (x) {
+    return '<span class="vn">📁 ' + esc(x) + '</span>' + MAT_VIS_ROLES.map(function (r) {
+      var off = (m.vis[r] || []).indexOf(x) >= 0;
+      return '<button class="tc ' + (off ? 'off' : 'on') + '" data-act="mvis" data-v="' + esc(r + '|' + x) + '"' + (m.busy ? ' disabled' : '') + '><b>' + (off ? '✕ 看不到' : '✓ 看得到') + '</b></button>';
+    }).join('');
+  }).join('') + '</div>';
+  h += '<div class="xnote"><div>看不到的那一夾：那個身分的人清單上沒有、不能填、也不會收到通知。</div><div>老闆、主任、開發者每一夾都看得到。</div><div>匯出（Excel／PDF）只有開發者、老闆、主任有。</div></div>';
+  if (m.err) h += '<div style="color:var(--red);font-size:14px;margin-top:6px">' + esc(m.err) + '</div>';
+  return h + '<div class="btns"><button class="dim" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button><button data-act="mvissave"' + (m.busy ? ' disabled' : '') + '>' + (m.busy ? '存檔中…' : '存檔') + '</button></div>';
+}
 function matLast(m) { return Math.max(Number(m.at) || 0, Number(m.editAt) || 0); }
 function matWho(m) { return todoWhen(m.by, m.at, '寫') + (m.editAt > 0 ? '・' + todoWhen(m.editBy, m.editAt, '改') : ''); }
 // 鋼筋那一夾＝鋼筋系統的「現場餘料」（使用者「我可以在手機輸入鋼筋外掛的現場餘料功能」）：號數、形式、尺寸（公分）、支數。
@@ -3080,13 +3115,19 @@ function renderMats() {
     h = topBar('📦 現場材料數量', M.from, right, 'matsreload') + '<div class="wrap"><div style="font-size:15px;font-weight:bold;margin:0 4px 10px">工地：' + esc(S.site) + '</div>';
     if (M.err) h += '<div class="err">' + esc(M.err) + '</div>';
     if (!items && !M.err) h += '<div class="sub" style="font-size:15px;margin:0 4px 10px">讀取中…</div>';
-    h += MAT_FOLDERS.map(function (x) {
+    var shown = matFolders();   // 第 65 版：開發者沒開放給這個身分的資料夾不列
+    if (!shown.length) h += '<div class="card"><div class="sub" style="font-size:15.5px;line-height:1.6">目前沒有開放給你的資料夾。</div></div>';
+    h += shown.map(function (x) {
       var list = (items || []).filter(function (m) { return m.folder === x; });
       return '<button class="tile" data-act="matfolder" data-v="' + esc(x) + '"><span class="em" style="background:' + MAT_COLORS[x] + '29">📁</span><span class="grow"><b>' + esc(x) + '</b>' +
         '<span class="sub" style="display:block;font-size:14px">' + esc(matFolderLine(x, list)) + '</span></span><span class="arrow">›</span></button>';
     }).join('');
     // 匯出這個工地全部的（有東西才有這顆）
-    if (hasMatExport() && items && items.length) h += '<button class="ghost" style="border-color:#8D6E63;color:#8D6E63" data-act="matexport">📤 匯出這個工地（Excel／PDF）</button>';
+    // 第 65 版：匯出只有開發者、老闆、主任（公司、施工人員沒有這顆）
+    if (hasMatExport() && matCanExport() && items && items.length) h += '<button class="ghost" style="border-color:#8D6E63;color:#8D6E63" data-act="matexport">📤 匯出這個工地（Excel／PDF）</button>';
+    // 開發者：設定公司、施工人員看得到哪幾個資料夾；下面一行寫現在的設定
+    if (M.visEdit) h += '<button class="ghost" style="border-color:var(--navy);color:var(--navy)" data-act="matvis">👁 設定誰看得到哪個資料夾</button>' +
+      '<div class="sub" style="font-size:13.5px;line-height:1.5;margin:6px 4px 10px;text-align:center">' + esc(matVisLine(M.vis)) + '</div>';
     return h + '<div class="note" style="padding:0 4px">每個人都可以填；每一筆會記是誰、哪一天寫的。自己寫的可以改、刪（開發者每一筆都可以）。鋼筋那一夾填的是現場剩下的鋼筋，電腦的鋼筋系統「現場餘料」可以讀進去用。</div></div>';
   }
   var rebar = f === MAT_REBAR;
@@ -4368,7 +4409,12 @@ function loadMats(keep) {
   var M = S.mat, site = S.site; M.busy = '讀取中…'; renderSoft();
   return api('smat', { op: 'list', site: site }).then(function (r) {
     if (S.site !== site || S.mat !== M) return;
-    M.items = r.items || []; M.ver = Number(r.ver) || 0; MATCACHE[site] = M.items; M.busy = ''; M.err = keep || ''; renderSoft();
+    M.items = r.items || []; M.ver = Number(r.ver) || 0; MATCACHE[site] = M.items; M.busy = ''; M.err = keep || '';
+    // 第 65 版：看不到的資料夾、可不可以匯出、（開發者）現在的設定；更舊的收件服務沒有這幾個 → 照登入時的、照角色
+    M.hideFolders = Array.isArray(r.hideFolders) ? r.hideFolders.map(String) : null; M.canExport = r.canExport == null ? null : r.canExport === true;
+    M.visEdit = r.visEdit === true; M.vis = r.vis || null;
+    if (M.folder && matHide().indexOf(M.folder) >= 0) { M.folder = ''; M.sub = ''; }   // 正在看的那一夾剛被關掉 → 回到資料夾那一頁
+    renderSoft();
   }).catch(function (e) { M.busy = ''; var m = failMsg(e); if (m) { M.err = keep || ('讀不到：' + m); renderSoft(); } });
 }
 function findMat(id) { return ((S.mat && S.mat.items) || []).filter(function (m) { return m.id === id; })[0]; }
@@ -4710,6 +4756,27 @@ var ACT = {
   matsreload: function () { if (S.mat) { S.mat.err = ''; loadMats(); } },
   // 匯出這個工地（第 54 版）：先選 Excel／PDF → 收件服務做好傳回來 → 存到「下載」
   matexport: function () { S.modal = { type: 'smatx', busy: false, err: '', done: '', parts: null }; renderModal(); },
+  // 誰看得到哪個資料夾（只有開發者；第 65 版）：打開 → 點格子切換 → 存檔
+  matvis: function () {
+    var M = S.mat; if (!M || !M.visEdit) return;
+    var v = M.vis || {}, c = {}; MAT_VIS_ROLES.forEach(function (r) { c[r] = (v[r] || []).slice(); });
+    S.modal = { type: 'smatvis', vis: c, busy: false, err: '' }; renderModal();
+  },
+  mvis: function (v) {
+    var m = S.modal; if (!m || m.type !== 'smatvis' || m.busy) return;
+    var i = String(v).indexOf('|'), a = m.vis[String(v).slice(0, i)], x = String(v).slice(i + 1); if (!a) return;
+    var k = a.indexOf(x); if (k >= 0) a.splice(k, 1); else a.push(x);
+    renderModal();
+  },
+  mvissave: function () {
+    var m = S.modal; if (!m || m.type !== 'smatvis' || m.busy) return;
+    m.busy = true; m.err = ''; renderModal();
+    api('smat', { op: 'vis', vis: m.vis }).then(function (r) {
+      if (S.mat) S.mat.vis = r.vis || m.vis;
+      if (S.modal === m) closeModal();
+      render();
+    }).catch(function (e) { m.busy = false; var x = failMsg(e); if (x && S.modal === m) { m.err = '沒有存到：' + x; renderModal(); } });
+  },
   // 匯出要哪幾個資料夾：點「全部」＝全部；點某一個＝勾／不勾（都不勾＝回到全部）
   msmxpart: function (v) {
     var m = S.modal; if (!m || m.type !== 'smatx' || m.busy) return;
