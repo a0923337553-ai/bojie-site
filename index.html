@@ -506,7 +506,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/23e';
+var WEB_VERSION = '11/23f';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -2003,7 +2003,8 @@ function renderSite() {
 var PGCACHE = {}, PG_NOTE = '樓層打「3」就是 3F，空著＝不分樓層；項目可以點選大項或自己打；部位（柱、梁、版、牆…）空著＝整個大項。日子用民國寫（115.12.01），日期空著的那一列不算。', PG_PCTS = [0, 25, 50, 75, 100];
 // 第 69 版：抓不到部位的叫「其他」；預計那一格常用的部位
 var PG_OTHER = '其他', PG_PARTS = ['柱', '梁', '版', '牆', '樓梯', '鑑界', '建築線', '高程'];
-function hasProgress() { return isOffice() && Number(S.s && S.s.version) >= 70; }
+// 工項累計：只有老闆、開發者（使用者 2026-11-23「這個只有老闆跟開發者看的到」；收件服務第 71 版）
+function hasProgress() { return !!S.s && (S.s.role === '老闆' || S.s.role === '管理者') && Number(S.s.version) >= 71; }
 // 11/23e 起沒用到（甘特圖改成工項累計，程式留著）
 function openProgressGantt(from) {
   var wk = false; try { wk = LS.get('pgweek') === '1'; } catch (e) { }
@@ -2396,7 +2397,11 @@ function renderProgress() {
   if (!d) return h + (P.err ? '' : '<div class="sub" style="font-size:15px;margin:0 4px 10px">' + esc(P.busy || '讀取中…') + '</div>') + '</div>';
   h += '<div class="card"><div style="font-size:20px;font-weight:800">' + esc(d.site) + '</div><div class="sub">從開工累計到今天 ・ 日誌 ' + (d.logs || 0) + ' 天</div>' +
     '<div class="note" style="margin-top:4px">' + (d.showQty ? '一組＝日誌寫一樣的字；工數＝日誌的人數×工數（一天寫好幾行的照行數平均分）。點工項打開／收起來，點一組看每一天。' :
-      '一組＝日誌寫一樣的字。工數只有開發者、老闆、主任看得到。點工項打開／收起來，點一組看每一天。') + '</div></div>';
+      '一組＝日誌寫一樣的字。工數只有開發者、老闆、主任看得到。點工項打開／收起來，點一組看每一天。') + '</div>' +
+    // 第 71 版：匯出 Excel／PDF（兩格一樣大）
+    (d.canExport && (d.cats || []).length ? '<div class="tg two itbtn"><button class="tc" data-act="itexport" data-v="xlsx"' + (P.busy ? ' disabled' : '') + '><b>匯出 Excel</b></button>' +
+      '<button class="tc" data-act="itexport" data-v="pdf"' + (P.busy ? ' disabled' : '') + '><b>匯出 PDF</b></button></div>' + (P.done ? '<div class="note" style="margin-top:6px">已存：' + esc(P.done) + '</div>' : '') : '') +
+    '</div>';
   if (!(d.cats || []).length) h += '<div class="sub" style="margin:0 4px">這個工地還沒有施工日誌。</div>';
   (d.cats || []).forEach(function (c, ci) {
     var open = !!P.open[c.n], selecting = P.sel === c.n;
@@ -2436,6 +2441,17 @@ function itNameModal(m) {
   return '<h3>' + esc(m.title) + '</h3><div class="sub">' + esc(m.hint) + '</div><input type="text" maxlength="40" data-f="m.name" value="' + esc(m.name) + '" style="margin-top:6px">' +
     '<button class="big" style="margin-top:10px" data-act="itnameok">好</button><button class="ghost" data-act="mclose">取消</button>';
 }
+// 第 71 版：匯出（收件服務組好檔案，這裡存下來）
+SITE_ACTS.itexport = function (v) {
+  var P = S.it, site = S.site; if (!P || P.busy) return;
+  var fmt = v === 'pdf' ? 'pdf' : 'xlsx'; P.busy = fmt === 'pdf' ? '匯出 PDF 中…（要十幾秒）' : '匯出 Excel 中…'; P.done = ''; render();
+  api('progress', { op: 'export', site: site, fmt: fmt }).then(function (r) {
+    var bin = atob(r.data), u8 = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    saveBlob(new Blob([u8], { type: r.mime || 'application/octet-stream' }), r.name);
+    if (S.it === P) { P.busy = ''; P.err = ''; P.done = r.name; render(); }
+  }, function (e) { if (S.it === P) { P.busy = ''; P.err = '沒有匯出：' + errText(e); render(); } });
+};
 SITE_ACTS.itreload = function () { if (S.it && !S.it.busy) itRun('重新算一次（日誌多的話要十幾秒）…', { op: 'sum', fresh: true }); };
 SITE_ACTS.itcat = function (v) { var P = S.it, c = P && P.data && P.data.cats[+v]; if (!c) return; P.open[c.n] = !P.open[c.n]; render(); };
 SITE_ACTS.itpick = function (v) { var P = S.it, c = P && P.data && P.data.cats[+v]; if (!c) return; P.sel = c.n; P.picked = {}; render(); };
