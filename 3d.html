@@ -308,6 +308,7 @@ async function loadModel() {
   SKMETA = r.sk || null;   // 收件服務第 27 版：這個工地有 SketchUp 模型
   // 第 47 版：方案（舊的收件服務沒有 plans＝只有一個，不顯示方案那排）
   PLANS = r.plans || []; PLAN = r.plan || PLAN; CONFIRMED = r.confirmed || ''; WAIT_PLAN = !!r.waitPlan;
+  NOW = r.now || null;   // 第 72 版：現況（空拍）
   verInit(!!r.canUp, r.skPending || []);   // 第 34 版：開發者、老闆可以上傳；第 47 版：方案
   if (r.same && have) return JSON.parse(have.text);
   if (!r.model) { if (SKMETA) return null; throw { error: WAIT_PLAN ? 'WAIT' : 'NONE' }; }
@@ -324,6 +325,8 @@ let SK = null, SKMETA = P.get('glb') ? { local: P.get('glb') } : null, skErr = '
 let SKNAME = 'SketchUp 模型', SK_AERIAL = false;
 // 第 47 版：方案（使用者 2026-11-16「這裡改成方案，有時候要提方案就會有方案一方案二」）：網址帶 plan＝看哪個方案；換方案＝帶新的 plan 重新打開
 let PLAN = P.get('plan') || '', PLANS = [], CONFIRMED = '', WAIT_PLAN = false;
+// 第 72 版：現況（空拍建模；使用者 2026-11-23「不是新方案」「你應該稱他現況」）：不算方案，plan＝'now'
+let NOW = null;
 const skItems = [];   // {mesh, tag, name, mat}
 function idb() {
   return new Promise((ok, bad) => {
@@ -377,7 +380,7 @@ async function loadSk() {
   const gltf = await new Promise((ok, bad) => new mod.GLTFLoader().parse(buf, '', ok, e => bad({ error: '3D 模型打不開：' + (e && e.message || e) })));
   // 空拍模型（轉檔時 asset.extras.kind＝'aerial'）：畫面上寫「空拍模型」，不寫 SketchUp
   const ex = (gltf.asset && gltf.asset.extras) || {};
-  SK_AERIAL = ex.kind === 'aerial'; SKNAME = SK_AERIAL ? '空拍模型' : 'SketchUp 模型';
+  SK_AERIAL = ex.kind === 'aerial' || PLAN === 'now'; SKNAME = PLAN === 'now' ? '現況' : SK_AERIAL ? '空拍模型' : 'SketchUp 模型';
   const g = gltf.scene;
   g.scale.setScalar(100);   // glTF 是公尺，這裡用公分（跟 3D 結構一樣）
   let verts = 0;
@@ -1732,10 +1735,12 @@ function planGo(id) {
 function renderPlans() {
   const R = document.getElementById('plans'); if (!R) return;
   R.innerHTML = '';
-  if (st.view !== 'sk' || !(PLANS.length > 1 || (CANUP && PLANS.length))) { R.style.display = 'none'; return; }
+  if (st.view !== 'sk' || !(PLANS.length > 1 || (CANUP && PLANS.length) || NOW)) { R.style.display = 'none'; return; }
+  // 第 72 版：現況（空拍）放最前面，跟方案分開
+  if (NOW) { const n = chip('🛩 現況', PLAN === 'now', '', () => { if (PLAN !== 'now') planGo('now'); }); n.style.fontWeight = '700'; R.appendChild(n); }
   PLANS.forEach(p => {
     const label = (p.locked ? '🔒 ' : '') + p.name + (p.confirmed ? ' ✓ 確定' : '');
-    const c = chip(label, p.id === PLAN, p.locked ? 'off' : '', () => {
+    const c = chip(label, p.id === PLAN && PLAN !== 'now', p.locked ? 'off' : '', () => {
       if (p.locked) { alert('已經確定用「' + ((PLANS.find(x => x.confirmed) || {}).name || '') + '」，其他方案鎖起來了。\n要換：開發者或老闆在「🗂 方案」按「取消確定」。'); return; }
       if (p.id !== PLAN) planGo(p.id);
     });
@@ -2083,7 +2088,7 @@ function renderSide() {
     T.textContent = (SK_AERIAL ? '🛩 ' : '🏠 ') + SKNAME;
     h += (hasStruct() && ST_ON ? '<div class="tip">🚚 <b>' + (SKF.length ? '灌漿區' : '灌漿區、切樓層') + '</b>：按上面「🏗 3D 結構」</div>' : '')
       + markSection()
-      + (SK_AERIAL ? '<div class="muted" style="margin:4px 0 8px">空拍建模（DJI）：可以轉、拉近、量尺寸、圈要改進的地方。</div>' : '<div class="muted" style="margin:4px 0 8px">' + (SKF.length ?'模型左上角「🏢 整棟 ▾」點開選一層只看那一層、再點一次收起（照樓層高度切；有標「1F」「2F」的群組、元件、標籤就照名字）' + (SKF.some(f => f.other) ? '；建物外面的（圍牆、院子、樹…）在「其他」' : '') + '；'
+      + (SK_AERIAL ? '<div class="muted" style="margin:4px 0 8px">' + (PLAN === 'now' ? '現況＝空拍建模（DJI）的工地現在的樣子，不是方案' : '空拍建模（DJI）') + '：可以轉、拉近、量尺寸、圈要改進的地方。</div>' :'<div class="muted" style="margin:4px 0 8px">' + (SKF.length ?'模型左上角「🏢 整棟 ▾」點開選一層只看那一層、再點一次收起（照樓層高度切；有標「1F」「2F」的群組、元件、標籤就照名字）' + (SKF.some(f => f.other) ? '；建物外面的（圍牆、院子、樹…）在「其他」' : '') + '；'
         : skTags().length > 1 ? '上面的標籤可以一個一個關掉、打開（跟 SketchUp 的「標籤」一樣）；' : '') + '點模型看它是哪個群組、元件。</div>');
   } else if (st.rebar) {
     const m = st.rebar;
@@ -2394,15 +2399,17 @@ async function verShow() {
 function verRender(r) {
   VLAST = r; VPEND = r.pending || VPEND || [];
   const plans = r.plans || [], conf = r.confirmed || '', dis = vBusy ? ' disabled' : '';
-  PLANS = plans; CONFIRMED = conf; renderPlans();
+  PLANS = plans; CONFIRMED = conf; if ('now' in r) NOW = r.now || null; renderPlans();
   const open = plans.filter(p => !p.locked);
-  if (!VTARGET || (VTARGET !== 'new' && !open.some(p => p.id === VTARGET))) VTARGET = open.some(p => p.id === PLAN) ? PLAN : (open[0] ? open[0].id : 'new');
+  if (!VTARGET || (VTARGET !== 'new' && VTARGET !== 'now' && !open.some(p => p.id === VTARGET))) VTARGET = PLAN === 'now' ? 'now' : open.some(p => p.id === PLAN) ? PLAN : (open[0] ? open[0].id : 'new');
   const nextName = '方案' + (PLAN_NUMS[plans.length + 1] || (plans.length + 1));
   let h = '<div class="card" style="margin-top:0"><div class="t">⬆ 上傳 3D <span class="muted">（SketchUp 檔 .skp 或 .glb）</span></div>' +
     '<div class="chips" style="padding:6px 0 2px;flex-wrap:wrap">' + open.map(p => '<span class="chip' + (VTARGET === p.id ? ' on' : '') + '" data-tgt="' + esc(p.id) + '">取代「' + esc(p.name) + '」</span>').join('') +
-    '<span class="chip' + (VTARGET === 'new' ? ' on' : '') + '" data-tgt="new">＋ 新方案</span></div>' +
+    '<span class="chip' + (VTARGET === 'new' ? ' on' : '') + '" data-tgt="new">＋ 新方案</span>' +
+    // 第 72 版：現況（空拍建模轉好的 .glb；不算方案）
+    '<span class="chip' + (VTARGET === 'now' ? ' on' : '') + '" data-tgt="now">🛩 ' + (NOW ? '換「現況」' : '＋ 現況（空拍）') + '</span></div>' +
     '<div class="row" style="margin-top:4px"><button class="btn solid" id="vpUp"' + dis + '>選檔案上傳</button><span class="muted">' +
-    (VTARGET === 'new' ? '會變成「' + esc(nextName) + '」' : '取代以後舊的那個不留（丟雲端垃圾桶）') + '</span></div>' +
+    (VTARGET === 'now' ? '空拍建模轉好的 .glb；不算方案、不會被鎖' + (NOW ? '，舊的現況丟雲端垃圾桶' : '') : VTARGET === 'new' ? '會變成「' + esc(nextName) + '」' : '取代以後舊的那個不留（丟雲端垃圾桶）') + '</span></div>' +
     (conf ? '<div class="muted" style="margin-top:4px">已經確定方案了：鎖住的方案不能換；新方案上傳後也是鎖住的，要「取消確定」才看得到。</div>' : '') +
     '<div class="muted" id="vpMsg" style="margin-top:6px"></div><div class="bar2" id="vpBar"><i></i></div></div>';
   VPEND.forEach(p => {
@@ -2413,6 +2420,9 @@ function verRender(r) {
       // 第 48 版：雲端沒叫到、或轉失敗 → 再叫一次雲端
       (p.err || !p.cloud ? ' <button class="btn ghost" data-kick="' + esc(p.id) + '"' + dis + '>☁ 雲端再轉一次</button>' : '') + '</div></div>';
   });
+  // 第 72 版：現況（空拍）一列
+  if (NOW) h += '<div class="card"><div class="vrow"><div class="g"><b>🛩 現況（空拍）</b><div class="muted">' + esc(NOW.by || '電腦上傳') + '・' + vTime(NOW.at) + '・' + vMB(NOW.size) +
+    '</div></div><div class="vb"><button class="btn ghost red" id="vpNowDel"' + dis + '>拿掉</button></div></div></div>';
   h += '<div class="card"><div class="t">方案 <span class="muted">（確定一個以後，其他方案鎖起來，施工人員才看得到確定的那個）</span></div>';
   if (!plans.length) h += '<div class="muted" style="padding:6px 0">還沒有方案：上面選「＋ 新方案」上傳</div>';
   plans.forEach(p => {
@@ -2435,6 +2445,16 @@ function verRender(r) {
   VB.querySelectorAll('[data-pdel]').forEach(b => b.onclick = () => planDelete(P2(b.dataset.pdel)));
   VB.querySelectorAll('[data-del]').forEach(b => b.onclick = () => verDelete(b.dataset.del));
   VB.querySelectorAll('[data-kick]').forEach(b => b.onclick = () => verKick(b.dataset.kick));
+  const nd = document.getElementById('vpNowDel');
+  if (nd) nd.onclick = async () => {
+    if (vBusy || !confirm('拿掉「現況」（空拍）？\n\n模型丟進雲端硬碟的垃圾桶（30 天內救得回來）。')) return;
+    vBusy = true; vMsg('處理中…');
+    try {
+      await api('model3d', { site: SITE, op: 'nowdel' }); vBusy = false; NOW = null;
+      if (PLAN === 'now') { vMsg('✅ 拿掉了，重新打開 3D…'); setTimeout(() => planGo(''), 700); return; }
+      const v = await api('model3d', { site: SITE, op: 'plans' }); verRender(v); vMsg('✅ 拿掉了');
+    } catch (e) { vBusy = false; vMsg('沒有成功：' + esc(errText(e))); }
+  };
 }
 /** 第 48 版：再叫一次雲端轉（雲端沒叫到、或轉失敗） */
 async function verKick(id) {
@@ -2495,8 +2515,9 @@ VF.onchange = async () => {
   const ext = ((/\.(skp|glb)$/i.exec(f.name) || [])[1] || '').toLowerCase();
   if (!ext) { vMsg('只能傳 SketchUp 檔（.skp）或 .glb'); return; }
   if (f.size > 300 * 1048576) { vMsg('檔案太大（超過 300 MB）'); return; }
-  const tgt = VTARGET || 'new', tname = tgt === 'new' ? '新方案' : '「' + ((PLANS.find(p => p.id === tgt) || {}).name || '') + '」';
-  if (tgt !== 'new' && !confirm('用「' + f.name + '」取代' + tname + '？\n舊的那個不留（丟雲端垃圾桶）。')) return;
+  const tgt = VTARGET || 'new', tname = tgt === 'new' ? '新方案' : tgt === 'now' ? '「現況」' : '「' + ((PLANS.find(p => p.id === tgt) || {}).name || '') + '」';
+  if (tgt === 'now' && ext !== 'glb') { vMsg('現況要傳空拍建模轉好的 .glb'); return; }
+  if (tgt !== 'new' && (tgt !== 'now' || NOW) && !confirm('用「' + f.name + '」取代' + tname + '？\n舊的那個不留（丟雲端垃圾桶）。')) return;
   vBusy = true; document.getElementById('vpUp').disabled = true;
   try {
     vMsg('讀檔案…', 0);
