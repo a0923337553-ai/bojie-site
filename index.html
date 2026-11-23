@@ -73,6 +73,8 @@ button { font-family:inherit; cursor:pointer; color:inherit; }
 .tc b { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; line-height:1.25; }
 .tc span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11.5px; color:var(--muted); line-height:1.2; }
 .tc.two, .tg.tall .tc { min-height:48px; }   /* tall＝這一組有的格子是兩行：全部一樣高 */
+.tg.extg { grid-template-columns:repeat(3, minmax(0, 1fr)); margin-top:4px; }   /* 工地展延：三格一樣大（不展延／展延 1 次／展延 2 次） */
+.tg.extg .tc { min-height:54px; } .tg.extg .tc span { font-size:13px; } .tg.extg .tc:disabled { color:var(--line); }
 .tc.on { background:var(--teal); border-color:var(--teal); color:#fff; } .tc.on span { color:#fff; }
 /* 誰看得到哪個資料夾（開發者設定；第 65 版）：左邊資料夾名稱，右邊公司、施工人員各一格，每格一樣大 */
 .vgrid { display:grid; grid-template-columns:92px minmax(0, 1fr) minmax(0, 1fr); gap:7px; align-items:center; }
@@ -456,7 +458,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/21m';
+var WEB_VERSION = '11/23a';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -714,7 +716,8 @@ function isOffice() { return !!S.s && (S.s.office === true || OFFICE_ROLES.index
 function hasFeed() { return !!S.s && Number(S.s.version) >= 7; }
 function feedSites() {
   var f = S.feed;
-  if (f && f.sites && f.sites.length) return f.sites.map(function (x) { return typeof x === 'string' ? { name: x } : { name: x.name, start: x.start || '', end: x.end || '' }; });
+  // 第 66 版：展延（ext＝幾次、end0＝原本的竣工日；end 已經是展延後的）
+  if (f && f.sites && f.sites.length) return f.sites.map(function (x) { return typeof x === 'string' ? { name: x } : { name: x.name, start: x.start || '', end: x.end || '', ext: Math.min(2, Number(x.ext) || 0), end0: x.end0 || '' }; });
   return (S.s ? S.s.sites : []).map(function (n) { return { name: n }; });
 }
 function siteNames() { return feedSites().map(function (x) { return x.name; }); }
@@ -729,6 +732,8 @@ function siteDaysText(st) {
   if (!st.start || !dateOf(st.start)) return '';
   var t = todayYmd(), parts = ['已進行 ' + (daysBetween(st.start, t) + 1) + ' 天'];
   if (st.end && dateOf(st.end)) parts.push('剩餘 ' + daysBetween(t, st.end) + ' 天');
+  // 展延（使用者 2026-11-23）：剩餘天數已經照展延後的算；字中間放「不斷行」，窄的手機整段換行，不會斷成「展／延 1 次」
+  if (st.ext > 0 && st.end) parts.push('展⁠延 ' + st.ext + ' 次');
   return parts.join(' ・ ');
 }
 function siteProgress(st) {
@@ -1240,8 +1245,36 @@ function workerSiteAdd() { return !!S.s && S.s.role === '施工人員' && Number
 SITE_ACTS.wsiteadd = function () { S.modal = { type: 'siteedit', worker: true, old: '', name: '', start: '', end: '', busy: '', err: '', ask: false }; renderModal(); var i = $('sitename'); if (i) i.focus(); };
 SITE_ACTS.siteedit = function (n) {
   var st = feedSites().filter(function (x) { return x.name === n; })[0] || { name: n };
-  S.modal = { type: 'siteedit', old: n, name: n, start: st.start || '', end: st.end || '', busy: '', err: '', ask: false }; renderModal();
+  // 展延（使用者 2026-11-23）：視窗裡的竣工日期寫原本的，ext＝已經展延幾次
+  var ext = st.ext > 0 && dateOf(st.end) ? st.ext : 0;
+  var end = ext ? (dateOf(st.end0) ? st.end0 : ymdAddMonths(st.end, -EXT_MONTHS * ext)) : (st.end || '');
+  S.modal = { type: 'siteedit', old: n, name: n, start: st.start || '', end: end, ext: ext, busy: '', err: '', ask: false }; renderModal();
 };
+// ---------- 展延（使用者 2026-11-23「我想在下面可以新增展延的功能，總共可以展延兩次，一次是半年」；跟摺疊機 Site.of 一樣） ----------
+// 手機新增.json 的 sites：end＝展延後的竣工日（剩餘天數、進度條、收件服務都照這個），end0＝原本的，ext＝幾次（0 就不寫這兩欄）
+var EXT_MAX = 2, EXT_MONTHS = 6;
+/** 加幾個月（跟 Java plusMonths 一樣：8/31 加半年＝2/28） */
+function ymdAddMonths(ymd, n) {
+  var d = dateOf(ymd); if (!d) return '';
+  var t = new Date(d.getFullYear(), d.getMonth() + n, 1, 12), last = new Date(t.getFullYear(), t.getMonth() + 1, 0, 12).getDate();
+  t.setDate(Math.min(d.getDate(), last));
+  return ymdOf(t);
+}
+/** 要存進 手機新增.json 的那一筆 */
+function siteRec(name, start, end, ext) {
+  ext = dateOf(end) ? Math.max(0, Math.min(EXT_MAX, Number(ext) || 0)) : 0;
+  if (!ext) return { name: name, start: start, end: end || '' };
+  return { name: name, start: start, end: ymdAddMonths(end, EXT_MONTHS * ext), end0: end, ext: ext };
+}
+function siteExtHtml(m) {
+  var ok = !!dateOf(m.end), h = '<div class="label" style="margin-top:8px">' + (ok ? '展延（一次半年，最多兩次）' : '展延：要先填竣工日期') + '</div><div class="tg extg">';
+  for (var k = 0; k <= EXT_MAX; k++) {
+    h += '<button class="tc two' + (ok && (m.ext || 0) === k ? ' on' : '') + '" data-act="siteext" data-v="' + k + '"' + (ok && !m.busy ? '' : ' disabled') + '>' +
+      '<b>' + (k ? '展延 ' + k + ' 次' : '不展延') + '</b><span>' + (ok ? rocDate(ymdAddMonths(m.end, EXT_MONTHS * k)) : '—') + '</span></button>';
+  }
+  return h + '</div>';
+}
+SITE_ACTS.siteext = function (v) { var m = S.modal; if (!m || m.type !== 'siteedit' || m.busy) return; m.ext = Math.max(0, Math.min(EXT_MAX, Number(v) || 0)); m.err = ''; renderModal(); };
 function siteEditProblem(m) {
   var n = String(m.name || '').trim();
   if (!n) return '要打工地名稱';
@@ -1266,7 +1299,8 @@ function siteEditModal(m) {
   return '<h3>' + (m.old ? '編輯工地' : '新增工地') + '</h3>' +
     '<div class="label">工地名稱</div><input type="text" id="sitename" data-f="m.name" maxlength="30" autocomplete="off" value="' + esc(m.name) + '">' +
     '<div class="row2" style="margin-top:8px"><div><div class="label">開工日期</div><input type="date" data-f="m.start" value="' + esc(m.start) + '"></div>' +
-    '<div><div class="label">竣工日期（可以空著）</div><input type="date" data-f="m.end" value="' + esc(m.end) + '"></div></div>' +
+    '<div><div class="label">' + (m.old && m.ext > 0 ? '原本的竣工日期' : '竣工日期（可以空著）') + '</div><input type="date" id="siteend" data-f="m.end" value="' + esc(m.end) + '"></div></div>' +
+    (m.old ? '<div id="siteextbox">' + siteExtHtml(m) + '</div>' : '') +
     '<div class="note" id="mmsg" style="margin-top:6px">' + esc(m.err || siteEditNote(m)) + '</div>' +
     '<button class="big" style="margin-top:12px" id="msave" data-act="siteeditok"' + (p || m.busy ? ' disabled' : '') + '>' + esc(m.busy || (m.old ? '存檔' : '加入')) + '</button>' +
     (m.old ? '<button class="ghost red" data-act="sitedelask"' + (m.busy ? ' disabled' : '') + '>刪除這個工地</button>' : '') +
@@ -1276,6 +1310,7 @@ function siteEditNote(m) {
   var p = siteEditProblem(m); if (p) return p;
   if (m.worker) return '只要打名稱，開工日由開發者填。加了以後大家的工地清單都會有。';
   if (m.old && String(m.name || '').trim() !== m.old) return '改名：雲端的資料夾、施工人員傳的、注意事項、待辦、派工都一起改成新名字（跟摺疊機一樣）。改之前摺疊機最好先同步好（首頁沒有「還有幾筆等網路上傳」）。';
+  if (m.old && m.ext > 0 && dateOf(m.end)) return '竣工日期照展延後的 ' + rocDate(ymdAddMonths(m.end, EXT_MONTHS * m.ext)) + ' 算（剩餘天數、進度條、日誌表頭）。';
   return m.old ? '只改日期。' : '加好之後摺疊機同步就會有；電腦 Excel 按「從手機匯入」建日誌。';
 }
 function siteEditMsg(m, t) { m.busy = t; if (S.modal === m) renderModal(); }
@@ -1285,7 +1320,7 @@ function siteEditDone(m, name, start, end, gone) {
   var f = S.feed;
   if (f && f.sites) {
     f.sites = f.sites.map(function (x) { return typeof x === 'string' ? { name: x } : x; }).filter(function (x) { return x.name !== gone && x.name !== name; });
-    if (name) f.sites.push({ name: name, start: start, end: end || '' });
+    if (name) f.sites.push(m.rec && m.rec.name === name ? m.rec : { name: name, start: start, end: end || '' });   // m.rec：有展延的那筆（end 是展延後的）
   }
   if (S.s && S.s.sites) { S.s.sites = S.s.sites.filter(function (x) { return x !== gone; }); if (name && S.s.sites.indexOf(name) < 0) S.s.sites.push(name); }
   if (gone && S.site === gone) setSite(name || (siteNames()[0] || ''));
@@ -1303,12 +1338,13 @@ SITE_ACTS.siteeditok = function () {
     return;
   }
   var name = String(m.name).trim(), start = m.start, end = m.end || '', old = m.old;
+  var rec = m.rec = siteRec(name, start, end, old ? m.ext : 0);   // 展延（使用者 2026-11-23）：end 寫展延後的，end0、ext 另外記
   m.err = '';
   dLogin(function () {
     if (!old || name === old) {   // 新增，或只改日期：手機新增.json 的 sites（跟摺疊機 addSite／editSiteDates 一樣）
       siteEditMsg(m, '存到雲端…');
       dCustomEdit(function (o) {
-        o.sites = o.sites.filter(function (s) { return s && s.name !== name; }).concat([{ name: name, start: start, end: end }]);
+        o.sites = o.sites.filter(function (s) { return s && s.name !== name; }).concat([rec]);
         o.hidden = o.hidden.filter(function (h) { return h !== 'sites:' + name; });
       }).then(function () { siteEditDone(m, name, start, end, ''); }, function (e) { siteEditFail(m, e); });
       return;
@@ -1346,7 +1382,7 @@ SITE_ACTS.siteeditok = function () {
     }).then(function () {
       siteEditMsg(m, '改工地清單…');
       return dCustomEdit(function (o) {
-        o.sites = o.sites.filter(function (s) { return s && s.name !== old && s.name !== name; }).concat([{ name: name, start: start, end: end }]);
+        o.sites = o.sites.filter(function (s) { return s && s.name !== old && s.name !== name; }).concat([rec]);
         o.hidden = o.hidden.filter(function (h) { return h !== 'sites:' + name; }); if (o.hidden.indexOf('sites:' + old) < 0) o.hidden.push('sites:' + old);
         if (o.siteGeo[old]) { o.siteGeo[name] = o.siteGeo[old]; delete o.siteGeo[old]; }
         var sd = {}; Object.keys(o.sheetDone).forEach(function (k) { sd[k.indexOf(old + '/') === 0 ? name + k.slice(old.length) : k] = o.sheetDone[k]; }); o.sheetDone = sd;
@@ -1472,6 +1508,7 @@ function newsTag(n) {
     case 'snote': return [n.tag === 'give' ? '給你看' : '施工單記號', '#B08900'];
     case 'rebar': return ['鋼筋發布', '#7A3FB0'];   // BricsCAD 分批發布料單群組（使用者 2026-11-11）
     case 'smat': return ['現場材料', '#8D6E63'];   // 現場材料數量有人新增（收件服務第 54 版，使用者 2026-11-19）
+    case 'm3d': return ['3D 更新', '#0E7C86'];   // 3D 模型換上新的（收件服務第 66 版，使用者 2026-11-23）
     default: return ['消息', '#5D7486'];
   }
 }
@@ -3871,11 +3908,12 @@ function fetchPhoto(attr, kind, id) {
  * 3D 結構（使用者 2026-11-10）：整頁蓋一個 3d.html（同一個網站，讀得到登入的代碼），關掉回到原本的工地頁。
  * 手機往回滑、按返回鍵也是關掉 3D（先記一筆瀏覽紀錄）。
  */
-function open3d(rel) {   // rel：鋼筋第幾批（點「鋼筋發布」消息進來，3D 打開整棟鋼筋、亮那一批）
+function open3d(rel, plan) {   // rel：鋼筋第幾批（點「鋼筋發布」消息進來，3D 打開整棟鋼筋、亮那一批）；plan：哪個方案（點「3D 更新」消息進來，第 66 版）
   if ($('d3')) return;
   var d = document.createElement('div'); d.id = 'd3';
   d.style.cssText = 'position:fixed;inset:0;z-index:1000;background:#F4F6F7';
-  d.innerHTML = '<iframe src="3d.html?embed=1&site=' + encodeURIComponent(S.site) + (PCAPP ? '&app=pc' : '') + (rel ? '&rel=' + encodeURIComponent(rel) : '') + '" style="border:0;width:100%;height:100%;display:block" allow="fullscreen"></iframe>';
+  plan = /^p\d+$/.test(String(plan || '')) ? String(plan) : '';
+  d.innerHTML = '<iframe src="3d.html?embed=1&site=' + encodeURIComponent(S.site) + (PCAPP ? '&app=pc' : '') + (rel ? '&rel=' + encodeURIComponent(rel) : '') + (plan ? '&plan=' + plan : '') + '" style="border:0;width:100%;height:100%;display:block" allow="fullscreen"></iframe>';
   document.body.appendChild(d); document.body.style.overflow = 'hidden';
   try { history.pushState({ d3: 1 }, ''); } catch (e) { }
 }
@@ -4549,6 +4587,7 @@ var ACT = {
       case 'smat': if (n.site && hasMats()) { setSite(n.site); openMats('hub'); } return;   // 現場材料數量有人新增：打開那個工地的（返回回首頁）
       case 'mark': if (isOffice()) { setSite(n.site); open3d(); } return;   // 3D 上圈要改進的地方
       case 'rebar': if (isOffice()) { setSite(n.site); open3d(n.id); } return;   // 鋼筋第 N 批發布：打開 3D 亮那一批
+      case 'm3d': setSite(n.site); open3d('', n.id); return;   // 3D 模型換上新的（第 66 版；施工人員只收到確定的方案）：打開那個方案
       case 'task': if (isOffice()) { setSite(n.site); openTasks('hub'); } else { loadMyTasks(); render(); } return;   // 派工
       case 'snote': openSheetNote(n); return;   // 施工單記號：打開那份、跳到那一頁
       case 'worker': setSite(n.site); openWork('hub'); return;
@@ -5035,6 +5074,7 @@ document.addEventListener('input', function (ev) {
     var mm = $('mmsg'); if (mm && m.type === 'cal') mm.textContent = m.err || calProblem(m);
     if (mm && m.type === 'dladd') mm.textContent = dlAddNote(m);
     if (mm && m.type === 'siteedit') { m.err = ''; mm.textContent = siteEditNote(m); }
+    var eb = $('siteextbox'); if (eb && k === 'm.end' && m.type === 'siteedit') eb.innerHTML = siteExtHtml(m);   // 展延那三格的日期跟著竣工日期換（不整個重畫，電腦上打日期不會跳掉）
     if (mm && m.type === 'pouredit') { m.err = ''; mm.textContent = pourEditNote(m); }
     var un = $('mcunitnote'); if (un && m.type === 'contract') un.textContent = cUnitNote(m);   // 單價×數量（第 43 版）
     if (mm && m.type === 'omat') mm.textContent = modalOk(m) ? '' : '要填廠商或數量';
