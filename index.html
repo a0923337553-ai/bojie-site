@@ -73,6 +73,27 @@ button { font-family:inherit; cursor:pointer; color:inherit; }
 .tc b { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; line-height:1.25; }
 .tc span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11.5px; color:var(--muted); line-height:1.2; }
 .tc.two, .tg.tall .tc { min-height:48px; }   /* tall＝這一組有的格子是兩行：全部一樣高 */
+/* 施工進度（第 67 版）：上面三格、圖例、月／週、甘特圖（左邊名稱固定、右邊左右滑）、每一項、編輯預計 */
+.tg.pgsum { grid-template-columns:repeat(3, minmax(0, 1fr)); margin-top:8px; } .tg.pgsum .tc { min-height:60px; cursor:default; }
+.tg.pgsum .tc b { font-size:20px; } .tg.pgsum .tc.dim b { font-size:16px; color:var(--muted); } .tg.pgsum .tc span { font-size:12px; }
+.pglg { display:flex; gap:12px; flex-wrap:wrap; font-size:12.5px; color:var(--muted); align-items:center; }
+.pglg i { display:inline-block; width:18px; height:8px; border-radius:3px; margin-right:4px; vertical-align:middle; }
+.pgunit { display:flex; align-items:center; gap:6px; margin:8px 0 6px; } .pgunit > span { font-size:13px; color:var(--muted); margin-right:2px; }
+.pgunit .tc { width:64px; min-height:34px; flex:none; }
+.gt { display:flex; } .gtn { width:86px; flex:none; }
+.gtn .gtr { display:block; width:100%; height:34px; border:0; background:none; text-align:left; font-weight:bold; font-size:13px; color:var(--ink); padding:0 4px 0 0; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-radius:0; }
+.gax { height:22px; position:relative; } .gax span { position:absolute; top:3px; font-size:11px; color:var(--muted); white-space:nowrap; }
+.gts { flex:1; min-width:0; overflow-x:auto; -webkit-overflow-scrolling:touch; } .gtc { position:relative; }
+.gtb { position:relative; height:34px; background-image:linear-gradient(to right, #E3EAEF 1px, transparent 1px); cursor:pointer; }
+.gtb.alt { background-color:#F6F9FB; } .gtb i { position:absolute; height:8px; border-radius:4px; }
+.gtb .gp { top:7px; background:#BFD8F2; } .gtb .ga { top:18px; background:#1E9E6A; } .gtb .ga.late { background:#F2994A; }
+.gtoday { position:absolute; top:22px; bottom:0; width:2px; background:var(--red); pointer-events:none; }
+.pgst { display:flex; width:100%; text-align:left; background:none; border:0; border-top:1px solid #EEF2F5; border-radius:0; padding:7px 0; margin:0; gap:8px; align-items:flex-start; }
+.pgst b { width:86px; flex:none; font-size:14.5px; color:var(--ink); } .pgst span { flex:1; font-size:13.5px; color:var(--muted); line-height:19px; font-weight:normal; } .pgst span.bad { color:var(--red); }
+.pgph, .pgpr { display:grid; grid-template-columns:76px minmax(0, 1fr) minmax(0, 1fr) 22px; gap:6px; align-items:center; margin-bottom:6px; }
+.pgph span { font-size:12px; color:var(--muted); } .pgpr b { font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pgpr input { margin:0; padding:6px; font-size:14px; min-width:0; width:100%; box-sizing:border-box; height:40px; letter-spacing:0; }
+.pgx { border:0; background:none; color:var(--muted); font-size:16px; padding:0; margin:0; width:22px; }
 .tg.extg { grid-template-columns:repeat(3, minmax(0, 1fr)); margin-top:4px; }   /* 工地展延：三格一樣大（不展延／展延 1 次／展延 2 次） */
 .tg.extg .tc { min-height:54px; } .tg.extg .tc span { font-size:13px; } .tg.extg .tc:disabled { color:var(--line); }
 .tc.on { background:var(--teal); border-color:var(--teal); color:#fff; } .tc.on span { color:#fff; }
@@ -458,7 +479,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/23a';
+var WEB_VERSION = '11/23b';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -876,13 +897,14 @@ function render() {
     '<button class="ghost dim" data-act="tologin" style="margin-top:14px">回登入畫面</button></div>';
   else h = ({ hub: renderHub, work: renderWork, edit: renderEdit, view: renderView, site: renderSite, pours: renderPours, sheets: renderSheets,
     pdf: renderPdf, contracts: renderContracts, todo: renderTodo, logs: renderLogs, calendar: renderCal, tasks: renderTasks,
-    people: renderPeople, adminq: renderAdminQ, dlog: renderDlog, staff: renderStaff, mats: renderMats }[S.route] || renderHub)();
+    people: renderPeople, adminq: renderAdminQ, dlog: renderDlog, staff: renderStaff, mats: renderMats, progress: renderProgress }[S.route] || renderHub)();
   if (S.asCode && S.route !== 'login') h = asBar() + h;   // 開發者切換成別人測試中
   $('app').innerHTML = h;
   if ($('gbtn')) mountGis();
   $('app').className = 'r-' + S.route;   // 電腦版：清單、表單那幾頁窄一點比較好讀
   if (S.route === 'login') { var c = $('code'); if (c) c.value = S.codeInput; }
   for (var k in keep) { var el = document.querySelector('[data-sk="' + k + '"]'); if (el) el.scrollTop = keep[k]; }
+  if (S.route === 'progress') pgAfter();   // 施工進度：甘特圖滑到今天（重畫時留在原本的地方）
   fillPhotos();
 }
 /** 背景回來的資料：正在打字、在看 PDF 時先不重畫（不然鍵盤會收起來、PDF 會不見） */
@@ -897,7 +919,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smats: scafModal, smatv: smatViewModal, smatx: smatExportModal, smatvis: smatVisModal, wmerge: wmergeModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smats: scafModal, smatv: smatViewModal, smatx: smatExportModal, smatvis: smatVisModal, wmerge: wmergeModal, pgplan: pgPlanModal, pgrow: pgRowModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -1924,6 +1946,8 @@ function renderSite() {
   // 開發者點「施工日誌」直接是寫日誌那一頁（跟摺疊機一樣；以前另外一格「寫施工日誌（開發者）」）
   if (dev) h += tile('施工日誌', '天氣、大項、材料、討論、拍照・跟摺疊機同一份', '#2F80ED', '📋', 'dlog').replace('data-act="tile"', 'data-act="dlopenday"').replace('data-v="dlog"', 'data-v=""');
   else h += tile('施工日誌', '每天的日誌、施工人員傳的、照片', '#2F80ED', '📋', 'logs');
+  // 施工進度（收件服務第 67 版，使用者 2026-11-23「施工日誌下面新增一個施工進度的按鈕…甘特圖」；開發者、老闆、主任、公司）
+  if (hasProgress()) h += tile('施工進度', '甘特圖：預計 vs 實際', '#0E7C86', '📊', 'progress');
   h += tile('鋼筋施工單', sheets + ' 份', '#16A6A0', '📐', 'sheets');
   h += tile('混凝土灌漿數量', next ? '下一次 ' + rocDate(pourOf(next).pourDate) + '（' + (pourOf(next).part || '') + '）' + (pourOf(next).m3 ? ' ・ ' + pourOf(next).m3 + ' m³' : '') : pours.length + ' 份', '#F2994A', '🚚', 'pours');
   // 現場材料數量（收件服務第 52 版，使用者 2026-11-19「在混凝土灌漿數量下面新增一個按鈕」；每個人都能填）
@@ -1943,6 +1967,208 @@ function renderSite() {
   if (o && S.officeErr) h += '<div class="sub">' + esc(S.officeErr) + '</div>';
   return h + '</div>';
 }
+
+// ---------- 施工進度（甘特圖；收件服務第 67 版。使用者 2026-11-23「我想在施工日誌下面新增一個施工進度的按鈕，點進去會有預計進度跟實際進度的甘特圖」
+// 「雖然現在沒有預計進度的資料，但現階段有實際進度資料，也就是施工日誌」「3a」「這裡能否讓使用者調整可以用週或者月計算」；跟摺疊機 ProgressScreen 一樣） ----------
+// 實際＝收件服務從施工日誌算的（每個大項有寫的日子＋確認過的施工人員傳的）；預計＝開發者填的；開發者、老闆、主任、公司看得到
+var PGCACHE = {}, PG_NOTE = '空著的項目不畫預計。日子用民國寫（跟工地的開工、竣工一樣）。';
+function hasProgress() { return isOffice() && Number(S.s && S.s.version) >= 67; }
+function openProgress(from) {
+  var wk = false; try { wk = LS.get('pgweek') === '1'; } catch (e) { }
+  S.pg = { from: from, data: PGCACHE[S.site] || null, busy: '', err: '', week: wk, scrolled: '', left: 0 }; go('progress'); loadProgress(false);
+}
+function loadProgress(fresh) {
+  var P = S.pg, site = S.site; P.busy = fresh ? '重新算…' : '讀取中…'; renderSoft();
+  return api('progress', { op: 'get', site: site, fresh: !!fresh }).then(function (r) {
+    if (S.pg !== P) return; P.data = r; PGCACHE[site] = r; P.busy = ''; P.err = ''; P.scrolled = ''; renderSoft();
+  }, function (e) {
+    if (S.pg !== P) return; var t = errText(e); P.busy = ''; P.err = /不認得/.test(t) ? '收件服務還沒更新到有施工進度的版本' : '讀不到：' + t; renderSoft();
+  });
+}
+/** 每一列：名稱、預計（同名可以好幾段）、有做的日子 */
+function pgRows(d) {
+  return (d.cats || []).map(function (c) {
+    return { name: c, plan: (d.plan || []).filter(function (p) { return p.n === c; }), days: ((d.acts || {})[c] || []).slice().sort() };
+  });
+}
+/** 有做的日子接成一段一段（中間空 7 天以內算同一段） */
+function pgSegs(days) {
+  var out = [], a = null, b = null;
+  days.forEach(function (x) { if (!a) { a = b = x; return; } if (daysBetween(b, x) <= 8) b = x; else { out.push([a, b]); a = b = x; } });
+  if (a) out.push([a, b]);
+  return out;
+}
+/** 這一列的一句話、要不要紅字（落後） */
+function pgStatus(r, t) {
+  var ss = r.plan.map(function (p) { return p.s; }).sort(), es = r.plan.map(function (p) { return p.e; }).sort();
+  var ps = ss[0] || '', pe = es[es.length - 1] || '', f = r.days[0], l = r.days[r.days.length - 1];
+  if (!ps) return [f ? '有做 ' + r.days.length + ' 天 ・ ' + rocDate(f) + '～' + rocDate(l) : '還沒有日誌', false];
+  if (!f) return t < ps ? ['預計 ' + rocDate(ps) + ' 開工', false] : ['預計 ' + rocDate(ps) + ' 開工，晚了 ' + daysBetween(ps, t) + ' 天還沒做', true];
+  var late = daysBetween(ps, f), st = late > 0 ? '晚 ' + late + ' 天開工' : late < 0 ? '早 ' + (-late) + ' 天開工' : '準時開工';
+  var over = pe && t > pe && l >= addDays(t, -7) ? daysBetween(pe, t) : 0;
+  return [st + ' ・ 有做 ' + r.days.length + ' 天' + (over > 0 ? ' ・ 超過預計完成 ' + over + ' 天' : ''), late > 7 || over > 0];
+}
+/** 預計到今天應該做到幾 %（照每一段預計的天數加權）；沒填＝null */
+function pgPct(d) {
+  var p = d.plan || [], all = 0, done = 0, t = d.today;
+  if (!p.length) return null;
+  p.forEach(function (x) { var tot = daysBetween(x.s, x.e) + 1; all += tot; done += t < x.s ? 0 : t > x.e ? tot : daysBetween(x.s, t) + 1; });
+  return all > 0 ? Math.round(done * 100 / all) : null;
+}
+/** 圖的範圍：那個月的 1 號 ～ 最後那個月的月底 */
+function pgSpan(d) {
+  var lo = [d.start, d.today], hi = [d.end, d.today];
+  Object.keys(d.acts || {}).forEach(function (c) { var a = (d.acts[c] || []).slice().sort(); if (a.length) { lo.push(a[0]); hi.push(a[a.length - 1]); } });
+  (d.plan || []).forEach(function (p) { lo.push(p.s); hi.push(p.e); });
+  var a = dateOf(lo.filter(dateOf).sort()[0]), b = dateOf(hi.filter(dateOf).sort().pop());
+  return [ymdOf(new Date(a.getFullYear(), a.getMonth(), 1, 12)), ymdOf(new Date(b.getFullYear(), b.getMonth() + 1, 0, 12))];
+}
+/** 格子：月＝每個月 1 號；週＝每個星期一 */
+function pgScale(d, week) {
+  var sp = pgSpan(d), cells = [], c;
+  if (week) { c = addDays(sp[0], -((dateOf(sp[0]).getDay() + 6) % 7)); while (c <= sp[1]) { cells.push(c); c = addDays(c, 7); } }
+  else { c = sp[0]; while (c <= sp[1]) { cells.push(c); c = ymdAddMonths(c, 1); } }
+  return { week: week, cells: cells.length ? cells : [sp[0]] };
+}
+/** 這一天在第幾格（有小數） */
+function pgX(sc, ymd) {
+  if (sc.week) return daysBetween(sc.cells[0], ymd) / 7;
+  var a = dateOf(sc.cells[0]), b = dateOf(ymd), len = new Date(b.getFullYear(), b.getMonth() + 1, 0, 12).getDate();
+  return (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth() + (b.getDate() - 1) / len;
+}
+/** 月：1、4、7、10 月寫「115.4」；週：每兩週寫「11/23」，換年那個寫「116.1/4」 */
+function pgLabel(sc, i) {
+  var c = dateOf(sc.cells[i]), y = c.getFullYear() - 1911, mo = c.getMonth() + 1;
+  if (!sc.week) return i === 0 || mo % 3 === 1 ? y + '.' + mo : '';
+  if (i % 2) return '';
+  var yr = i === 0 || sc.cells.slice(Math.max(0, i - 2), i).some(function (x) { return x.slice(0, 4) !== sc.cells[i].slice(0, 4); });
+  return (yr ? y + '.' : '') + mo + '/' + c.getDate();
+}
+function pgGantt(d, week) {
+  var sc = pgScale(d, week), cw = week ? 26 : 32, W = cw * sc.cells.length, rows = pgRows(d), t = d.today;
+  var bar = function (cls, a, b) { var x0 = pgX(sc, a) * cw, x1 = pgX(sc, addDays(b, 1)) * cw; return '<i class="' + cls + '" style="left:' + x0.toFixed(1) + 'px;width:' + Math.max(3, x1 - x0).toFixed(1) + 'px"></i>'; };
+  var h = '<div class="gt"><div class="gtn"><div class="gax"></div>';
+  rows.forEach(function (r) { h += '<button class="gtr" data-act="pgrow" data-v="' + esc(r.name) + '">' + esc(r.name) + '</button>'; });
+  h += '</div><div class="gts" id="gts"><div class="gtc" style="width:' + W + 'px"><div class="gax">';
+  sc.cells.forEach(function (c, i) { var l = pgLabel(sc, i); if (l) h += '<span style="left:' + (i * cw + 2) + 'px">' + esc(l) + '</span>'; });
+  h += '</div>';
+  rows.forEach(function (r, idx) {
+    var late = pgStatus(r, t)[1];
+    h += '<div class="gtb' + (idx % 2 ? '' : ' alt') + '" data-act="pgrow" data-v="' + esc(r.name) + '" style="background-size:' + cw + 'px 100%">';
+    r.plan.forEach(function (p) { h += bar('gp', p.s, p.e); });
+    pgSegs(r.days).forEach(function (s) { h += bar('ga' + (late ? ' late' : ''), s[0], s[1]); });
+    h += '</div>';
+  });
+  var tx = (pgX(sc, t) + (week ? 0.5 / 7 : 0.5 / 30)) * cw;
+  S.pg.todayX = tx;
+  return h + '<i class="gtoday" style="left:' + tx.toFixed(1) + 'px"></i></div></div></div>';
+}
+/** 畫好以後：第一次滑到今天（今天在看得到的六成五），之後重畫留在原本的地方 */
+function pgAfter() {
+  var P = S.pg, el = $('gts'); if (!P || !el || !P.data) return;
+  var key = P.data.site + '|' + (P.week ? 'w' : 'm');
+  if (P.scrolled === key) el.scrollLeft = P.left || 0;
+  else { el.scrollLeft = Math.max(0, (P.todayX || 0) - el.clientWidth * 0.65); P.scrolled = key; P.left = el.scrollLeft; }
+  el.onscroll = function () { P.left = el.scrollLeft; };
+}
+function pgBox(v, l, dim) { return '<div class="tc two' + (dim ? ' dim' : '') + '"><b>' + esc(v) + '</b><span>' + esc(l) + '</span></div>'; }
+function renderProgress() {
+  var P = S.pg || (S.pg = { from: 'site', data: null, busy: '', err: '', week: false }), d = P.data;
+  var h = topBar('📊 施工進度', P.from, P.busy || '⟳ 更新', 'pgreload') + '<div class="wrap">';
+  if (P.err) h += '<div class="err">' + esc(P.err) + '</div>';
+  if (!d) return h + (P.err ? '' : '<div class="sub" style="font-size:15px;margin:0 4px 10px">讀取中…</div>') + '</div>';
+  var pct = pgPct(d), dates = [d.start ? '開工 ' + rocDate(d.start) : '', d.end ? '竣工 ' + rocDate(d.end) + (d.ext > 0 ? '（展延 ' + d.ext + ' 次）' : '') : ''].filter(Boolean).join(' ・ ');
+  h += '<div class="card"><div style="font-size:20px;font-weight:800">' + esc(d.site) + '</div>' + (dates ? '<div class="sub">' + esc(dates) + '</div>' : '') +
+    '<div class="tg pgsum">' + pgBox(d.start ? (daysBetween(d.start, d.today) + 1) + ' 天' : '—', '已進行') + pgBox((d.logs || 0) + ' 天', '施工日誌') +
+    pgBox(pct == null ? '還沒填' : pct + '%', '預計到今天', pct == null) + '</div></div>';
+  var rows = pgRows(d);
+  h += '<div class="card"><div class="pglg"><span><i style="background:#BFD8F2"></i>預計</span><span><i style="background:#1E9E6A"></i>實際</span>' +
+    '<span><i style="background:#F2994A"></i>比預計晚</span><span><i style="background:var(--red);width:3px;height:13px"></i>今天</span></div>' +
+    '<div class="pgunit"><span>時間</span><button class="tc' + (P.week ? '' : ' on') + '" data-act="pgunit" data-v="m"><b>月</b></button>' +
+    '<button class="tc' + (P.week ? ' on' : '') + '" data-act="pgunit" data-v="w"><b>週</b></button></div>';
+  h += rows.length ? pgGantt(d, P.week) : '<div class="sub" style="margin:8px 0">這個工地還沒有施工日誌，也還沒填預計進度。</div>';
+  h += '<div class="note" style="margin-top:6px">實際：那個大項有寫進施工日誌的日子（施工人員傳的要確認過才算），中間空 7 天以內畫成一段。左右滑看其他月份，點一列看那一列。</div></div>';
+  if (rows.length) {
+    h += '<div class="card"><div class="ttl">每一項</div>';
+    rows.forEach(function (r) { var s = pgStatus(r, d.today); h += '<button class="pgst" data-act="pgrow" data-v="' + esc(r.name) + '"><b>' + esc(r.name) + '</b><span' + (s[1] ? ' class="bad"' : '') + '>' + esc(s[0]) + '</span></button>'; });
+    h += '</div>';
+  }
+  if (d.canEdit) h += '<button class="big" data-act="pgplan">✎ 編輯預計進度</button>';
+  else if (!(d.plan || []).length) h += '<div class="note" style="margin:0 4px">預計進度由開發者填；還沒填的時候只畫實際。</div>';
+  return h + '</div>';
+}
+function pgRowModal(m) {
+  var d = S.pg && S.pg.data, r = d && pgRows(d).filter(function (x) { return x.name === m.name; })[0];
+  if (!r) return '<h3>' + esc(m.name) + '</h3><button class="ghost" data-act="mclose">關閉</button>';
+  var s = pgStatus(r, d.today), by = {};
+  var h = '<h3>' + esc(r.name) + '</h3><div style="font-size:15.5px;line-height:23px;' + (s[1] ? 'color:var(--red)' : '') + '">' + esc(s[0]) + '</div>' +
+    '<div class="sub" style="margin-top:8px">預計：' + esc(r.plan.length ? r.plan.map(function (p) { return rocDate(p.s) + '～' + rocDate(p.e); }).join('、') : '還沒填') + '</div>' +
+    '<div class="sub">實際：' + esc(r.days.length ? rocDate(r.days[0]) + '～' + rocDate(r.days[r.days.length - 1]) + '，有做 ' + r.days.length + ' 天' : '施工日誌還沒有') + '</div>';
+  if (r.days.length) {
+    r.days.forEach(function (x) { by[x.slice(0, 7)] = (by[x.slice(0, 7)] || 0) + 1; });
+    h += '<div style="font-weight:bold;margin-top:10px">每個月有做幾天</div>';
+    Object.keys(by).sort().forEach(function (k) { h += '<div style="font-size:15px">' + (Number(k.slice(0, 4)) - 1911) + ' 年 ' + Number(k.slice(5)) + ' 月：' + by[k] + ' 天</div>'; });
+  }
+  return h + '<button class="ghost" data-act="mclose" style="margin-top:12px">關閉</button>';
+}
+/** 編輯預計：每一列 m.pg_i_n／s／e（名稱、開始、完成；日期用民國打，跟摺疊機一樣，格子才放得下），_f＝大項（名稱不能改），_x＝拿掉了 */
+function pgPlanCheck(m) {
+  var plan = [];
+  for (var i = 0; i < m.n; i++) {
+    if (m['pg_' + i + '_x']) continue;
+    var n = String(m['pg_' + i + '_n'] || '').trim(), st = String(m['pg_' + i + '_s'] || '').trim(), et = String(m['pg_' + i + '_e'] || '').trim();
+    if (!st && !et) continue;
+    if (!n) return { plan: [], err: '有一列沒有名稱' };
+    var s = parseRoc(st), e = parseRoc(et);
+    if (!s) return { plan: [], err: '「' + n + '」的預計開始看不懂，寫成 115.12.01' };
+    if (!e) return { plan: [], err: '「' + n + '」的預計完成看不懂，寫成 116.03.31' };
+    if (e < s) return { plan: [], err: '「' + n + '」的預計完成比開始早' };
+    plan.push({ n: n.slice(0, 20), s: s, e: e });
+  }
+  return { plan: plan, err: '' };
+}
+function pgPlanModal(m) {
+  var c = pgPlanCheck(m), h = '<h3>編輯預計進度</h3><div class="pgph"><span>項目</span><span>預計開始</span><span>預計完成</span><span></span></div>';
+  for (var i = 0; i < m.n; i++) {
+    if (m['pg_' + i + '_x']) continue;
+    var k = 'pg_' + i + '_', f = m[k + 'f'];
+    h += '<div class="pgpr">' + (f ? '<b>' + esc(m[k + 'n']) + '</b>' : '<input type="text" maxlength="20" placeholder="名稱" data-f="m.' + k + 'n" value="' + esc(m[k + 'n']) + '">') +
+      '<input type="text" inputmode="decimal" placeholder="115.__.__" data-f="m.' + k + 's" value="' + esc(m[k + 's']) + '">' +
+      '<input type="text" inputmode="decimal" placeholder="116.__.__" data-f="m.' + k + 'e" value="' + esc(m[k + 'e']) + '">' +
+      (f ? '<span></span>' : '<button class="pgx" data-act="pgdel" data-v="' + i + '">✕</button>') + '</div>';
+  }
+  return h + '<button class="ghost" data-act="pgadd" style="margin-top:6px"' + (m.busy ? ' disabled' : '') + '>＋ 加一項（例如：1F 版、外牆）</button>' +
+    '<div class="note" id="mmsg" style="margin-top:6px">' + esc(m.err || c.err || PG_NOTE) + '</div>' +
+    '<button class="big" id="msave" style="margin-top:10px" data-act="pgsave"' + (c.err || m.busy ? ' disabled' : '') + '>' + esc(m.busy || '存檔') + '</button>' +
+    '<button class="ghost" data-act="mclose"' + (m.busy ? ' disabled' : '') + '>取消</button>';
+}
+SITE_ACTS.pgreload = function () { if (S.pg && !S.pg.busy) loadProgress(true); };
+SITE_ACTS.pgunit = function (v) {
+  var P = S.pg; if (!P) return; P.week = v === 'w'; P.scrolled = '';
+  try { LS.set('pgweek', P.week ? '1' : '0'); } catch (e) { }
+  render();
+};
+SITE_ACTS.pgrow = function (v) { if (S.pg && S.pg.data) { S.modal = { type: 'pgrow', name: v }; renderModal(); } };
+SITE_ACTS.pgplan = function () {
+  var d = S.pg && S.pg.data; if (!d || !d.canEdit) return;
+  var m = { type: 'pgplan', n: 0, busy: '', err: '' }, all = (d.all || []).slice();
+  var put = function (n, s, e, f) { var k = 'pg_' + (m.n++) + '_'; m[k + 'n'] = n; m[k + 's'] = s ? rocDate(s) : ''; m[k + 'e'] = e ? rocDate(e) : ''; m[k + 'f'] = f ? 1 : 0; };
+  all.concat((d.cats || []).filter(function (c) { return all.indexOf(c) < 0; })).forEach(function (n) {
+    var ps = (d.plan || []).filter(function (p) { return p.n === n; }), fixed = all.indexOf(n) >= 0;
+    if (!ps.length) { if (fixed) put(n, '', '', true); } else ps.forEach(function (p) { put(n, p.s, p.e, fixed); });
+  });
+  S.modal = m; renderModal();
+};
+SITE_ACTS.pgadd = function () { var m = S.modal; if (!m || m.type !== 'pgplan' || m.busy) return; var k = 'pg_' + (m.n++) + '_'; m[k + 'n'] = ''; m[k + 's'] = ''; m[k + 'e'] = ''; m[k + 'f'] = 0; renderModal(); };
+SITE_ACTS.pgdel = function (i) { var m = S.modal; if (!m || m.type !== 'pgplan' || m.busy) return; m['pg_' + i + '_x'] = 1; m.err = ''; renderModal(); };
+SITE_ACTS.pgsave = function () {
+  var m = S.modal; if (!m || m.type !== 'pgplan' || m.busy) return;
+  var c = pgPlanCheck(m), site = S.site; if (c.err) return;
+  m.busy = '存檔中…'; m.err = ''; renderModal();
+  api('progress', { op: 'plan', site: site, plan: c.plan }).then(function (r) {
+    PGCACHE[site] = r; if (S.pg) { S.pg.data = r; S.pg.scrolled = ''; } if (S.modal === m) closeModal(); render();
+  }, function (e) { m.busy = ''; m.err = '沒有存到：' + errText(e); if (S.modal === m) renderModal(); });
+};
 
 // ---------- 混凝土灌漿數量：開發者改名稱、灌漿日期、m³，或刪掉（收件服務第 41 版；使用者 2026-11-15「不管是電腦版還是手機板還是蘋果都要支援可以編輯刪除的功能（只有開發者」）----------
 // 開發者＝Google 登入或開發者自己的代碼（iPhone 用代碼也算；收件服務 login 給 dev）；切換成別人時不算
@@ -3657,6 +3883,7 @@ function calProblem(m) {
 }
 function noticeOk(m) { var t = todayYmd(); return !m.busy && m.text.trim() && m.site && m.day && m.day >= t && m.day <= addDays(t, 90); }
 function modalOk(m) {
+  if (m.type === 'pgplan') return !m.busy && !pgPlanCheck(m).err;   // 施工進度：編輯預計
   if (m.type === 'cal') return !m.busy && !calProblem(m);
   if (m.type === 'notice') return noticeOk(m);
   if (m.type === 'todoadd') return !!(m.text.trim() && m.site);
@@ -4764,6 +4991,7 @@ var ACT = {
     if (v === 'logs') openLogs('site');
     else if (v === 'todo') openTodo('site');
     else if (v === 'mats') openMats('site');
+    else if (v === 'progress') openProgress('site');   // 施工進度（第 67 版）
     else if (v === '3d') open3d();
     else if (v === 'tasks') openTasks('site');
     else if (v === 'work') openWork('site');   // 管理者：這個工地施工人員傳的
@@ -5074,7 +5302,8 @@ document.addEventListener('input', function (ev) {
     var mm = $('mmsg'); if (mm && m.type === 'cal') mm.textContent = m.err || calProblem(m);
     if (mm && m.type === 'dladd') mm.textContent = dlAddNote(m);
     if (mm && m.type === 'siteedit') { m.err = ''; mm.textContent = siteEditNote(m); }
-    var eb = $('siteextbox'); if (eb && k === 'm.end' && m.type === 'siteedit') eb.innerHTML = siteExtHtml(m);   // 展延那三格的日期跟著竣工日期換（不整個重畫，電腦上打日期不會跳掉）
+    var eb = $('siteextbox'); if (eb && k === 'm.end' && m.type === 'siteedit') eb.innerHTML = siteExtHtml(m);
+    if (mm && m.type === 'pgplan') { m.err = ''; mm.textContent = pgPlanCheck(m).err || PG_NOTE; }   // 施工進度：還差什麼   // 展延那三格的日期跟著竣工日期換（不整個重畫，電腦上打日期不會跳掉）
     if (mm && m.type === 'pouredit') { m.err = ''; mm.textContent = pourEditNote(m); }
     var un = $('mcunitnote'); if (un && m.type === 'contract') un.textContent = cUnitNote(m);   // 單價×數量（第 43 版）
     if (mm && m.type === 'omat') mm.textContent = modalOk(m) ? '' : '要填廠商或數量';
