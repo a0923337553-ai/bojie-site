@@ -2421,7 +2421,7 @@ function verRender(r) {
       (p.err || !p.cloud ? ' <button class="btn ghost" data-kick="' + esc(p.id) + '"' + dis + '>☁ 雲端再轉一次</button>' : '') + '</div></div>';
   });
   // 第 72 版：現況（空拍）一列
-  if (NOW) h += '<div class="card"><div class="vrow"><div class="g"><b>🛩 現況（空拍）</b><div class="muted">' + esc(NOW.by || '電腦上傳') + '・' + vTime(NOW.at) + '・' + vMB(NOW.size) +
+  if (NOW) h += '<div class="card"><div class="vrow" style="border-top:0;padding:2px 0"><div class="g"><b>🛩 現況（空拍）</b><div class="muted">' + esc(NOW.by || '電腦上傳') + '・' + vTime(NOW.at) + '・' + vMB(NOW.size) +
     '</div></div><div class="vb"><button class="btn ghost red" id="vpNowDel"' + dis + '>拿掉</button></div></div></div>';
   h += '<div class="card"><div class="t">方案 <span class="muted">（確定一個以後，其他方案鎖起來，施工人員才看得到確定的那個）</span></div>';
   if (!plans.length) h += '<div class="muted" style="padding:6px 0">還沒有方案：上面選「＋ 新方案」上傳</div>';
