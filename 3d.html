@@ -319,6 +319,9 @@ async function loadModel() {
 // 電腦把 .skp 轉成 .glb（材質、群組名、標籤＝樓層）傳到 工地App/3D/<工地>/SketchUp模型.glb；收件服務 model3d {skPart} 一段一段給（App 也只能問 model3d）。
 // 下載好記在這台（IndexedDB），模型沒換就不重抓。本機測試：&glb=xxx.glb
 let SK = null, SKMETA = P.get('glb') ? { local: P.get('glb') } : null, skErr = '';
+// 2026-11-23：空拍模型（DJI Terra 匯出轉的 .glb；使用者「這個不是SKETCHUP」「不是SKP的模型」）不寫 SketchUp。
+// 轉檔時在 asset.extras.kind 寫 'aerial'；沒寫的照舊叫 SketchUp 模型。
+let SKNAME = 'SketchUp 模型', SK_AERIAL = false;
 // 第 47 版：方案（使用者 2026-11-16「這裡改成方案，有時候要提方案就會有方案一方案二」）：網址帶 plan＝看哪個方案；換方案＝帶新的 plan 重新打開
 let PLAN = P.get('plan') || '', PLANS = [], CONFIRMED = '', WAIT_PLAN = false;
 const skItems = [];   // {mesh, tag, name, mat}
@@ -337,7 +340,7 @@ async function skBytes() {
   if (hit && hit.modified === SKMETA.modified && hit.buf) return hit.buf;
   const parts = [], mb = (SKMETA.size / 1048576).toFixed(1);
   for (let i = 0; i < SKMETA.parts; i++) {
-    say('下載 SketchUp 模型 ' + (i + 1) + '／' + SKMETA.parts + '（共 ' + mb + ' MB；第一次比較久，之後記在這台）…');
+    say('下載 3D 模型 ' + (i + 1) + '／' + SKMETA.parts + '（共 ' + mb + ' MB；第一次比較久，之後記在這台）…');
     const r = await api('model3d', { site: SITE, skPart: i, plan: PLAN });
     if (r.modified !== SKMETA.modified) throw { error: '模型剛好重新上傳，按「再試一次」' };
     parts.push(b64Bytes(r.data));
@@ -360,18 +363,21 @@ function skNameOf(o) {
 async function gunzipIf(buf) {
   const u = new Uint8Array(buf);
   if (u.length < 2 || u[0] !== 0x1f || u[1] !== 0x8b) return buf;
-  say('解開 SketchUp 模型…');
+  say('解開 3D 模型…');
   try {
     if (typeof DecompressionStream === 'function') return await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
     const { gunzipSync } = await import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js');   // 舊 iPhone（iOS 16.4 以前）沒有 DecompressionStream
     return gunzipSync(u).buffer;
-  } catch (e) { throw { error: 'SketchUp 模型解不開：' + (e && e.message || e) }; }
+  } catch (e) { throw { error: '3D 模型解不開：' + (e && e.message || e) }; }
 }
 async function loadSk() {
   const [raw, mod] = await Promise.all([skBytes(), import(GLTF_URL)]);
   const buf = await gunzipIf(raw);
-  say('打開 SketchUp 模型…');
-  const gltf = await new Promise((ok, bad) => new mod.GLTFLoader().parse(buf, '', ok, e => bad({ error: 'SketchUp 模型打不開：' + (e && e.message || e) })));
+  say('打開 3D 模型…');
+  const gltf = await new Promise((ok, bad) => new mod.GLTFLoader().parse(buf, '', ok, e => bad({ error: '3D 模型打不開：' + (e && e.message || e) })));
+  // 空拍模型（轉檔時 asset.extras.kind＝'aerial'）：畫面上寫「空拍模型」，不寫 SketchUp
+  const ex = (gltf.asset && gltf.asset.extras) || {};
+  SK_AERIAL = ex.kind === 'aerial'; SKNAME = SK_AERIAL ? '空拍模型' : 'SketchUp 模型';
   const g = gltf.scene;
   g.scale.setScalar(100);   // glTF 是公尺，這裡用公分（跟 3D 結構一樣）
   let verts = 0;
@@ -414,8 +420,8 @@ function setView(v) {
   document.getElementById('hideBtn').style.display = 'none'; hideUi();
   const vb = document.getElementById('viewBtn');
   vb.style.display = SK && hasStruct() && ST_ON ? '' : 'none';
-  vb.textContent = v === 'sk' ? '🏗 3D 結構' : '🏠 SketchUp 模型';
-  document.getElementById('title').firstChild.textContent = (M.site || SITE || '') + (v === 'sk' ? '・SketchUp 模型 ' : '・3D 結構 ');
+  vb.textContent = v === 'sk' ? '🏗 3D 結構' : (SK_AERIAL ? '🛩 ' : '🏠 ') + SKNAME;
+  document.getElementById('title').firstChild.textContent = (M.site || SITE || '') + (v === 'sk' ? '・' + SKNAME + ' ' : '・3D 結構 ');
   document.getElementById('made').textContent = v === 'sk' ? (SKMETA && SKMETA.modified ? '（' + String(SKMETA.modified).slice(0, 10) + ' 上傳）' : '') : (M.made ? '（' + String(M.made).slice(0, 10) + ' 匯出）' : '');
 }
 function applySk() {
@@ -1061,7 +1067,7 @@ function finishCircle(pts) {
   const hm = best && st.view !== 'sk' ? best.object.userData.m : null, c = T2CAD(p);
   const hs = best && st.view === 'sk' ? skItems.find(it => it.mesh === best.object) : null;
   st.draft = { pos: [c[0], c[1], c[2], Math.round(wr)], cam: { t: T2CAD(cam.target).map(v => Math.round(v)), d: Math.round(cam.dist), th: +cam.theta.toFixed(3), ph: +cam.phi.toFixed(3), v: viewState() },
-    member: hm ? (hm.f + ' ' + hm.k + ' ' + (hm.c || hm.n || '')).trim() : hs ? ('SketchUp ' + (hs.name || hs.tag || '')).trim().slice(0, 40) : st.view === 'sk' ? 'SketchUp' : '' };
+    member: hm ? (hm.f + ' ' + hm.k + ' ' + (hm.c || hm.n || '')).trim() : hs ? ((SK_AERIAL ? '空拍 ' : 'SketchUp ') + (hs.name || hs.tag || '')).trim().slice(0, 40) : st.view === 'sk' ? (SK_AERIAL ? '空拍' : 'SketchUp') : '' };
   setMarking(false); st.markSel = null; showDraft(true); renderSide(); layout();
 }
 /** 上面那個寫字的框：圈好了打開（清空），送出或取消就關掉 */
@@ -1347,7 +1353,7 @@ function markSection() {
   if (!marks.length) return head + '<div class="muted" style="margin:0 0 10px">還沒有人圈。按畫面右上角「✏️ 圈起來」，用手指圈出要改進的地方。</div>';
   // 有 SketchUp 模型時：別的畫面圈的寫一下是哪個（點了會換過去）
   // 3D 結構藏起來時不寫「結構」（使用者 2026-11-13「不要顯示結構跟配筋」）
-  const where = m => SK && markView(m) !== st.view ? ' <span class="muted">（' + (markView(m) === 'sk' ? 'SketchUp 模型' : ST_ON ? '3D 結構' : '舊的 3D') + '）</span>' : '';
+  const where = m => SK && markView(m) !== st.view ? ' <span class="muted">（' + (markView(m) === 'sk' ? SKNAME : ST_ON ? '3D 結構' : '舊的 3D') + '）</span>' : '';
   return head + marks.slice().sort((a, b) => (a.done - b.done) || (b.at - a.at)).map(m =>
     '<div class="mk' + (m.done ? ' done' : '') + (st.markSel === m.id ? ' on' : '') + '" data-mk="' + esc(m.id) + '"><span class="no">' + markNo(m) + '</span>' + esc(m.text) + where(m)
     + '<span class="st ' + (m.done ? 'd">已改好' : 'o">待處理') + '</span><div class="who">' + esc(m.by) + '・' + when(m.at)
@@ -2069,16 +2075,16 @@ function renderSide() {
     h += markSection();
   } else if (st.view === 'sk' && st.skSel) {
     const it = st.skSel;
-    T.textContent = 'SketchUp 模型';
+    T.textContent = SKNAME;
     h += '<div class="card"><div class="t">' + esc(it.name || '（沒有名稱的面）') + '</div>'
       + table([['標籤', it.tag || '未加標籤']])
       + '<div class="row"><button class="btn ghost" id="skUnsel">取消</button></div></div>' + markSection();
   } else if (st.view === 'sk') {
-    T.textContent = '🏠 SketchUp 模型';
+    T.textContent = (SK_AERIAL ? '🛩 ' : '🏠 ') + SKNAME;
     h += (hasStruct() && ST_ON ? '<div class="tip">🚚 <b>' + (SKF.length ? '灌漿區' : '灌漿區、切樓層') + '</b>：按上面「🏗 3D 結構」</div>' : '')
       + markSection()
-      + '<div class="muted" style="margin:4px 0 8px">' + (SKF.length ? '模型左上角「🏢 整棟 ▾」點開選一層只看那一層、再點一次收起（照樓層高度切；有標「1F」「2F」的群組、元件、標籤就照名字）' + (SKF.some(f => f.other) ? '；建物外面的（圍牆、院子、樹…）在「其他」' : '') + '；'
-        : skTags().length > 1 ? '上面的標籤可以一個一個關掉、打開（跟 SketchUp 的「標籤」一樣）；' : '') + '點模型看它是哪個群組、元件。</div>';
+      + (SK_AERIAL ? '<div class="muted" style="margin:4px 0 8px">空拍建模（DJI）：可以轉、拉近、量尺寸、圈要改進的地方。</div>' : '<div class="muted" style="margin:4px 0 8px">' + (SKF.length ?'模型左上角「🏢 整棟 ▾」點開選一層只看那一層、再點一次收起（照樓層高度切；有標「1F」「2F」的群組、元件、標籤就照名字）' + (SKF.some(f => f.other) ? '；建物外面的（圍牆、院子、樹…）在「其他」' : '') + '；'
+        : skTags().length > 1 ? '上面的標籤可以一個一個關掉、打開（跟 SketchUp 的「標籤」一樣）；' : '') + '點模型看它是哪個群組、元件。</div>');
   } else if (st.rebar) {
     const m = st.rebar;
     const job = jobsOf(m).find(j => j.k === m.k || (j.k === '梁' && m.k === '地梁'));
