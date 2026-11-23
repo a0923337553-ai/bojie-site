@@ -103,7 +103,21 @@ button { font-family:inherit; cursor:pointer; color:inherit; }
 .pgpr { padding:6px 0 8px; border-bottom:1px solid #EEF2F5; }
 .pgpr .r1 { display:grid; grid-template-columns:70px minmax(0, 1fr) 24px; gap:6px; align-items:center; }
 .pgpr .r2 { display:grid; grid-template-columns:70px minmax(0, 1fr) minmax(0, 1fr); gap:6px; margin-top:5px; padding-right:30px; }
-.pgpr .r2 input[list]::-webkit-calendar-picker-indicator { display:none !important; }   /* 部位那一格窄：不要選單箭頭，打字就跳建議 */
+.pgpr .r2 input[list]::-webkit-calendar-picker-indicator { display:none !important; }
+/* 工項累計（11/23e）：每個工項一張卡，一組一列（名字＋日期、天數、工數） */
+.itc .ith { display:flex; width:100%; background:none; border:0; padding:2px 0; margin:0; align-items:baseline; text-align:left; border-radius:0; }
+.itc .ith b { flex:1; font-size:16.5px; color:var(--ink); } .itc .ith span { font-size:13.5px; color:var(--muted); font-weight:bold; }
+.itr { display:grid; grid-template-columns:minmax(0, 1fr) 44px 58px; align-items:center; width:100%; text-align:left; background:none; border:0; border-bottom:1px solid #EEF2F5; border-radius:0; padding:5px 0; margin:0; min-height:46px; font-weight:normal; }
+.itr.noq { grid-template-columns:minmax(0, 1fr) 44px; }
+.itr > span:not(.nm) { text-align:right; font-size:15px; color:var(--ink); }
+.itr .nm b { display:block; font-size:14.5px; color:var(--ink); line-height:19px; } .itr .nm small { display:block; font-size:11.5px; color:var(--muted); }
+.itr .nm em { font-style:normal; font-size:11px; background:var(--teal); color:#fff; border-radius:5px; padding:0 5px; margin-left:4px; vertical-align:1px; }
+.itr .ck { font-style:normal; font-size:18px; color:var(--muted); float:left; width:24px; } .itr.on .ck { color:var(--teal); }
+.itr.mg { background:#F2FAF9; } .itr.on { background:#E3F5F3; }
+.itr.ithd { min-height:0; font-size:12px; color:var(--muted); border-bottom:1px solid #EEF2F5; margin-top:6px; } .itr.ithd > span { font-size:12px; color:var(--muted); }
+.itr.ithd > span:first-child { text-align:left; }
+.tg.itbtn { margin-top:8px; grid-template-columns:1fr; } .tg.two.itbtn { grid-template-columns:1fr 1fr; }
+.itday { display:flex; justify-content:space-between; font-size:15px; padding:2px 0; } .itday span:last-child { color:var(--muted); }   /* 部位那一格窄：不要選單箭頭，打字就跳建議 */
 .pgst.sub { padding-left:28px !important; } .pgst.sub b { width:72px; font-size:14px; } .pgst .ar { width:auto; margin-right:2px; font-size:11px; }
 .pgpr input { margin:0; padding:6px; font-size:14px; min-width:0; width:100%; box-sizing:border-box; height:40px; letter-spacing:0; }
 .pgx { border:0; background:none; color:var(--muted); font-size:16px; padding:0; margin:0; width:22px; }
@@ -492,7 +506,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/23d';
+var WEB_VERSION = '11/23e';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -932,7 +946,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smats: scafModal, smatv: smatViewModal, smatx: smatExportModal, smatvis: smatVisModal, wmerge: wmergeModal, pgplan: pgPlanModal, pgrow: pgRowModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smats: scafModal, smatv: smatViewModal, smatx: smatExportModal, smatvis: smatVisModal, wmerge: wmergeModal, pgplan: pgPlanModal, pgrow: pgRowModal, itgroup: itGroupModal, itname: itNameModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -1960,7 +1974,8 @@ function renderSite() {
   if (dev) h += tile('施工日誌', '天氣、大項、材料、討論、拍照・跟摺疊機同一份', '#2F80ED', '📋', 'dlog').replace('data-act="tile"', 'data-act="dlopenday"').replace('data-v="dlog"', 'data-v=""');
   else h += tile('施工日誌', '每天的日誌、施工人員傳的、照片', '#2F80ED', '📋', 'logs');
   // 施工進度（收件服務第 67 版，使用者 2026-11-23「施工日誌下面新增一個施工進度的按鈕…甘特圖」；開發者、老闆、主任、公司）
-  if (hasProgress()) h += tile('施工進度', '甘特圖：預計 vs 實際', '#0E7C86', '📊', 'progress');
+  // 11/23e：改名「工項累計」（使用者 2026-11-23「施工進度名稱改成工項累計」…「基礎模板拆除+地梁模板組立算一組」→ A 合併；收件服務第 70 版）
+  if (hasProgress()) h += tile('工項累計', '每個工項：一組一組幾天、幾工', '#0E7C86', '📊', 'progress');
   h += tile('鋼筋施工單', sheets + ' 份', '#16A6A0', '📐', 'sheets');
   h += tile('混凝土灌漿數量', next ? '下一次 ' + rocDate(pourOf(next).pourDate) + '（' + (pourOf(next).part || '') + '）' + (pourOf(next).m3 ? ' ・ ' + pourOf(next).m3 + ' m³' : '') : pours.length + ' 份', '#F2994A', '🚚', 'pours');
   // 現場材料數量（收件服務第 52 版，使用者 2026-11-19「在混凝土灌漿數量下面新增一個按鈕」；每個人都能填）
@@ -1988,8 +2003,9 @@ function renderSite() {
 var PGCACHE = {}, PG_NOTE = '樓層打「3」就是 3F，空著＝不分樓層；項目可以點選大項或自己打；部位（柱、梁、版、牆…）空著＝整個大項。日子用民國寫（115.12.01），日期空著的那一列不算。', PG_PCTS = [0, 25, 50, 75, 100];
 // 第 69 版：抓不到部位的叫「其他」；預計那一格常用的部位
 var PG_OTHER = '其他', PG_PARTS = ['柱', '梁', '版', '牆', '樓梯', '鑑界', '建築線', '高程'];
-function hasProgress() { return isOffice() && Number(S.s && S.s.version) >= 67; }
-function openProgress(from) {
+function hasProgress() { return isOffice() && Number(S.s && S.s.version) >= 70; }
+// 11/23e 起沒用到（甘特圖改成工項累計，程式留著）
+function openProgressGantt(from) {
   var wk = false; try { wk = LS.get('pgweek') === '1'; } catch (e) { }
   S.pg = { from: from, data: PGCACHE[S.site] || null, busy: '', err: '', week: wk, scrolled: '', left: 0, open: {} }; go('progress'); loadProgress(false);
 }
@@ -2176,7 +2192,7 @@ function pgAfter() {
   el.onscroll = function () { P.left = el.scrollLeft; };
 }
 function pgBox(v, l, dim, red) { return '<div class="tc two' + (dim ? ' dim' : '') + '"><b' + (red ? ' style="color:var(--red)"' : '') + '>' + esc(v) + '</b><span>' + esc(l) + '</span></div>'; }
-function renderProgress() {
+function renderProgressGantt() {
   var P = S.pg || (S.pg = { from: 'site', data: null, busy: '', err: '', week: false, open: {} }), d = P.data;
   var h = topBar('📊 施工進度', P.from, P.busy || '⟳ 更新', 'pgreload') + '<div class="wrap">';
   if (P.err) h += '<div class="err">' + esc(P.err) + '</div>';
@@ -2346,6 +2362,107 @@ SITE_ACTS.pgsave = function () {
   api('progress', { op: 'plan', site: site, plan: c.plan }).then(function (r) {
     PGCACHE[site] = r; if (S.pg) { S.pg.data = r; S.pg.scrolled = ''; } if (S.modal === m) closeModal(); render();
   }, function (e) { m.busy = ''; m.err = '沒有存到：' + errText(e); if (S.modal === m) renderModal(); });
+};
+
+// ---------- 工項累計（收件服務第 70 版；使用者 2026-11-23「施工進度名稱改成工項累計」「然後裡面的內容全部拿掉」
+// 「讀取施工日誌內各工項的施工部位及天數及使用的工數」「基礎模板拆除+地梁模板組立算一組」→ A：日誌寫一樣的字一組，開發者可以合併、取名字）----------
+var ITCACHE = {};
+function openProgress(from) {
+  S.it = { from: from, data: ITCACHE[S.site] || null, busy: '', err: '', open: {}, sel: '', picked: {} }; go('progress');
+  itRun(ITCACHE[S.site] ? '更新中…' : '讀取中…（第一次要算十幾秒）', { op: 'sum' });
+}
+/** 問收件服務（sum／merge／unmerge／rename），回來的資料整份換掉 */
+function itRun(what, body) {
+  var P = S.it, site = S.site; P.busy = what; renderSoft();
+  return api('progress', Object.assign({ site: site }, body)).then(function (r) {
+    ITCACHE[site] = r; if (S.it !== P) return; P.data = r; P.busy = ''; P.err = ''; render();
+  }, function (e) {
+    if (S.it !== P) return; var t = errText(e); P.busy = ''; P.err = /不認得/.test(t) ? '收件服務還沒更新到有工項累計的版本' : '讀不到：' + t; render();
+  });
+}
+/** 工數：整數不寫小數點，其他最多兩位 */
+function itFmt(q) { var r = Math.round(q * 100) / 100; return String(r); }
+function itTotal(g, d) { if (!d.showQty) return null; var s = 0; g.ds.forEach(function (x) { s += Number(x[1]) || 0; }); return s; }
+/** 「115.04.30」或「115.04.30～05.04」 */
+function itRange(g) {
+  if (!g.ds.length) return ''; var a = g.ds[0][0], b = g.ds[g.ds.length - 1][0];
+  if (a === b) return rocDate(a);
+  return rocDate(a) + '～' + (a.slice(0, 4) === b.slice(0, 4) ? rocDate(b).replace(/^\d+\./, '') : rocDate(b));
+}
+function renderProgress() {
+  var P = S.it || (S.it = { from: 'site', data: null, busy: '', err: '', open: {}, sel: '', picked: {} }), d = P.data;
+  var h = topBar('📊 工項累計', P.from, P.busy || '⟳ 更新', 'itreload') + '<div class="wrap">';
+  if (P.err) h += '<div class="err">' + esc(P.err) + '</div>';
+  if (!d) return h + (P.err ? '' : '<div class="sub" style="font-size:15px;margin:0 4px 10px">' + esc(P.busy || '讀取中…') + '</div>') + '</div>';
+  h += '<div class="card"><div style="font-size:20px;font-weight:800">' + esc(d.site) + '</div><div class="sub">從開工累計到今天 ・ 日誌 ' + (d.logs || 0) + ' 天</div>' +
+    '<div class="note" style="margin-top:4px">' + (d.showQty ? '一組＝日誌寫一樣的字；工數＝日誌的人數×工數（一天寫好幾行的照行數平均分）。點工項打開／收起來，點一組看每一天。' :
+      '一組＝日誌寫一樣的字。工數只有開發者、老闆、主任看得到。點工項打開／收起來，點一組看每一天。') + '</div></div>';
+  if (!(d.cats || []).length) h += '<div class="sub" style="margin:0 4px">這個工地還沒有施工日誌。</div>';
+  (d.cats || []).forEach(function (c, ci) {
+    var open = !!P.open[c.n], selecting = P.sel === c.n;
+    h += '<div class="card itc"><button class="ith" data-act="itcat" data-v="' + ci + '"><b>' + (open ? '▾ ' : '▸ ') + esc(c.n) + '</b><span>' +
+      esc(c.days + ' 天' + (d.showQty && c.q != null ? ' ・ ' + itFmt(c.q) + ' 工' : '') + ' ・ ' + c.groups.length + ' 組') + '</span></button>';
+    if (open) {
+      h += '<div class="itr ithd' + (d.showQty ? '' : ' noq') + '"><span>一組（照日誌寫的）</span><span>天數</span>' + (d.showQty ? '<span>工數</span>' : '') + '</div>';
+      c.groups.forEach(function (g, gi) {
+        var on = selecting && P.picked[gi], tq = itTotal(g, d);
+        h += '<button class="itr' + (d.showQty ? '' : ' noq') + (g.m ? ' mg' : '') + (on ? ' on' : '') + '" data-act="itrow" data-v="' + ci + ':' + gi + '"><span class="nm">' +
+          (selecting ? '<i class="ck">' + (on ? '☑' : '☐') + '</i>' : '') + '<b>' + esc(g.n) + (g.m ? '<em>合併</em>' : '') + '</b><small>' + esc(itRange(g)) + '</small></span>' +
+          '<span>' + g.ds.length + '</span>' + (d.showQty ? '<span>' + (tq == null ? '—' : itFmt(tq)) + '</span>' : '') + '</button>';
+      });
+      if (d.canEdit) {
+        var n = Object.keys(P.picked).filter(function (k) { return P.picked[k]; }).length;
+        h += selecting ? '<div class="tg two itbtn"><button class="tc on" data-act="itmerge" data-v="' + ci + '"' + (n < 2 ? ' disabled' : '') + '><b>合併（已勾 ' + n + ' 組）</b></button>' +
+          '<button class="tc" data-act="itcancel"><b>取消</b></button></div>' :
+          '<div class="tg itbtn"><button class="tc" data-act="itpick" data-v="' + ci + '"><b>☑ 勾幾組合併</b></button></div>';
+      }
+    }
+    h += '</div>';
+  });
+  return h + '</div>';
+}
+function itGroupModal(m) {
+  var d = S.it && S.it.data, c = d && d.cats[m.ci], g = c && c.groups[m.gi];
+  if (!g) return '<h3>找不到這一組</h3><button class="ghost" data-act="mclose">關閉</button>';
+  var tq = itTotal(g, d), h = '<h3>' + esc(g.n) + '</h3><div style="font-size:15.5px">' + esc(c.n + ' ・ ' + g.ds.length + ' 天' + (tq != null ? ' ・ ' + itFmt(tq) + ' 工' : '')) + '</div>';
+  if (g.m) h += '<div class="sub" style="margin-top:6px">合併了：' + esc(g.k.join('、')) + '</div>';
+  h += '<div style="font-weight:bold;margin-top:10px">每一天</div>';
+  g.ds.forEach(function (x) { h += '<div class="itday"><span>' + esc(rocDate(x[0])) + '</span>' + (d.showQty && x.length > 1 ? '<span>' + itFmt(x[1]) + ' 工</span>' : '') + '</div>'; });
+  if (d.canEdit) h += '<div class="tg two" style="margin-top:12px"><button class="tc" data-act="itrename"><b>改名字</b></button>' +
+    (g.m ? '<button class="tc" data-act="itunmerge"><b>拆開</b></button>' : '<div></div>') + '</div>';
+  return h + '<button class="ghost" data-act="mclose" style="margin-top:10px">關閉</button>';
+}
+function itNameModal(m) {
+  return '<h3>' + esc(m.title) + '</h3><div class="sub">' + esc(m.hint) + '</div><input type="text" maxlength="40" data-f="m.name" value="' + esc(m.name) + '" style="margin-top:6px">' +
+    '<button class="big" style="margin-top:10px" data-act="itnameok">好</button><button class="ghost" data-act="mclose">取消</button>';
+}
+SITE_ACTS.itreload = function () { if (S.it && !S.it.busy) itRun('重新算一次（日誌多的話要十幾秒）…', { op: 'sum', fresh: true }); };
+SITE_ACTS.itcat = function (v) { var P = S.it, c = P && P.data && P.data.cats[+v]; if (!c) return; P.open[c.n] = !P.open[c.n]; render(); };
+SITE_ACTS.itpick = function (v) { var P = S.it, c = P && P.data && P.data.cats[+v]; if (!c) return; P.sel = c.n; P.picked = {}; render(); };
+SITE_ACTS.itcancel = function () { var P = S.it; if (!P) return; P.sel = ''; P.picked = {}; render(); };
+SITE_ACTS.itrow = function (v) {
+  var P = S.it, a = String(v).split(':'), c = P && P.data && P.data.cats[+a[0]]; if (!c) return;
+  if (P.sel === c.n) { P.picked[a[1]] = !P.picked[a[1]]; render(); return; }
+  S.modal = { type: 'itgroup', ci: +a[0], gi: +a[1] }; renderModal();
+};
+SITE_ACTS.itmerge = function (v) {
+  var P = S.it, c = P && P.data && P.data.cats[+v]; if (!c) return;
+  var gs = c.groups.filter(function (g, i) { return P.picked[i]; }); if (gs.length < 2) return;
+  var keys = []; gs.forEach(function (g) { keys = keys.concat(g.k); });
+  S.modal = { type: 'itname', title: '合併成一組', hint: '幫這一組取名字', name: gs.map(function (g) { return g.n; }).join('＋').slice(0, 40), op: 'merge', cat: c.n, keys: keys }; renderModal();
+};
+SITE_ACTS.itrename = function () {
+  var m = S.modal, d = S.it && S.it.data, c = m && d && d.cats[m.ci], g = c && c.groups[m.gi]; if (!g) return;
+  S.modal = { type: 'itname', title: '改名字', hint: '這一組的名字', name: g.n, op: 'rename', cat: c.n, keys: g.k }; renderModal();
+};
+SITE_ACTS.itunmerge = function () {
+  var m = S.modal, d = S.it && S.it.data, c = m && d && d.cats[m.ci], g = c && c.groups[m.gi]; if (!g) return;
+  closeModal(); itRun('拆開中…', { op: 'unmerge', cat: c.n, keys: g.k });
+};
+SITE_ACTS.itnameok = function () {
+  var m = S.modal; if (!m || m.type !== 'itname') return; var name = String(m.name || '').trim(); if (!name) return;
+  closeModal(); if (S.it) { S.it.sel = ''; S.it.picked = {}; }
+  itRun(m.op === 'merge' ? '合併中…' : '改名字中…', { op: m.op, cat: m.cat, keys: m.keys, name: name });
 };
 
 // ---------- 混凝土灌漿數量：開發者改名稱、灌漿日期、m³，或刪掉（收件服務第 41 版；使用者 2026-11-15「不管是電腦版還是手機板還是蘋果都要支援可以編輯刪除的功能（只有開發者」）----------
