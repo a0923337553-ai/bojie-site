@@ -506,7 +506,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/24a';
+var WEB_VERSION = '11/24b';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -610,17 +610,31 @@ function failMsg(e) {
 }
 
 // 2026-11-24（使用者「為何這麼慢」，電腦版 Google 登入一直「確認中…」）：實測收件服務的請求大約一半整個「掉了」
-// （100 秒都沒回；Google 其他網址都正常，是 Apps Script 那邊）。讀資料的動作：8 秒（登入 12 秒）沒回就再送一次（誰先回用誰），最多 6 次；
-// 改資料的動作不重送（免得存兩次）；工項累計（progress）很重也不重送。
+// （100 秒都沒回；Google 其他網址都正常，是 Apps Script 那邊）。讀資料的動作：幾秒（API_GAP_BY）沒回就再送一次（誰先回用誰），最多 6 次；
+// 改資料的動作不重送（免得存兩次）。
+// 11/24 中午（使用者截圖：電腦版工項累計一直「讀取中…」；「電腦版感覺都讀很久」）：工項累計（progress sum／get）也重送（等久一點）；
+// 每個動作照平常要幾秒決定等多久才再送；不重送的（存檔）最多等 2 分鐘就說沒有回應，不要一直轉。
 var API_READ = { login: 1, feed: 1, gauth: 1, appinfo: 1, apk: 1, contracts: 1, dtok: 1, forecast: 1, here: 1, logmonth: 1, logs: 1,
-  logphoto: 1, pdf: 1, people: 1, photoget: 1, recent: 1, staffall: 1, weather: 1, cal: 1, smat: 1, snote: 1, task: 1, todo: 1, notice: 1, model3d: 1 };
+  logphoto: 1, pdf: 1, people: 1, photoget: 1, recent: 1, staffall: 1, weather: 1, cal: 1, smat: 1, snote: 1, task: 1, todo: 1, notice: 1, model3d: 1,
+  progress: 1 };
 var API_READ_OP = { list: 1, get: 1, workers: 1, photo: 1, plans: 1 };
-var API_GAP = 8000, API_GAP_LOGIN = 12000, API_TRIES = 6;   // 登入本來就要 5–10 秒；11/24 上午掉的變一半 → 最多 6 次
+var API_TRIES = 6, API_WAIT_MAX = 120000;
+// 11/24 實測平常要幾秒：清單、日誌、待辦、行事曆 3–4 秒；第一次打開首頁消息 14 秒、日誌 8 秒、登入 7 秒；工項累計算過 4 秒、第一次 30 秒
+var API_GAP = 6000;
+var API_GAP_BY = { login: 12000, gauth: 12000, feed: 10000, logs: 10000, pdf: 10000, apk: 12000, model3d: 10000, progress: 15000 };
 function apiResend(action, body) {
   if (!API_READ[action]) return false;
   var op = body && body.op != null ? String(body.op) : '';
+  if (action === 'progress') return op === 'sum' || op === 'get';
   if (action === 'cal' || action === 'smat' || action === 'snote' || action === 'task' || action === 'todo') return !!API_READ_OP[op];
   return !op || !!API_READ_OP[op];
+}
+/** 不重送的：最多等 ms 毫秒，沒回就算失敗（Google 弄丟的請求永遠不會回來） */
+function apiCap(p, ms) {
+  return new Promise(function (ok, bad) {
+    var t = setTimeout(function () { bad({ error: '收件服務沒有回應（Google 那邊慢），再按一次' }); }, ms);
+    p.then(function (r) { clearTimeout(t); ok(r); }, function (e) { clearTimeout(t); bad(e); });
+  });
 }
 /** 同一個請求：gap 毫秒沒回就再送一次，最多 tries 次；第一個回來的算數，全部失敗才算失敗 */
 function apiHedge(once, gap, tries) {
@@ -649,7 +663,7 @@ function api(action, body) {
       .then(function (res) { return res.json(); }, function () { throw { error: '連不上收件服務（網路有問題，等一下再試）' }; })
       .then(null, function (e) { throw (e && e.error ? e : { error: '收件服務回覆看不懂，等一下再試' }); });
   };
-  return (apiResend(action, body) ? apiHedge(once, action === 'login' || action === 'gauth' ? API_GAP_LOGIN : API_GAP, API_TRIES) : once())
+  return (apiResend(action, body) ? apiHedge(once, API_GAP_BY[action] || API_GAP, API_TRIES) : apiCap(once(), API_WAIT_MAX))
     .then(function (r) {
       if (r && r.ok) return r;
       if (r && r.error === 'LOCKED') lockedNow(r.message);
