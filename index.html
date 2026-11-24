@@ -506,7 +506,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/23f';
+var WEB_VERSION = '11/24a';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -609,14 +609,47 @@ function failMsg(e) {
   return errText(e);
 }
 
+// 2026-11-24（使用者「為何這麼慢」，電腦版 Google 登入一直「確認中…」）：實測收件服務的請求大約一半整個「掉了」
+// （100 秒都沒回；Google 其他網址都正常，是 Apps Script 那邊）。讀資料的動作：8 秒（登入 12 秒）沒回就再送一次（誰先回用誰），最多 4 次；
+// 改資料的動作不重送（免得存兩次）；工項累計（progress）很重也不重送。
+var API_READ = { login: 1, feed: 1, gauth: 1, appinfo: 1, apk: 1, contracts: 1, dtok: 1, forecast: 1, here: 1, logmonth: 1, logs: 1,
+  logphoto: 1, pdf: 1, people: 1, photoget: 1, recent: 1, staffall: 1, weather: 1, cal: 1, smat: 1, snote: 1, task: 1, todo: 1, notice: 1, model3d: 1 };
+var API_READ_OP = { list: 1, get: 1, workers: 1, photo: 1, plans: 1 };
+var API_GAP = 8000, API_GAP_LOGIN = 12000, API_TRIES = 4;   // 登入本來就要 5–10 秒
+function apiResend(action, body) {
+  if (!API_READ[action]) return false;
+  var op = body && body.op != null ? String(body.op) : '';
+  if (action === 'cal' || action === 'smat' || action === 'snote' || action === 'task' || action === 'todo') return !!API_READ_OP[op];
+  return !op || !!API_READ_OP[op];
+}
+/** 同一個請求：gap 毫秒沒回就再送一次，最多 tries 次；第一個回來的算數，全部失敗才算失敗 */
+function apiHedge(once, gap, tries) {
+  return new Promise(function (ok, bad) {
+    var done = false, sent = 0, out = 0, timer = null;
+    function fire() {
+      if (done || sent >= tries) return;
+      sent++; out++; clearTimeout(timer);
+      // 最後一次也送了：再等 2 倍時間還沒回就算失敗（不要一直轉）
+      timer = setTimeout(sent < tries ? fire : function () { if (!done) { done = true; bad({ error: '收件服務沒有回應（Google 那邊慢），等一下再試' }); } }, sent < tries ? gap : gap * 2);
+      once().then(function (r) { if (done) return; done = true; clearTimeout(timer); ok(r); },
+        function (e) { out--; if (done) return; if (sent < tries) fire(); else if (!out) { done = true; bad(e); } });
+    }
+    fire();
+  });
+}
 function api(action, body) {
   var req = { action: action, code: S.code, client: 'page', device: deviceId() };
   // 開發者用 Google 登入的（gMode）：帶通行證 gs；沒帶代碼＝開發者本人（gsme），帶別人的代碼＝切換成他測試
   if (S.gMode && S.gs) { req.gs = S.gs; if (!S.code) req.gsme = 1; }
   for (var k in (body || {})) req[k] = body[k];
   // text/plain：不會先多問一次（CORS preflight），收件服務的 doPost 一樣讀得到
-  return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(req) })
-    .then(function (res) { return res.json(); }, function () { throw { error: '連不上收件服務（網路有問題，等一下再試）' }; })
+  var text = JSON.stringify(req);
+  var once = function () {
+    return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: text })
+      .then(function (res) { return res.json(); }, function () { throw { error: '連不上收件服務（網路有問題，等一下再試）' }; })
+      .then(null, function (e) { throw (e && e.error ? e : { error: '收件服務回覆看不懂，等一下再試' }); });
+  };
+  return (apiResend(action, body) ? apiHedge(once, action === 'login' || action === 'gauth' ? API_GAP_LOGIN : API_GAP, API_TRIES) : once())
     .then(function (r) {
       if (r && r.ok) return r;
       if (r && r.error === 'LOCKED') lockedNow(r.message);
