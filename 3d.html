@@ -284,7 +284,7 @@ function api(action, body) {
     .then(r => r.json(), () => { throw { error: '連不上收件服務（網路有問題，等一下再試）' }; });
   // 2026-11-24：收件服務的請求有時整個「掉了」（實測一半 100 秒都沒回）→ 讀模型（沒有 op、op plans）8 秒沒回就再送，最多 6 次；改資料的不重送
   const read = action === 'model3d' && (!req.op || req.op === 'plans');
-  return (read ? hedge(once, 8000, 6) : once()).then(r => { if (r && r.ok) return r; throw (r || {}); });
+  return (read ? hedge(once, 10000, 6) : once()).then(r => { if (r && r.ok) return r; throw (r || {}); });
 }
 /** gap 毫秒沒回就再送一次，最多 tries 次；第一個回來的算數，全部失敗才算失敗 */
 function hedge(once, gap, tries) {
