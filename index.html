@@ -610,12 +610,12 @@ function failMsg(e) {
 }
 
 // 2026-11-24（使用者「為何這麼慢」，電腦版 Google 登入一直「確認中…」）：實測收件服務的請求大約一半整個「掉了」
-// （100 秒都沒回；Google 其他網址都正常，是 Apps Script 那邊）。讀資料的動作：8 秒（登入 12 秒）沒回就再送一次（誰先回用誰），最多 4 次；
+// （100 秒都沒回；Google 其他網址都正常，是 Apps Script 那邊）。讀資料的動作：8 秒（登入 12 秒）沒回就再送一次（誰先回用誰），最多 6 次；
 // 改資料的動作不重送（免得存兩次）；工項累計（progress）很重也不重送。
 var API_READ = { login: 1, feed: 1, gauth: 1, appinfo: 1, apk: 1, contracts: 1, dtok: 1, forecast: 1, here: 1, logmonth: 1, logs: 1,
   logphoto: 1, pdf: 1, people: 1, photoget: 1, recent: 1, staffall: 1, weather: 1, cal: 1, smat: 1, snote: 1, task: 1, todo: 1, notice: 1, model3d: 1 };
 var API_READ_OP = { list: 1, get: 1, workers: 1, photo: 1, plans: 1 };
-var API_GAP = 8000, API_GAP_LOGIN = 12000, API_TRIES = 4;   // 登入本來就要 5–10 秒
+var API_GAP = 8000, API_GAP_LOGIN = 12000, API_TRIES = 6;   // 登入本來就要 5–10 秒；11/24 上午掉的變一半 → 最多 6 次
 function apiResend(action, body) {
   if (!API_READ[action]) return false;
   var op = body && body.op != null ? String(body.op) : '';
