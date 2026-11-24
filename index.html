@@ -506,7 +506,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/24g';
+var WEB_VERSION = '11/24h';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -5179,6 +5179,7 @@ function catMarksLoad(my) {
   var d = my.doc;
   return api('catmark', { op: 'list', site: d.site, folder: d.folder, file: d.name }).then(function (r) {
     my.marks = (r.marks || []).filter(function (m) { return m.pos && m.pos.length >= 3; }); my.marksOn = true; my.ovs = my.ovs || {};
+    my.canExport = !!r.canExport;   // 收件服務第 75 版：開發者、老闆、主任可以匯出
     Object.keys(my.ovs).forEach(function (k) { catOverlayDraw(my, +k); });
     var b = document.querySelectorAll('[data-cmbtn]'); for (var i = 0; i < b.length; i++) b[i].textContent = '⭕ 圈註記' + (my.marks.length ? ' ' + my.marks.length : '');
   }).catch(function () { if (!my.marksOn) { my.marks = []; my.marksOn = false; } });
@@ -5196,6 +5197,28 @@ function catOverlayDraw(my, pi) {   // 整頁往下看的時候：這一頁的�
       '<circle cx="' + bx + '" cy="' + by + '" r="19" fill="#E53935" stroke="#fff" stroke-width="3"/><text x="' + bx + '" y="' + (by + 8) + '" text-anchor="middle" font-size="23" font-weight="700" fill="#fff">' + m.no + '</text>';
   });
   o.el.innerHTML = s;
+}
+/** 每個圈的位置圖（最多 60 個）：從畫好的那一頁切出圈附近那一塊（4:3，寬 640），畫上紅圈和號碼 → {圈的編號: jpg 的 base64}；那一頁還沒畫好的就沒有 */
+function catFigs(my) {
+  var out = {};
+  (my.marks || []).slice().sort(function (a, b) { return a.no - b.no; }).slice(0, 60).forEach(function (m) {
+    var src = my.pcv && my.pcv[m.page]; if (!src) return;
+    try {
+      var W = src.width, H = src.height, cw = Math.min(W, Math.max(m.pos[2] * W * 2.6, W * 0.15) * 2), ch = Math.min(H, cw * 0.75);
+      var left = Math.max(0, Math.min(W - cw, m.pos[0] * W - cw / 2)), top = Math.max(0, Math.min(H - ch, m.pos[1] * H - ch / 2)), ow = 640, oh = Math.max(1, Math.round(ow * ch / cw)), k = ow / cw;
+      var c = document.createElement('canvas'); c.width = ow; c.height = oh; var x = c.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0, 0, ow, oh); x.drawImage(src, left, top, cw, ch, 0, 0, ow, oh);
+      var cx = (m.pos[0] * W - left) * k, cy = (m.pos[1] * H - top) * k, rr = Math.max(8, m.pos[2] * W * k);
+      x.strokeStyle = '#fff'; x.lineWidth = 9; x.beginPath(); x.arc(cx, cy, rr, 0, 6.2832); x.stroke();
+      x.strokeStyle = '#E53935'; x.lineWidth = 5; x.beginPath(); x.arc(cx, cy, rr, 0, 6.2832); x.stroke();
+      var bx = Math.max(20, Math.min(ow - 20, cx + rr * 0.71)), by = Math.max(20, Math.min(oh - 20, cy - rr * 0.71));
+      x.beginPath(); x.arc(bx, by, 19, 0, 6.2832); x.fillStyle = '#fff'; x.fill(); x.beginPath(); x.arc(bx, by, 16.5, 0, 6.2832); x.fillStyle = '#E53935'; x.fill();
+      x.fillStyle = '#fff'; x.font = '700 22px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(String(m.no), bx, by + 1);
+      var q = [0.74, 0.55, 0.38], i, d;
+      for (i = 0; i < q.length; i++) { d = c.toDataURL('image/jpeg', q[i]).split(',')[1]; if (d.length * 0.75 < 190 * 1024) { out[m.id] = d; break; } }
+    } catch (e) { }
+  });
+  return out;
 }
 function catPageWrap(my, pi, c) {
   var w = document.createElement('div'); w.style.cssText = 'position:relative';
@@ -5354,6 +5377,23 @@ function catMarkOpen(my, pi, openId) {
       r.onclick = function () { if (o.parentNode) o.parentNode.removeChild(o); if (m.page === pi) { M.draft = null; M.open = m.id; panel(); draw(); } else if (my.pcv[m.page]) catMarkOpen(my, m.page, m.id); };
       c.querySelector('[data-cm="rows"]').appendChild(r);
     });
+    // 匯出 Excel／PDF（開發者、老闆、主任）：每個圈一列＋位置圖＋現況照片；位置圖在這裡畫好一起送
+    if (my.canExport) {
+      var ex = document.createElement('div'), msg = document.createElement('div'), er = document.createElement('div');
+      ex.style.cssText = 'margin-top:10px'; msg.style.cssText = 'font-size:13px;color:#5D7486;margin-bottom:6px;display:none'; er.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px';
+      [['📊 匯出 Excel', 'xlsx'], ['📄 匯出 PDF', 'pdf']].forEach(function (b) {
+        var xb = document.createElement('button'); xb.type = 'button'; xb.textContent = b[0]; xb.style.cssText = cb;
+        xb.onclick = function () {
+          if (M.exporting) return;
+          M.exporting = true; msg.style.display = 'block'; msg.style.color = '#5D7486'; msg.textContent = '匯出中…（畫位置圖、放照片，要等 20～40 秒）';
+          api('catmark', { op: 'export', site: d.site, folder: d.folder, file: d.name, fmt: b[1], figs: catFigs(my) }).then(function (r) {
+            M.exporting = false; saveBlob(new Blob([b64ToBytes(r.data)], { type: r.mime }), r.name); msg.style.color = '#1E9E6A'; msg.textContent = '✅ 匯出好了：' + r.name;
+          }).catch(function (e) { M.exporting = false; msg.style.color = '#E5383B'; msg.textContent = '沒有匯出：' + (failMsg(e) || '網路有問題'); });
+        };
+        er.appendChild(xb);
+      });
+      ex.appendChild(msg); ex.appendChild(er); c.appendChild(ex);
+    }
     var x = document.createElement('button'); x.type = 'button'; x.textContent = '關閉'; x.style.cssText = cb + ';margin-top:10px'; x.onclick = function () { if (o.parentNode) o.parentNode.removeChild(o); }; c.appendChild(x);
     o.appendChild(c); el.appendChild(o);
   }
