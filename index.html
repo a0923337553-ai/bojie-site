@@ -506,7 +506,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/24b';
+var WEB_VERSION = '11/24c';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -969,7 +969,7 @@ function render() {
   if (S.route === 'login') h = renderLogin();
   else if (!S.s || !S.s.today) h = topBar('柏捷工地', null) + '<div class="wrap">' + (S.err ? '<div class="err">' + esc(S.err) + '</div>' : '<div class="card note" style="font-size:15px">讀取中…</div>') +
     '<button class="ghost dim" data-act="tologin" style="margin-top:14px">回登入畫面</button></div>';
-  else h = ({ hub: renderHub, work: renderWork, edit: renderEdit, view: renderView, site: renderSite, pours: renderPours, sheets: renderSheets,
+  else h = ({ hub: renderHub, work: renderWork, edit: renderEdit, view: renderView, site: renderSite, pours: renderPours, sheets: renderSheets, shub: renderSheetHub, scat: renderCatFolder,
     pdf: renderPdf, contracts: renderContracts, todo: renderTodo, logs: renderLogs, calendar: renderCal, tasks: renderTasks,
     people: renderPeople, adminq: renderAdminQ, dlog: renderDlog, staff: renderStaff, mats: renderMats, progress: renderProgress }[S.route] || renderHub)();
   if (S.asCode && S.route !== 'login') h = asBar() + h;   // 開發者切換成別人測試中
@@ -2023,7 +2023,8 @@ function renderSite() {
   // 施工進度（收件服務第 67 版，使用者 2026-11-23「施工日誌下面新增一個施工進度的按鈕…甘特圖」；開發者、老闆、主任、公司）
   // 11/23e：改名「工項累計」（使用者 2026-11-23「施工進度名稱改成工項累計」…「基礎模板拆除+地梁模板組立算一組」→ A 合併；收件服務第 70 版）
   if (hasProgress()) h += tile('工項累計', '每個工項：一組一組幾天、幾工', '#0E7C86', '📊', 'progress');
-  h += tile('鋼筋施工單', sheets + ' 份', '#16A6A0', '📐', 'sheets');
+  // 2026-11-24：改名「施工單」，裡面分資料夾（鋼筋施工單、現況圖、自己建的；收件服務第 73 版）
+  h += tile('施工單', '施工圖・鋼筋施工單 ' + sheets + ' 份・現況圖…', '#16A6A0', '📐', 'shub');
   h += tile('混凝土灌漿數量', next ? '下一次 ' + rocDate(pourOf(next).pourDate) + '（' + (pourOf(next).part || '') + '）' + (pourOf(next).m3 ? ' ・ ' + pourOf(next).m3 + ' m³' : '') : pours.length + ' 份', '#F2994A', '🚚', 'pours');
   // 現場材料數量（收件服務第 52 版，使用者 2026-11-19「在混凝土灌漿數量下面新增一個按鈕」；每個人都能填）
   if (hasMats()) h += tile('現場材料數量', matLine(site), '#8D6E63', '📦', 'mats');
@@ -2618,7 +2619,7 @@ function renderSheets() {
   var site = S.site, o = S.office;
   // 工地底下的資料夾（收件服務第 26 版，BricsCAD 列印「＋ 新資料夾」，使用者 2026-11-13）：先列資料夾，點進去才是 PDF
   var fo = S.sheetFolderSite === site ? (S.sheetFolder || '') : '';
-  var h = topBar(fo || '鋼筋施工單', fo ? 'sheetsroot' : 'site', S.officeBusy ? '更新中…' : '⟳ 更新', 'officereload') + '<div class="wrap"><div class="label">' +
+  var h = topBar(fo || '鋼筋施工單', fo ? 'sheetsroot' : 'shub', S.officeBusy ? '更新中…' : '⟳ 更新', 'officereload') + '<div class="wrap"><div class="label">' +
     esc(site) + (fo ? ' ／ ' + esc(fo) : ' ・ 依群組，一個群組一份（跟列印出來的一樣）') + '</div>';
   if (S.officeErr) h += '<div class="err">' + esc(S.officeErr) + '</div>';
   if (!o) return h + '<div class="sub">讀取中…</div></div>';
@@ -4894,7 +4895,7 @@ function loadPdfJs() {
 function pdfStatus(t) { S.pdf.status = t; var el = $('pdfstatus'); if (el) el.textContent = t; }
 function openPdf(id) {
   var o = S.office; if (!o) return;
-  var doc = (o.pours || []).concat(o.sheets || []).filter(function (d) { return d.id === id; })[0]; if (!doc) return;
+  var doc = (o.pours || []).concat(o.sheets || [], o.cats || []).filter(function (d) { return d.id === id; })[0]; if (!doc) return;
   // 施工單記號（第 15 版）：主任、老闆、開發者看得到、可以畫
   var sheet = (o.sheets || []).indexOf(doc) >= 0;
   openPdfDoc(doc, { notes: sheet && isLead(), sd: sheet && sdCan() });   // sd＝開發者綁完打勾（使用者 2026-11-15 巡查 ⑤b）
@@ -5121,7 +5122,8 @@ var ACT = {
     if (v === 'matsroot') { if (S.mat) { S.mat.folder = ''; S.mat.sub = ''; S.mat.err = ''; } go('mats'); return; }   // 現場材料數量：從資料夾回五個資料夾
     if (v === 'matssub') { if (S.mat) { S.mat.sub = ''; S.mat.err = ''; } go('mats'); return; }   // 施工架：從「施工架／壁拉桿」那一夾回兩個資料夾
     if (v === 'site') S.sheetFolder = '';
-    if (v === 'work' || v === 'site' || v === 'hub' || v === 'pours' || v === 'sheets') { if (S.busy) return; go(v); if (v === 'work') refresh(); }
+    if (v === 'shub') { S.sheetFolder = ''; S.sheetMsg = ''; }
+    if (v === 'work' || v === 'site' || v === 'hub' || v === 'pours' || v === 'sheets' || v === 'shub' || v === 'scat') { if (S.busy) return; go(v); if (v === 'work') refresh(); }
     else go(v);
   },
   // 施工單資料夾（收件服務第 26 版）
@@ -5166,7 +5168,7 @@ var ACT = {
     switch (n.kind) {
       case 'notice': openNotice(n); return;
       case 'pour': setSite(n.site); openOffice('pours'); return;
-      case 'sheet': setSite(n.site); openOffice('sheets'); return;
+      case 'sheet': setSite(n.site); if (n.cat) { S.catFolder = n.folder || '現況圖'; openOffice('scat'); } else openOffice('sheets'); return;   // 第 73 版：施工單資料夾的新檔
       case 'contract': setSite(n.site); openOffice('contracts'); return;
       case 'todo': setSite(n.site); openTodo('hub'); return;
       case 'smat': if (n.site && hasMats()) { setSite(n.site); openMats('hub'); } return;   // 現場材料數量有人新增：打開那個工地的（返回回首頁）
@@ -6571,6 +6573,144 @@ ACT.tododel = function (id) {
   if (!confirm('刪除這一項待辦？\n「' + t.text + '」\n刪掉以後大家都看不到了。')) return;
   todoDelNow(id);
 };
+
+// ===================== 施工單分資料夾（收件服務第 73 版；使用者 2026-11-24「鋼筋施工單改成施工單，然後將鋼筋施工單移到裡面，
+// 施工單裡面新增一個資料夾叫做現況圖，以及可以新增資料夾的功能」「電腦跟手機都可以上傳」） =====================
+// 施工單：📐 鋼筋施工單（原本的清單）、🗺 現況圖（每個工地都有）、自己建的；開發者「＋ 新增資料夾」、往左滑刪、資料夾裡「＋ 上傳 PDF」。
+function catFolders(site) {
+  var o = S.office || {}, fixed = o.catFixed || ['現況圖'];
+  var other = uniq(((o.catDirs || {})[site] || []).concat((o.cats || []).filter(function (d) { return d.site === site; }).map(function (d) { return d.folder || ''; })))
+    .filter(function (f) { return f && fixed.indexOf(f) < 0; }).sort(cmp);
+  return fixed.concat(other);
+}
+function catInside(site, f) { return ((S.office || {}).cats || []).filter(function (d) { return d.site === site && d.folder === f; }).sort(function (a, b) { return cmp(b.modified || '', a.modified || ''); }); }
+function catNew(d) { return Date.now() - Date.parse(d.modified || 0) < 14 * 864e5 && !(S.catSeen || {})[d.id + ':' + d.modified]; }
+function catEdit() { return !!(S.office && S.office.catEdit); }
+function renderSheetHub() {
+  var site = S.site, o = S.office;
+  var h = topBar('施工單', 'site', S.officeBusy ? '更新中…' : '⟳ 更新', 'officereload') + '<div class="wrap"><div class="label">' + esc(site) + '</div>';
+  if (S.officeErr) h += '<div class="err">' + esc(S.officeErr) + '</div>';
+  if (S.sheetMsg) h += '<div class="box">' + esc(S.sheetMsg) + '</div>';
+  if (!o) return h + '<div class="sub">讀取中…</div></div>';
+  var rebar = (o.sheets || []).filter(function (d) { return d.site === site; });
+  function row(act, v, icon, name, sub, isNew) {
+    return '<button class="item" data-act="' + act + '" data-v="' + esc(v) + '"><span style="font-size:30px;margin-right:10px">' + icon + '</span><span class="grow"><b style="font-size:17px">' + esc(name) + '</b>' +
+      (isNew ? ' <span class="newtag">新</span>' : '') + '<span class="sub" style="display:block">' + esc(sub) + '</span></span><span class="arrow">›</span></button>';
+  }
+  var ed = catEdit(), fixed = o.catFixed || ['現況圖'], fs = o.cats ? catFolders(site) : [];
+  if (ed && fs.some(function (f) { return fixed.indexOf(f) < 0; }))
+    h += '<div class="sub" style="font-size:13px;margin:-2px 0 8px 2px">' + (matchMedia('(hover:hover)').matches ? '開發者：滑鼠按住往左拖，可以刪除資料夾' : '開發者：往左滑可以刪除資料夾') + '</div>';
+  // 施工圖排在鋼筋施工單前面（catFirst；使用者 2026-11-24「鋼筋的前面幫我新增一個施工圖的資料夾」）
+  var first = o.catFirst || [];
+  function catRow(f) {
+    var inside = catInside(site, f);
+    var b = row('catfolder', f, f === '現況圖' ? '🗺' : f === '施工圖' ? '📑' : '📁', f, inside.length ? inside.length + ' 份' : '還沒有檔案', inside.some(catNew));
+    h += ed && fixed.indexOf(f) < 0 ? '<div class="swp"><button class="swdel" data-act="catdirdel" data-v="' + esc(f) + '">刪除</button>' + b + '</div>' : b;
+  }
+  fs.filter(function (f) { return first.indexOf(f) >= 0; }).forEach(catRow);
+  h += row('nav', 'sheets', '📐', '鋼筋施工單', rebar.length ? rebar.length + ' 份（BricsCAD 鋼筋列印的）' : '還沒有鋼筋施工單', false);
+  if (!o.cats) h += '<div class="card sub" style="font-size:15px">收件服務還是舊版，現況圖、資料夾要等更新。</div>';
+  fs.filter(function (f) { return first.indexOf(f) < 0; }).forEach(catRow);
+  if (ed && o.cats) h += '<button class="ghost" data-act="catmkdir" style="margin-top:6px;border-style:dashed">＋ 新增資料夾</button>';
+  return h + '<div class="note" style="margin-top:8px">電腦端：BricsCAD「施工單發佈」選資料夾發佈；手機、iPad 開發者在資料夾裡按「＋ 上傳 PDF／DWG」。</div></div>';
+}
+function renderCatFolder() {
+  var site = S.site, o = S.office, f = S.catFolder || '現況圖';
+  var h = topBar(f, 'shub', S.officeBusy ? '更新中…' : '⟳ 更新', 'officereload') + '<div class="wrap"><div class="label">' + esc(site) + ' ／ 施工單 ／ ' + esc(f) + '</div>';
+  if (S.officeErr) h += '<div class="err">' + esc(S.officeErr) + '</div>';
+  if (S.sheetMsg) h += '<div class="box">' + esc(S.sheetMsg) + '</div>';
+  if (!o) return h + '<div class="sub">讀取中…</div></div>';
+  var ed = catEdit(), list = catInside(site, f);
+  if (ed) h += '<button class="big" style="margin:0 0 8px" data-act="catup"' + (S.busy ? ' disabled' : '') + '>＋ 上傳 PDF／DWG</button>';
+  if (ed && list.length) h += '<div class="sub" style="font-size:13px;margin:6px 0 8px 2px">' + (matchMedia('(hover:hover)').matches ? '開發者：滑鼠按住往左拖，可以刪除' : '開發者：往左滑可以刪除') + '</div>';
+  if (!list.length) h += '<div class="card sub" style="font-size:15px">這個資料夾還沒有檔案。' + (ed ? '按上面「＋ 上傳 PDF／DWG」，或電腦 BricsCAD「施工單發佈」選「' + esc(f) + '」。' : '') + '</div>';
+  list.forEach(function (d) {
+    var dwg = /\.dwg$/i.test(d.name);   // DWG 原檔：網頁畫不出來，點了下載、用看圖程式打開
+    var b = '<button class="item" data-act="catopen" data-v="' + esc(d.id) + '"><span class="pdfph"' + (dwg ? ' style="color:#2F6FB5;background:#EAF2FB"' : '') + '>' + (dwg ? 'DWG' : 'PDF') + '</span><span class="grow"><b style="font-size:16px">' + esc(dwg ? d.name : docTitle(d)) + '</b>' +
+      (catNew(d) ? ' <span class="newtag">新</span>' : '') + '<span class="sub" style="display:block">' + esc(shortTime(d.modified) || '─') + ' 上傳' + (dwg ? '（DWG 原檔：點了下載，用看圖程式打開）' : '') + '</span></span><span class="arrow">›</span></button>';
+    h += ed ? '<div class="swp"><button class="swdel" data-act="catdel" data-v="' + esc(d.id) + '">刪除</button>' + b + '</div>' : b;
+  });
+  return h + '</div>';
+}
+ACT.catfolder = function (v) { S.catFolder = v; S.sheetMsg = ''; go('scat'); window.scrollTo(0, 0); };
+ACT.catopen = function (id) {
+  var d = ((S.office || {}).cats || []).filter(function (x) { return x.id === id; })[0]; if (!d) return;
+  S.catSeen = S.catSeen || {}; S.catSeen[d.id + ':' + d.modified] = 1; try { localStorage.setItem('catSeen', JSON.stringify(S.catSeen)); } catch (e) { }
+  if (/\.dwg$/i.test(d.name)) {
+    if (S.busy) return;
+    S.busy = true; S.sheetMsg = '下載「' + d.name + '」中…'; render();
+    api('pdf', { id: d.id }).then(function (r) {
+      S.busy = false; saveBlob(new Blob([b64ToBytes(r.data)], { type: 'application/acad' }), d.name);
+      S.sheetMsg = '已下載「' + d.name + '」：用看 DWG 圖的程式打開。'; render();
+    }).catch(function (e) { S.busy = false; var m = failMsg(e); S.sheetMsg = m ? '下載失敗：' + m : ''; render(); });
+    return;
+  }
+  openPdfDoc(d, { from: 'scat' });
+};
+ACT.catmkdir = function () {
+  if (S.busy) return;
+  var n = (prompt('在「' + S.site + '」的施工單裡新增資料夾，名字：') || '').trim();
+  if (!n) return;
+  S.busy = true; S.sheetMsg = '新增中…'; render();
+  api('sheetcat', { op: 'mkdir', site: S.site, name: n }).then(function (r) {
+    S.busy = false; S.sheetMsg = '已新增資料夾「' + r.folder + '」'; loadOffice();
+  }).catch(function (e) { S.busy = false; var m = failMsg(e); S.sheetMsg = m ? '沒有新增：' + m : ''; render(); });
+};
+ACT.catdirdel = function (f) {
+  var site = S.site; if (!f || S.busy) return;
+  var n = catInside(site, f).length;
+  if (!confirm('刪除資料夾「' + f + '」？\n' + (n ? '裡面的 ' + n + ' 份也會一起刪掉。\n' : '這個資料夾是空的。\n') + '雲端放進垃圾桶，30 天內找得回來。')) return;
+  S.busy = true; S.sheetMsg = '刪除中…'; render();
+  api('sheetcat', { op: 'rmdir', site: site, folder: f }).then(function (r) {
+    S.busy = false; S.sheetMsg = '已刪除資料夾「' + f + '」' + (r && r.count ? '（連裡面 ' + r.count + ' 份）' : ''); S.feedStale = true; loadOffice();
+  }).catch(function (e) { S.busy = false; var m = failMsg(e); S.sheetMsg = m ? '刪不掉：' + m : ''; render(); });
+};
+ACT.catdel = function (id) {
+  var d = ((S.office || {}).cats || []).filter(function (x) { return x.id === id; })[0];
+  if (!d || S.busy) return;
+  if (!confirm('刪除「' + docTitle(d) + '」？\n雲端和每個人的手機、iPad 上的這份都會拿掉（雲端放進垃圾桶，30 天內找得回來）。')) return;
+  S.busy = true; S.sheetMsg = '刪除中…'; render();
+  api('sheetcat', { op: 'del', id: id }).then(function () {
+    S.busy = false; S.sheetMsg = '已刪除「' + docTitle(d) + '」'; S.feedStale = true; loadOffice();
+  }).catch(function (e) { S.busy = false; var m = failMsg(e); S.sheetMsg = m ? '刪不掉：' + m : ''; render(); });
+};
+/** 開發者上傳 PDF 到這個資料夾（可以一次選好幾個；一段 2 MB 傳給收件服務；同名的換成新的） */
+ACT.catup = function () {
+  if (S.busy) return;
+  var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/pdf,.pdf,.dwg'; inp.multiple = true;
+  inp.onchange = function () {
+    var files = Array.prototype.slice.call(inp.files || []); if (!files.length) return;
+    var site = S.site, folder = S.catFolder || '現況圖', ok = 0, fails = [], CH = 2 * 1024 * 1024;
+    S.busy = true; render();
+    function one(k) {
+      if (k >= files.length) {
+        S.busy = false; S.sheetMsg = (ok ? '✅ 傳好 ' + ok + ' 份到「' + folder + '」' : '') + (fails.length ? (ok ? '；' : '') + fails.join('；') : '');
+        S.feedStale = true; loadOffice(); return;
+      }
+      var f = files[k], tag = files.length > 1 ? '（' + (k + 1) + '/' + files.length + '）' : '';
+      if (!/\.(pdf|dwg)$/i.test(f.name) && f.type !== 'application/pdf') { fails.push('「' + f.name + '」不是 PDF 也不是 DWG'); return one(k + 1); }
+      if (f.size > 35 * 1048576) { fails.push('「' + f.name + '」太大（超過 35 MB）'); return one(k + 1); }
+      var parts = Math.max(1, Math.ceil(f.size / CH)), up = 'w' + Math.random().toString(36).slice(2, 14), name = /\.(pdf|dwg)$/i.test(f.name) ? f.name : f.name + '.pdf';
+      function part(i) {
+        if (i >= parts) { ok++; return one(k + 1); }
+        S.sheetMsg = '上傳中' + tag + '「' + name + '」' + (parts > 1 ? ' ' + Math.round(i * 100 / parts) + '%' : '…'); renderSoft();
+        var rd = new FileReader();
+        rd.onload = function () {
+          var s = rd.result; s = s.slice(s.indexOf(',') + 1);
+          api('sheetcat', { op: 'up', site: site, folder: folder, up: up, part: i, parts: parts, size: f.size, name: name, data: s })
+            .then(function () { part(i + 1); })
+            .catch(function (e) { fails.push('「' + name + '」沒傳上去：' + (failMsg(e) || '網路有問題')); one(k + 1); });
+        };
+        rd.onerror = function () { fails.push('讀不到「' + name + '」'); one(k + 1); };
+        rd.readAsDataURL(f.slice(i * CH, Math.min(f.size, (i + 1) * CH)));
+      }
+      part(0);
+    }
+    one(0);
+  };
+  inp.click();
+};
+try { S.catSeen = JSON.parse(localStorage.getItem('catSeen') || '{}'); } catch (e) { S.catSeen = {}; }
 
 // ---------- 第 14 版：開發者刪傳錯的鋼筋施工單（使用者 2026-11-11） ----------
 S.sheetMsg = '';
