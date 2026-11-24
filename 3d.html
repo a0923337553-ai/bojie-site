@@ -279,9 +279,27 @@ function api(action, body) {
   try { if (window.parent !== window && typeof parent.api === 'function' && parent.S) return parent.api(action, body); } catch (e) { }
   req.code = ls('code'); req.client = 'page'; req.device = ls('device');
   if (!req.code) return Promise.reject({ error: 'NOCODE' });
-  return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(req) })
-    .then(r => r.json(), () => { throw { error: '連不上收件服務（網路有問題，等一下再試）' }; })
-    .then(r => { if (r && r.ok) return r; throw (r || {}); });
+  const text = JSON.stringify(req);
+  const once = () => fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: text })
+    .then(r => r.json(), () => { throw { error: '連不上收件服務（網路有問題，等一下再試）' }; });
+  // 2026-11-24：收件服務的請求有時整個「掉了」（實測一半 100 秒都沒回）→ 讀模型（沒有 op、op plans）8 秒沒回就再送，最多 4 次；改資料的不重送
+  const read = action === 'model3d' && (!req.op || req.op === 'plans');
+  return (read ? hedge(once, 8000, 4) : once()).then(r => { if (r && r.ok) return r; throw (r || {}); });
+}
+/** gap 毫秒沒回就再送一次，最多 tries 次；第一個回來的算數，全部失敗才算失敗 */
+function hedge(once, gap, tries) {
+  return new Promise((ok, bad) => {
+    let done = false, sent = 0, out = 0, timer = null;
+    const fire = () => {
+      if (done || sent >= tries) return;
+      sent++; out++; clearTimeout(timer);
+      // 最後一次也送了：再等 2 倍時間還沒回就算失敗（不要一直轉）
+      timer = setTimeout(sent < tries ? fire : () => { if (!done) { done = true; bad({ error: '收件服務沒有回應（Google 那邊慢），等一下再試' }); } }, sent < tries ? gap : gap * 2);
+      once().then(r => { if (done) return; done = true; clearTimeout(timer); ok(r); },
+        e => { out--; if (done) return; if (sent < tries) fire(); else if (!out) { done = true; bad(e); } });
+    };
+    fire();
+  });
 }
 function errText(e) {
   if (!e) return '讀不到';
