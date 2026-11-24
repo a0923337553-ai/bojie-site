@@ -506,7 +506,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/24c';
+var WEB_VERSION = '11/24d';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -4935,6 +4935,7 @@ function openPdfDoc(doc, opt) {
       if (my.worker) { snotesOf(doc).forEach(function (x) { if (list.indexOf(x.page) < 0) list.push(x.page); }); if (list.indexOf(my.start) < 0) list.push(my.start); list = list.filter(function (p) { return p < n; }).sort(function (x, y) { return x - y; }); }
       else for (var p = 0; p < n; p++) list.push(p);
       var k = 0;
+      my.pdfDoc = pdf;
       function next() {
         if (S.pdf !== my || S.route !== 'pdf' || !box) return;
         if (k >= list.length) { pdfStatus(my.worker ? '給你看的 ' + list.length + ' 頁' : n + ' 頁'); return; }
@@ -4948,16 +4949,190 @@ function openPdfDoc(doc, opt) {
           if (v1.width * v1.height * scale * scale > 4.2e6) scale = Math.sqrt(4.2e6 / (v1.width * v1.height));
           var v = page.getViewport({ scale: scale });
           var c = document.createElement('canvas'); c.width = Math.floor(v.width); c.height = Math.floor(v.height);
-          if (my.notes) box.appendChild(snPageWrap(my, pi, c)); else box.appendChild(c);
+          if (my.notes) box.appendChild(snPageWrap(my, pi, c)); else box.appendChild(my.snap && my.snap.pages[pi] && my.snap.pages[pi].upm > 0 ? msPageWrap(my, pi, c) : c);
           return page.render({ canvasContext: c.getContext('2d'), viewport: v }).promise.then(function () {
             if (my.notes) { snDrawPage(my, pi); if (pi === my.start && my.start > 0) { var w = $('pg' + pi); if (w) w.scrollIntoView({ block: 'start' }); } }
           });
         }).then(function () { k++; return next(); });
       }
-      return next();
+      // 量測：先把 PDF 裡的鎖點讀出來（沒有、讀不到就沒有量測按鈕），再畫頁面
+      return (opt.measure ? snapLoad(a[0]).catch(function () { return null; }) : Promise.resolve(null)).then(function (snap) { my.snap = snap; return next(); });
     });
   }).catch(function (e) { if (S.pdf !== my) return; var m = e && e.error === 'DLOGIN' ? '雲端連線過期了，回上一頁再點一次' : failMsg(e); if (m) pdfStatus('打不開：' + m); });
 }
+/* MEASURE-BEGIN
+ * PDF 上量測（使用者 2026-11-24「你再pdf有抓取點的功能讓我能夠量測」；App 0.9.139 的 PdfSnap.kt、MeasureScreen.kt 同一套）：
+ * BricsCAD「施工單發佈」把每頁圖上的端點、交點和「紙上 1 mm＝圖上幾個單位」放在 PDF 裡（/Type /BojieSnap，格式「BJSNAP02」見外掛 PublishSnap.cs）。
+ * snapLoad 讀出來；每頁左下「📏 量測」開全螢幕：兩指放大、拖曳移動，點一下放一個點（附近有圖上的點就抓過去），兩點一組寫長度。 */
+function snapLoad(bytes) {
+  var mark = [47, 84, 121, 112, 101, 32, 47, 66, 111, 106, 105, 101, 83, 110, 97, 112], at = -1;   // 「/Type /BojieSnap」：放在檔案後面，從尾巴往前找
+  for (var i = bytes.length - mark.length, stop = Math.max(0, bytes.length - 24e6); i >= stop && at < 0; i--) {
+    if (bytes[i] !== 47) continue;
+    var k = 1; while (k < mark.length && bytes[i + k] === mark[k]) k++;
+    if (k === mark.length) at = i;
+  }
+  if (at < 0) return Promise.resolve(null);
+  var head = '', j;
+  for (j = at; j < at + 120 && j < bytes.length; j++) head += String.fromCharCode(bytes[j]);
+  var m = /\/Length (\d+)\s*>>\s*stream\n/.exec(head); if (!m) return Promise.resolve(null);
+  var start = at + m.index + m[0].length, len = +m[1];
+  if (len < 16 || start + len > bytes.length) return Promise.resolve(null);
+  var dv = new DataView(bytes.buffer, bytes.byteOffset + start, len), magic = '';
+  for (j = 0; j < 8; j++) magic += String.fromCharCode(dv.getUint8(j));
+  if (magic !== 'BJSNAP02') return Promise.resolve(null);
+  var data = { unit: dv.getUint8(8), pages: [] }, n = dv.getUint16(10, true), o = 12, total = 0;
+  for (j = 0; j < n; j++, o += 36) {
+    var pg = { w: dv.getFloat32(o, true), h: dv.getFloat32(o + 4, true), upm: dv.getFloat64(o + 8, true), ox: dv.getFloat32(o + 16, true), oy: dv.getFloat32(o + 20, true), n: dv.getUint32(o + 32, true), pts: null };
+    if (pg.n > 200000) return Promise.resolve(null);
+    data.pages.push(pg); total += pg.n;
+  }
+  var packed = dv.getUint32(o, true); o += 4;
+  if (packed > len - o) return Promise.resolve(null);
+  if (!total) { data.pages.forEach(function (p) { p.pts = new Float32Array(0); }); return Promise.resolve(data); }
+  if (!window.DecompressionStream) return Promise.resolve(null);   // 很舊的瀏覽器解不開：沒有量測
+  var blob = new Blob([bytes.subarray(start + o, start + o + packed)]);
+  return new Response(blob.stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer().then(function (buf) {
+    if (buf.byteLength < total * 8) return null;
+    var off = 0;
+    data.pages.forEach(function (p) { p.pts = new Float32Array(buf, off, p.n * 2); off += p.n * 8; });
+    return data;
+  });
+}
+function msLen(v, unit) { return unit === 1 ? v.toFixed(0) + ' 公釐' : unit === 2 ? v.toFixed(1) + ' 公分' : unit === 3 ? v.toFixed(3) + ' 公尺' : v.toFixed(1); }
+function msMeters(v, unit) { return unit === 1 && v >= 1000 ? (v / 1000).toFixed(3) + ' 公尺' : unit === 2 && v >= 100 ? (v / 100).toFixed(2) + ' 公尺' : ''; }
+function msPageWrap(my, pi, c) {
+  var w = document.createElement('div'); w.style.cssText = 'position:relative';
+  w.appendChild(c);
+  var b = document.createElement('button'); b.type = 'button'; b.textContent = '📏 量測 P.' + (pi + 1);
+  b.style.cssText = 'position:absolute;left:8px;bottom:14px;border:0;border-radius:999px;background:#1565C0;color:#fff;font-size:15px;font-weight:700;padding:8px 14px;box-shadow:0 2px 6px rgba(0,0,0,.35)';
+  b.onclick = function (e) { e.stopPropagation(); measureOpen(my, pi, c); };
+  w.appendChild(b);
+  return w;
+}
+var MS = null;
+function measureClose() { var m = MS; MS = null; if (m && m.el.parentNode) m.el.parentNode.removeChild(m.el); }
+window.addEventListener('popstate', measureClose);
+function measureOpen(my, pi, src) {
+  measureClose();
+  var pg = my.snap.pages[pi], unit = my.snap.unit, ratio = pg.h / pg.w;
+  var pill = 'border:0;border-radius:999px;background:rgba(42,47,54,.92);color:#fff;font-size:14px;font-weight:700;padding:10px 4px;text-align:center;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.3)';
+  var el = document.createElement('div');
+  el.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:99999;background:#5A6270;touch-action:none;-webkit-user-select:none;user-select:none;font-family:inherit';
+  el.innerHTML = '<canvas style="position:absolute;left:0;top:0;width:100%;height:100%"></canvas>' +
+    '<div style="position:absolute;left:0;right:0;top:calc(10px + env(safe-area-inset-top));text-align:center;pointer-events:none"><span style="display:inline-block;background:rgba(42,47,54,.92);color:#fff;font-size:14px;font-weight:700;border-radius:12px;padding:6px 12px">📏 P.' + (pi + 1) + ' 量測　兩指放大，點兩個點</span></div>' +
+    '<div style="position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom))">' +
+    '<div data-ms="res" style="display:none;background:#fff;border-radius:14px;padding:8px 14px;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,.3)"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1.6fr 1fr 1fr;gap:8px">' +
+    '<button type="button" data-ms="back" style="' + pill + '">‹ 返回</button><div data-ms="st" style="' + pill + '">點第一個點</div>' +
+    '<button type="button" data-ms="undo" style="' + pill + '">↶ 上一步</button><button type="button" data-ms="clear" style="' + pill + '">清除</button></div></div>';
+  document.body.appendChild(el);
+  var cv = el.firstChild, ctx = cv.getContext('2d'), q = function (k) { return el.querySelector('[data-ms="' + k + '"]'); };
+  var M = MS = { el: el, img: src, scale: 1, mx: 0, my: 0, shots: [] }, W = 0, H = 0, fw = 0, fh = 0, hx = 0, hy = 0;
+  function pageX(x) { return (pg.ox + x / pg.upm) / pg.w; }
+  function pageY(y) { return 1 - (pg.oy + y / pg.upm) / pg.h; }
+  function size() {
+    var dpr = window.devicePixelRatio || 1; W = el.clientWidth; H = el.clientHeight;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    fw = Math.min(W, H / ratio); fh = fw * ratio; hx = (W - fw) / 2; hy = (H - fh) / 2;
+    draw();
+  }
+  function scr(u, v) { return { x: hx + M.mx + u * fw * M.scale, y: hy + M.my + v * fh * M.scale }; }
+  function knob(p, ok) { ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, 6.2832); ctx.fillStyle = '#fff'; ctx.fill(); ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 6.2832); ctx.fillStyle = ok ? '#12B76A' : '#F2994A'; ctx.fill(); }
+  function draw() {
+    if (MS !== M) return;
+    var dpr = window.devicePixelRatio || 1, sw = fw * M.scale, sh = fh * M.scale, x0 = hx + M.mx, y0 = hy + M.my, i, n;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#fff'; ctx.fillRect(x0, y0, sw, sh);
+    try { ctx.drawImage(M.img, x0, y0, sw, sh); } catch (e) { }
+    // 可以抓的點：畫面裡不超過 1500 個才畫（太多＝還沒放大）
+    var seen = [], pts = pg.pts;
+    for (i = 0; i + 1 < pts.length && seen.length <= 3000; i += 2) {
+      var sx = x0 + pageX(pts[i]) * sw, sy = y0 + pageY(pts[i + 1]) * sh;
+      if (sx >= 0 && sx <= W && sy >= 0 && sy <= H) seen.push(sx, sy);
+    }
+    if (seen.length <= 3000) { ctx.strokeStyle = 'rgba(21,101,192,.75)'; ctx.lineWidth = 1.6; for (i = 0; i < seen.length; i += 2) { ctx.beginPath(); ctx.arc(seen[i], seen[i + 1], 3, 0, 6.2832); ctx.stroke(); } }
+    ctx.font = '700 15px sans-serif'; ctx.textBaseline = 'middle';
+    for (n = 0; n < M.shots.length; n += 2) {
+      var a = M.shots[n], pa = scr(a.u, a.v), b = M.shots[n + 1];
+      if (b) {
+        var pb = scr(b.u, b.v), text = msLen(Math.hypot(b.x - a.x, b.y - a.y), unit), tw = ctx.measureText(text).width, cx = (pa.x + pb.x) / 2, cy = (pa.y + pb.y) / 2;
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+        ctx.strokeStyle = '#1565C0'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+        ctx.fillStyle = 'rgba(21,101,192,.92)'; ctx.fillRect(cx - tw / 2 - 6, cy - 14, tw + 12, 28);
+        ctx.fillStyle = '#fff'; ctx.fillText(text, cx - tw / 2, cy + 1);
+        knob(pb, b.snapped);
+      }
+      knob(pa, a.snapped);
+    }
+    var cnt = M.shots.length, pending = cnt % 2 === 1, last = cnt >= 2 ? cnt - (pending ? 3 : 2) : -1, res = q('res');
+    q('st').textContent = !cnt ? '點第一個點' : pending ? '點第二個點' : '再點＝量下一段';
+    q('undo').style.opacity = q('clear').style.opacity = cnt ? '1' : '.5';
+    if (last < 0) res.style.display = 'none';
+    else {
+      var s0 = M.shots[last], s1 = M.shots[last + 1], d = Math.hypot(s1.x - s0.x, s1.y - s0.y), me = msMeters(d, unit), both = s0.snapped && s1.snapped;
+      res.style.display = 'block';
+      res.innerHTML = '<div style="font-size:22px;font-weight:700;color:#183B56">' + msLen(d, unit) + (me ? '　＝ ' + me : '') + '</div>' +
+        '<div style="font-size:14px;color:#5D7486">橫 ' + msLen(Math.abs(s1.x - s0.x), unit) + '　直 ' + msLen(Math.abs(s1.y - s0.y), unit) + '</div>' +
+        '<div style="font-size:13px;color:' + (both ? '#1E9E6A' : '#E0662B') + '">' + (both ? '● 兩點都抓到圖上的點' : '○ 有一點沒抓到圖上的點（大概的長度）') + '</div>';
+    }
+  }
+  function tap(x, y) {
+    var u = (x - hx - M.mx) / (fw * M.scale), v = (y - hy - M.my) / (fh * M.scale);
+    if (u < 0 || u > 1 || v < 0 || v > 1) return;
+    var max = 22 / (fw * M.scale) * pg.w, best = -1, bd = max * max, pts = pg.pts, tx = u * pg.w, ty = v * pg.h;
+    for (var i = 0; i + 1 < pts.length; i += 2) {
+      var dx = pg.ox + pts[i] / pg.upm - tx, dy = pg.h - (pg.oy + pts[i + 1] / pg.upm) - ty, d = dx * dx + dy * dy;
+      if (d <= bd) { bd = d; best = i; }
+    }
+    M.shots.push(best >= 0 ? { u: pageX(pts[best]), v: pageY(pts[best + 1]), x: pts[best], y: pts[best + 1], snapped: true }
+      : { u: u, v: v, x: (u * pg.w - pg.ox) * pg.upm, y: ((1 - v) * pg.h - pg.oy) * pg.upm, snapped: false });
+    draw();
+  }
+  function zoom(k, cx, cy, px, py) {   // 放大 k 倍（(cx,cy) 那一點不動）再移 (px,py)；圖至少留一半在畫面裡
+    var ns = Math.max(1, Math.min(24, M.scale * k)), kk = ns / M.scale, ox = hx + M.mx, oy = hy + M.my;
+    var nx = cx + (ox - cx) * kk + px, ny = cy + (oy - cy) * kk + py;
+    M.scale = ns;
+    if (ns === 1) { M.mx = 0; M.my = 0; }
+    else { M.mx = Math.max(W / 2 - fw * ns, Math.min(W / 2, nx)) - hx; M.my = Math.max(H / 2 - fh * ns, Math.min(H / 2, ny)) - hy; }
+    draw();
+  }
+  var t0 = null;
+  function two(t) { return { d: Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY), x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 }; }
+  function one(t, moved) { return { n: 1, x: t.clientX, y: t.clientY, sx: t.clientX, sy: t.clientY, moved: moved }; }
+  cv.addEventListener('touchstart', function (e) { e.preventDefault(); var t = e.touches; if (t.length === 1) t0 = one(t[0], false); else if (t.length >= 2) { t0 = two(t); t0.n = 2; } }, { passive: false });
+  cv.addEventListener('touchmove', function (e) {
+    e.preventDefault(); var t = e.touches; if (!t0) return;
+    if (t.length >= 2) { var w = two(t); if (t0.n === 2) zoom(w.d / (t0.d || 1), w.x, w.y, w.x - t0.x, w.y - t0.y); w.n = 2; t0 = w; }
+    else if (t0.n === 1) {
+      if (!t0.moved && Math.abs(t[0].clientX - t0.sx) + Math.abs(t[0].clientY - t0.sy) < 10) return;
+      zoom(1, 0, 0, t[0].clientX - t0.x, t[0].clientY - t0.y); t0.moved = true; t0.x = t[0].clientX; t0.y = t[0].clientY;
+    } else t0 = one(t[0], true);
+  }, { passive: false });
+  cv.addEventListener('touchend', function (e) {
+    e.preventDefault();
+    if (t0 && t0.n === 1 && !t0.moved && !e.touches.length) tap(t0.sx, t0.sy);
+    t0 = e.touches.length === 1 ? one(e.touches[0], true) : e.touches.length ? t0 : null;
+  }, { passive: false });
+  // 電腦：滾輪放大、按住拖曳、點一下放點
+  var md = null;
+  cv.addEventListener('wheel', function (e) { e.preventDefault(); zoom(e.deltaY < 0 ? 1.25 : 0.8, e.clientX, e.clientY, 0, 0); }, { passive: false });
+  cv.addEventListener('mousedown', function (e) { md = one(e, false); });
+  cv.addEventListener('mousemove', function (e) { if (!md) return; if (!md.moved && Math.abs(e.clientX - md.sx) + Math.abs(e.clientY - md.sy) < 5) return; zoom(1, 0, 0, e.clientX - md.x, e.clientY - md.y); md.moved = true; md.x = e.clientX; md.y = e.clientY; });
+  cv.addEventListener('mouseup', function (e) { if (md && !md.moved) tap(e.clientX, e.clientY); md = null; });
+  q('back').onclick = measureClose;
+  q('undo').onclick = function () { M.shots.pop(); draw(); };
+  q('clear').onclick = function () { M.shots = []; draw(); };
+  window.addEventListener('resize', function rs() { if (MS !== M) { window.removeEventListener('resize', rs); return; } size(); });
+  size();
+  // 放大看才清楚：這一頁另外畫一張大的（畫好換上去）
+  if (my.pdfDoc) my.pdfDoc.getPage(pi + 1).then(function (page) {
+    var v1 = page.getViewport({ scale: 1 }), s = Math.min(3200 / v1.width, Math.sqrt(9e6 / (v1.width * v1.height))), v = page.getViewport({ scale: s });
+    var c = document.createElement('canvas'); c.width = Math.floor(v.width); c.height = Math.floor(v.height);
+    return page.render({ canvasContext: c.getContext('2d'), viewport: v }).promise.then(function () { if (MS === M) { M.img = c; draw(); } });
+  }).catch(function () { });
+  return M;
+}
+/* MEASURE-END */
 /** 存檔（發包的報價單、合約；電腦存到下載，iPad 會跳出分享／存到檔案） */
 function pdfSave() {
   var p = S.pdf; if (!p || !p.save) return;
@@ -6645,7 +6820,7 @@ ACT.catopen = function (id) {
     }).catch(function (e) { S.busy = false; var m = failMsg(e); S.sheetMsg = m ? '下載失敗：' + m : ''; render(); });
     return;
   }
-  openPdfDoc(d, { from: 'scat' });
+  openPdfDoc(d, { from: 'scat', measure: true });   // BricsCAD 發佈的 PDF 帶鎖點：每頁左下「📏 量測」
 };
 ACT.catmkdir = function () {
   if (S.busy) return;
