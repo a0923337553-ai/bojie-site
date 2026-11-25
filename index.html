@@ -511,7 +511,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/25e';
+var WEB_VERSION = '11/25f';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -5063,6 +5063,7 @@ function msMids(pg) {
   return (pg.mids = new Float32Array(out));
 }
 var MS_KIND = { pt: '端點／交點', mid: '中點', perp: '垂直', on: '線上' };
+var MS_SHOW_SNAP = false;   // 量測畫面要不要畫可以抓的點（使用者 2026-11-25「他能不要顯示這些點嗎?」→ 不畫）
 function msLen(v, unit) { return unit === 1 ? v.toFixed(0) + ' 公釐' : unit === 2 ? v.toFixed(1) + ' 公分' : unit === 3 ? v.toFixed(3) + ' 公尺' : v.toFixed(1); }
 function msMeters(v, unit) { return unit === 1 && v >= 1000 ? (v / 1000).toFixed(3) + ' 公尺' : unit === 2 && v >= 100 ? (v / 100).toFixed(2) + ' 公尺' : ''; }
 function msPageWrap(my, pi, c) {
@@ -5110,15 +5111,16 @@ function measureOpen(my, pi, src) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#fff'; ctx.fillRect(x0, y0, sw, sh);
     try { ctx.drawImage(M.img, x0, y0, sw, sh); } catch (e) { }
-    // 可以抓的點：畫面裡不超過 1500 個才畫（太多＝還沒放大）
-    var seen = [], pts = pg.pts;
+    // 可以抓的點（藍圈、紫色中點）：使用者 2026-11-25「他能不要顯示這些點嗎?」→ 不畫（MS_SHOW_SNAP＝false）；抓點照樣有效，
+    // 長按游標靠近時變綠、寫抓到什麼。要再打開改成 true。畫的時候畫面裡不超過 1500 個才畫（太多＝還沒放大）
+    var seen = [], pts = MS_SHOW_SNAP ? pg.pts : [];
     for (i = 0; i + 1 < pts.length && seen.length <= 3000; i += 2) {
       var sx = x0 + pageX(pts[i]) * sw, sy = y0 + pageY(pts[i + 1]) * sh;
       if (sx >= 0 && sx <= W && sy >= 0 && sy <= H) seen.push(sx, sy);
     }
     if (seen.length <= 3000) { ctx.strokeStyle = 'rgba(21,101,192,.75)'; ctx.lineWidth = 1.6; for (i = 0; i < seen.length; i += 2) { ctx.beginPath(); ctx.arc(seen[i], seen[i + 1], 3, 0, 6.2832); ctx.stroke(); } }
     // 中點（新的 PDF 才有）：紫色小三角形，一樣畫面裡不超過 1500 個才畫
-    var mids = pg.segs && pg.segs.length ? msMids(pg) : null, ms2 = [];
+    var mids = MS_SHOW_SNAP && pg.segs && pg.segs.length ? msMids(pg) : null, ms2 = [];
     for (i = 0; mids && i + 1 < mids.length && ms2.length <= 3000; i += 2) {
       var mx3 = x0 + pageX(mids[i]) * sw, my3 = y0 + pageY(mids[i + 1]) * sh;
       if (mx3 >= 0 && mx3 <= W && my3 >= 0 && my3 <= H) ms2.push(mx3, my3);
