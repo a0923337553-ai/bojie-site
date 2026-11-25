@@ -115,6 +115,10 @@ button { font-family:inherit; cursor:pointer; color:inherit; }
 .itr .ck { font-style:normal; font-size:18px; color:var(--muted); float:left; width:24px; } .itr.on .ck { color:var(--teal); }
 .itr.mg { background:#F2FAF9; } .itr.on { background:#E3F5F3; }
 .itr.ithd { min-height:0; font-size:12px; color:var(--muted); border-bottom:1px solid #EEF2F5; margin-top:6px; } .itr.ithd > span { font-size:12px; color:var(--muted); }
+/* 11/25c：每一組後面寫是哪一家做的；別家做的、進的料（日誌的材料／機具）排在那個工項後面：名字、天數、數量＋單位 */
+.itr .nm small i { font-style:normal; } .itr .nm small i.ov { color:#002060; font-weight:bold; }
+.itr.mt { grid-template-columns:minmax(0, 1fr) 44px 108px; } .itr.mt .nm b { color:#002060; }
+.itsec { font-size:12.5px; font-weight:bold; color:#002060; margin-top:10px; padding:6px 0 0; border-top:2px solid #E3E9F7; }
 .itr.ithd > span:first-child { text-align:left; }
 .tg.itbtn { margin-top:8px; grid-template-columns:1fr; } .tg.two.itbtn { grid-template-columns:1fr 1fr; }
 .itday { display:flex; justify-content:space-between; font-size:15px; padding:2px 0; } .itday span:last-child { color:var(--muted); }   /* 部位那一格窄：不要選單箭頭，打字就跳建議 */
@@ -506,7 +510,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/25b';
+var WEB_VERSION = '11/25c';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -993,7 +997,7 @@ function renderModal() {
   if (!m) { $('modal').innerHTML = ''; return; }
   var body = { notice: noticeModal, nview: nviewModal, todoadd: todoAddModal, todoedit: todoEditModal, cal: calModal, dates: datesModal,
     task: taskModal, tphoto: taskPhotoModal, snlist: snListModal, sngive: snGiveModal, widget: widgetModal, apk: apkModal,
-    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smats: scafModal, smatv: smatViewModal, smatx: smatExportModal, smatvis: smatVisModal, wmerge: wmergeModal, pgplan: pgPlanModal, pgrow: pgRowModal, itgroup: itGroupModal, itname: itNameModal }[m.type](m);
+    padd: personAddModal, pnew: personNewModal, gverify: gVerifyModal, contract: contractModal, dladd: dlAddModal, dlrm: dlRmModal, omat: omatModal, sdmark: sdMarkModal, siteedit: siteEditModal, lpproj: lpProjModal, pouredit: pourEditModal, smat: smatModal, smatr: smatRebarModal, smats: scafModal, smatv: smatViewModal, smatx: smatExportModal, smatvis: smatVisModal, wmerge: wmergeModal, pgplan: pgPlanModal, pgrow: pgRowModal, itgroup: itGroupModal, itname: itNameModal, itmat: itMatModal }[m.type](m);
   $('modal').innerHTML = '<div class="mask" data-act="maskclose"><div class="sheet">' + body + '</div></div>';
   fillPhotos();
   if ($('gbtn')) mountGis();
@@ -2446,25 +2450,44 @@ function renderProgress() {
   if (P.err) h += '<div class="err">' + esc(P.err) + '</div>';
   if (!d) return h + (P.err ? '' : '<div class="sub" style="font-size:15px;margin:0 4px 10px">' + esc(P.busy || '讀取中…') + '</div>') + '</div>';
   h += '<div class="card"><div style="font-size:20px;font-weight:800">' + esc(d.site) + '</div><div class="sub">從開工累計到今天 ・ 日誌 ' + (d.logs || 0) + ' 天</div>' +
-    '<div class="note" style="margin-top:4px">' + (d.showQty ? '一組＝日誌寫一樣的字；工數＝日誌的人數×工數（一天寫好幾行的照行數平均分）。點工項打開／收起來，點一組看每一天。' :
+    '<div class="note" style="margin-top:4px">' + (d.showQty ? '一組＝日誌寫一樣的字；工數＝日誌的人數×工數（一天寫好幾行的照行數平均分）。點工項打開／收起來，點一組看每一天。' +
+      ((d.mats || []).length ? '日期後面是哪一家做的；深藍色＝別家做的、進的料（日誌的材料／機具）。' : '') :
       '一組＝日誌寫一樣的字。工數只有開發者、老闆、主任看得到。點工項打開／收起來，點一組看每一天。') + '</div>' +
     // 第 71 版：匯出 Excel／PDF（兩格一樣大）
     (d.canExport && (d.cats || []).length ? '<div class="tg two itbtn"><button class="tc" data-act="itexport" data-v="xlsx"' + (P.busy ? ' disabled' : '') + '><b>匯出 Excel</b></button>' +
       '<button class="tc" data-act="itexport" data-v="pdf"' + (P.busy ? ' disabled' : '') + '><b>匯出 PDF</b></button></div>' + (P.done ? '<div class="note" style="margin-top:6px">已存：' + esc(P.done) + '</div>' : '') : '') +
     '</div>';
   if (!(d.cats || []).length) h += '<div class="sub" style="margin:0 4px">這個工地還沒有施工日誌。</div>';
+  // 11/25c（使用者「為何品基我這裡還是沒看到廠商資料」「在工項累積的地方」；收件服務第 80、81 版）：
+  //   每一組後面寫哪一家做的（g.v）；別家做的、進的料（d.mats＝日誌的材料／機具，照品名分到工項）排在那個工項的幾組後面
+  var matOf = {}, matCats = [];
+  (d.mats || []).forEach(function (g, i) { g._i = i; if (!matOf[g.c]) { matOf[g.c] = []; matCats.push(g.c); } matOf[g.c].push(g); });
+  var matRows = function (ms) {
+    var r = '<div class="itsec">別家做的、進的料（日誌的材料／機具）</div><div class="itr mt ithd"><span>廠商　品名</span><span>天數</span><span>數量</span></div>';
+    ms.forEach(function (g) {
+      var q = 0; g.ds.forEach(function (x) { q += Number(x[1]) || 0; });
+      r += '<button class="itr mt" data-act="itmat" data-v="' + g._i + '"><span class="nm"><b>' + esc(g.v + (g.t ? '　' + g.t : '')) + '</b><small>' + esc(itRange(g)) + '</small></span>' +
+        '<span>' + g.ds.length + '</span><span>' + esc(itFmt(q) + (g.u ? ' ' + g.u : '')) + '</span></button>';
+    });
+    return r;
+  };
+  var vendTag = function (g) {
+    var v = g.v || []; if (!v.length) return '';
+    return ' ・ <i' + (v.length === 1 && v[0] === '柏捷' ? '' : ' class="ov"') + '>' + esc(v.join('、')) + '</i>';
+  };
   (d.cats || []).forEach(function (c, ci) {
-    var open = !!P.open[c.n], selecting = P.sel === c.n;
+    var open = !!P.open[c.n], selecting = P.sel === c.n, ms = matOf[c.n] || [];
     h += '<div class="card itc"><button class="ith" data-act="itcat" data-v="' + ci + '"><b>' + (open ? '▾ ' : '▸ ') + esc(c.n) + '</b><span>' +
-      esc(c.days + ' 天' + (d.showQty && c.q != null ? ' ・ ' + itFmt(c.q) + ' 工' : '') + ' ・ ' + c.groups.length + ' 組') + '</span></button>';
+      esc(c.days + ' 天' + (d.showQty && c.q != null ? ' ・ ' + itFmt(c.q) + ' 工' : '') + ' ・ ' + c.groups.length + ' 組' + (ms.length ? ' ・ 別家 ' + ms.length + ' 筆' : '')) + '</span></button>';
     if (open) {
       h += '<div class="itr ithd' + (d.showQty ? '' : ' noq') + '"><span>一組（照日誌寫的）</span><span>天數</span>' + (d.showQty ? '<span>工數</span>' : '') + '</div>';
       c.groups.forEach(function (g, gi) {
         var on = selecting && P.picked[gi], tq = itTotal(g, d);
         h += '<button class="itr' + (d.showQty ? '' : ' noq') + (g.m ? ' mg' : '') + (on ? ' on' : '') + '" data-act="itrow" data-v="' + ci + ':' + gi + '"><span class="nm">' +
-          (selecting ? '<i class="ck">' + (on ? '☑' : '☐') + '</i>' : '') + '<b>' + esc(g.n) + (g.m ? '<em>合併</em>' : '') + '</b><small>' + esc(itRange(g)) + '</small></span>' +
+          (selecting ? '<i class="ck">' + (on ? '☑' : '☐') + '</i>' : '') + '<b>' + esc(g.n) + (g.m ? '<em>合併</em>' : '') + '</b><small>' + esc(itRange(g)) + vendTag(g) + '</small></span>' +
           '<span>' + g.ds.length + '</span>' + (d.showQty ? '<span>' + (tq == null ? '—' : itFmt(tq)) + '</span>' : '') + '</button>';
       });
+      if (ms.length && !selecting) h += matRows(ms);
       if (d.canEdit) {
         var n = Object.keys(P.picked).filter(function (k) { return P.picked[k]; }).length;
         h += selecting ? '<div class="tg two itbtn"><button class="tc on" data-act="itmerge" data-v="' + ci + '"' + (n < 2 ? ' disabled' : '') + '><b>合併（已勾 ' + n + ' 組）</b></button>' +
@@ -2474,7 +2497,26 @@ function renderProgress() {
     }
     h += '</div>';
   });
+  // 只有別家（材料／機具）、日誌上面大項沒寫過的工項：排在後面；分不出工項的「其他（材料／機具）」放最後
+  var have = {}; (d.cats || []).forEach(function (c) { have[c.n] = 1; });
+  var extra = matCats.filter(function (n) { return !have[n]; });
+  extra.sort(function (a, b) { return (/^其他（/.test(a) ? 1 : 0) - (/^其他（/.test(b) ? 1 : 0); });
+  extra.forEach(function (n) {
+    var open = !!P.open[n], ms = matOf[n];
+    h += '<div class="card itc"><button class="ith" data-act="itmcat" data-v="' + esc(n) + '"><b>' + (open ? '▾ ' : '▸ ') + esc(n) + '</b><span>' + esc('別家 ' + ms.length + ' 筆') + '</span></button>' +
+      (open ? matRows(ms) : '') + '</div>';
+  });
   return h + '</div>';
+}
+/** 別家做的那一筆（日誌的材料／機具）：每一天的數量 */
+function itMatModal(m) {
+  var d = S.it && S.it.data, g = d && (d.mats || [])[m.i];
+  if (!g) return '<h3>找不到這一筆</h3><button class="ghost" data-act="mclose">關閉</button>';
+  var q = 0; g.ds.forEach(function (x) { q += Number(x[1]) || 0; });
+  var h = '<h3>' + esc(g.v + (g.t ? '　' + g.t : '')) + '</h3><div style="font-size:15.5px">' + esc(g.c + ' ・ ' + g.ds.length + ' 天 ・ ' + itFmt(q) + (g.u ? ' ' + g.u : '')) + '</div>' +
+    '<div class="sub" style="margin-top:6px">日誌「材料／機具」那一區寫的（別家做的、進的料）。分到哪個工項是照品名分的。</div><div style="font-weight:bold;margin-top:10px">每一天</div>';
+  g.ds.forEach(function (x) { h += '<div class="itday"><span>' + esc(rocDate(x[0])) + '</span><span>' + esc(itFmt(Number(x[1]) || 0) + (g.u ? ' ' + g.u : '')) + '</span></div>'; });
+  return h + '<button class="ghost" data-act="mclose" style="margin-top:10px">關閉</button>';
 }
 function itGroupModal(m) {
   var d = S.it && S.it.data, c = d && d.cats[m.ci], g = c && c.groups[m.gi];
@@ -2504,6 +2546,8 @@ SITE_ACTS.itexport = function (v) {
 };
 SITE_ACTS.itreload = function () { if (S.it && !S.it.busy) itRun('重新算一次（日誌多的話要十幾秒）…', { op: 'sum', fresh: true }); };
 SITE_ACTS.itcat = function (v) { var P = S.it, c = P && P.data && P.data.cats[+v]; if (!c) return; P.open[c.n] = !P.open[c.n]; render(); };
+SITE_ACTS.itmcat = function (v) { var P = S.it; if (!P || !v) return; P.open[v] = !P.open[v]; render(); };
+SITE_ACTS.itmat = function (v) { S.modal = { type: 'itmat', i: +v }; renderModal(); };
 SITE_ACTS.itpick = function (v) { var P = S.it, c = P && P.data && P.data.cats[+v]; if (!c) return; P.sel = c.n; P.picked = {}; render(); };
 SITE_ACTS.itcancel = function () { var P = S.it; if (!P) return; P.sel = ''; P.picked = {}; render(); };
 SITE_ACTS.itrow = function (v) {
