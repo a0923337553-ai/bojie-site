@@ -506,7 +506,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/25a';
+var WEB_VERSION = '11/25b';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -1265,6 +1265,8 @@ function renderHub() {
   var h = renderHero() + '<div class="wrap hub' + (week ? ' has-week' : '') + '">';
   // 管理者（第 13 版）：人員管理、施工人員待處理（等你同意、未分組）
   if (isAdmin() && !S.asCode) h += adminCard();
+  // 💻 叫電腦同步日誌（只有開發者；收件服務第 79 版）
+  if (pcSyncSees()) h += pcSyncCard();
   // 派工（第 15 版）：施工人員首頁最上面「派給你的工作」
   if (!off && S.myTasks && S.myTasks.length) h += myTaskCard();
   var n = hubCols();
@@ -6954,6 +6956,61 @@ function adminCard() {
   if (own && S.gMode) h += '<button class="link red" style="display:block;margin-top:4px" data-act="gouthere">🚪 這台登出 Google</button>';
   return h + '</div>';
 }
+// ---------- 💻 叫電腦同步日誌（只有開發者；收件服務第 79 版 pcsync，使用者 2026-11-25「因為有時候是請你做大更改，我人剛好不在電腦前」）----------
+// 按了以後收件服務記一件工作，電腦上的小程式（工作排程每分鐘來問一次）照做、回報；這裡每 6 秒問一次做到哪。
+// 「先看哪幾天」只看不傳；「傳到 App」才真的傳。他說：Google 的 MCP 通了以後這一顆可以拿掉。
+function pcSyncSees() { return calDev() && Number(S.s.version) >= 79; }
+function pcSyncCard() {
+  var p = S.pcs || {}, j = p.job, working = !!p.busy || (j && (j.state === 'wait' || j.state === 'run'));
+  if (!p.asked && !p.busy) { p.asked = true; S.pcs = p; setTimeout(function () { api('pcsync', { op: 'status' }).then(pcsGot, function () { }); }, 0); }   // 第一次畫：看電腦開著沒、上一件做到哪
+  var mins = p.pcSeen ? Math.floor((p.now - p.pcSeen) / 60000) : -1;
+  var line = !p.loaded ? '人不在電腦前，也可以叫電腦把改過的施工日誌傳到 App' :
+    p.pcOnline ? '電腦開著，按了 1 分鐘內會開始' :
+    mins < 0 ? '電腦還沒有來報到過（電腦要開著、有網路）' :
+    (mins < 60 ? '電腦 ' + mins + ' 分鐘沒有回應' : '電腦很久沒有回應') + '（關機、睡眠或沒網路），按了要等它開著才會做';
+  var h = '<div class="card"><b style="font-size:17px">💻 叫電腦同步日誌</b>' +
+    '<div class="sub" style="margin-top:4px' + (p.loaded && !p.pcOnline ? ';color:#B45309' : '') + '">' + esc(line) + '</div>' +
+    '<div class="row2" style="margin-top:8px"><button class="ghost" style="margin:0" data-act="pcsprev"' + (working ? ' disabled' : '') + '>🔍 先看哪幾天</button>' +
+    '<button class="big" style="margin:0" data-act="pcssend"' + (working ? ' disabled' : '') + '>📤 傳到 App</button></div>';
+  if (p.busy) h += '<div class="sub" style="margin-top:8px">送出中…</div>';
+  else if (j && j.state === 'wait') h += '<div style="margin-top:8px;font-weight:bold;color:#183B56">⏳ 等電腦來拿這件工作（最多 1 分鐘）…</div>';
+  else if (j && j.state === 'run') h += '<div style="margin-top:8px;font-weight:bold;color:#183B56">⚙️ 電腦正在' + (j.kind === 'send' ? '傳' : '看哪幾天有改') + '…</div>';
+  else if (j && j.state === 'done') {
+    h += '<div style="margin-top:8px;font-weight:bold;line-height:1.5' + (j.okRun ? '' : ';color:#C62828') + '">' + (j.okRun ? '✅ ' : '⚠️ ') + esc(j.text || (j.kind === 'send' ? '傳好了' : '看好了')) + '</div>';
+    (j.list || []).forEach(function (r) {
+      h += '<div class="row" style="gap:8px;margin-top:4px;align-items:flex-start"><b style="flex:0 0 108px;font-size:14px">' + esc(r.site) + ' ' + r.n + ' 天</b>' +
+        '<span class="sub grow" style="font-size:13.5px;line-height:1.45">' + esc(r.days) + '</span></div>';
+    });
+  }
+  if (p.err) h += '<div style="margin-top:6px;color:#C62828;font-size:14px">' + esc(p.err) + '</div>';
+  return h + '</div>';
+}
+function pcsKey(p) { var j = p.job || {}; return [p.loaded, p.pcOnline, p.busy, j.id, j.state, j.text, p.err, p.pcSeen ? Math.floor((p.now - p.pcSeen) / 60000) : -1].join('|'); }
+function pcsGot(r) {
+  var p = S.pcs = S.pcs || {}, before = pcsKey(p);
+  p.busy = false; p.loaded = true; p.job = r.job || null; p.pcSeen = r.pcSeen || 0; p.pcOnline = !!r.pcOnline; p.now = r.now || Date.now();
+  p.err = r.busy ? '電腦還在做上一件，等它做完再按' : '';
+  if (pcsKey(p) !== before && S.route === 'hub') render();   // 有變才重畫（不然首頁每 6 秒跳一次）
+  pcsWatch();
+}
+function pcsWatch() {
+  clearTimeout(S.pcsT);
+  var p = S.pcs, j = p && p.job;
+  if (!j || (j.state !== 'wait' && j.state !== 'run')) return;
+  if ((p.tries = (p.tries || 0) + 1) > 200) return;   // 最多追 20 分鐘
+  S.pcsT = setTimeout(function () { api('pcsync', { op: 'status' }).then(pcsGot, function () { pcsWatch(); }); }, 6000);
+}
+function pcsAsk(kind) {
+  var p = S.pcs = S.pcs || {};
+  if (p.busy) return;
+  p.busy = true; p.err = ''; p.tries = 0; p.asked = true; render();
+  api('pcsync', { op: 'ask', kind: kind }).then(pcsGot, function (e) { p.busy = false; p.err = '沒有送出去：' + errText(e); render(); });
+}
+ACT.pcsprev = function () { pcsAsk('preview'); };
+ACT.pcssend = function () {
+  if (!confirm('叫電腦把日誌傳到 App？\n電腦會把全部工地「有改過的那幾天」傳上來（跟在電腦按「日誌馬上同步到App」一樣）。\n電腦要開著、有網路，大約 1～3 分鐘。')) return;
+  pcsAsk('send');
+};
 function renderAdminQ() {
   var a = S.adminAll;
   var h = topBar('施工人員待處理', 'hub', '⟳ 更新', 'adminqreload') + '<div class="wrap">';
