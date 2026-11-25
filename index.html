@@ -119,6 +119,7 @@ button { font-family:inherit; cursor:pointer; color:inherit; }
 .itr .nm small i { font-style:normal; } .itr .nm small i.ov { color:#002060; font-weight:bold; }
 .itr.mt { grid-template-columns:minmax(0, 1fr) 44px 108px; } .itr.mt .nm b { color:#002060; }
 .itsec { font-size:12.5px; font-weight:bold; color:#002060; margin-top:10px; padding:6px 0 0; border-top:2px solid #E3E9F7; }
+.itc .ith span { text-align:right; white-space:nowrap; padding-left:8px; } .itc .ith span i.bj { display:block; font-style:normal; font-size:12px; color:#002060; }
 .itr.ithd > span:first-child { text-align:left; }
 .tg.itbtn { margin-top:8px; grid-template-columns:1fr; } .tg.two.itbtn { grid-template-columns:1fr 1fr; }
 .itday { display:flex; justify-content:space-between; font-size:15px; padding:2px 0; } .itday span:last-child { color:var(--muted); }   /* 部位那一格窄：不要選單箭頭，打字就跳建議 */
@@ -510,7 +511,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/25c';
+var WEB_VERSION = '11/25d';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -2478,7 +2479,8 @@ function renderProgress() {
   (d.cats || []).forEach(function (c, ci) {
     var open = !!P.open[c.n], selecting = P.sel === c.n, ms = matOf[c.n] || [];
     h += '<div class="card itc"><button class="ith" data-act="itcat" data-v="' + ci + '"><b>' + (open ? '▾ ' : '▸ ') + esc(c.n) + '</b><span>' +
-      esc(c.days + ' 天' + (d.showQty && c.q != null ? ' ・ ' + itFmt(c.q) + ' 工' : '') + ' ・ ' + c.groups.length + ' 組' + (ms.length ? ' ・ 別家 ' + ms.length + ' 筆' : '')) + '</span></button>';
+      esc(c.days + ' 天' + (d.showQty && c.q != null ? ' ・ ' + itFmt(c.q) + ' 工' : '') + ' ・ ' + c.groups.length + ' 組') +
+      (ms.length ? '<i class="bj">別家 ' + ms.length + ' 筆</i>' : '') + '</span></button>';   // 別家幾筆放第二行（一行太長，名字會被擠成兩行）
     if (open) {
       h += '<div class="itr ithd' + (d.showQty ? '' : ' noq') + '"><span>一組（照日誌寫的）</span><span>天數</span>' + (d.showQty ? '<span>工數</span>' : '') + '</div>';
       c.groups.forEach(function (g, gi) {
@@ -2503,7 +2505,7 @@ function renderProgress() {
   extra.sort(function (a, b) { return (/^其他（/.test(a) ? 1 : 0) - (/^其他（/.test(b) ? 1 : 0); });
   extra.forEach(function (n) {
     var open = !!P.open[n], ms = matOf[n];
-    h += '<div class="card itc"><button class="ith" data-act="itmcat" data-v="' + esc(n) + '"><b>' + (open ? '▾ ' : '▸ ') + esc(n) + '</b><span>' + esc('別家 ' + ms.length + ' 筆') + '</span></button>' +
+    h += '<div class="card itc"><button class="ith" data-act="itmcat" data-v="' + esc(n) + '"><b>' + (open ? '▾ ' : '▸ ') + esc(n) + '</b><span><i class="bj" style="display:inline">' + esc('別家 ' + ms.length + ' 筆') + '</i></span></button>' +
       (open ? matRows(ms) : '') + '</div>';
   });
   return h + '</div>';
