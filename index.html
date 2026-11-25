@@ -511,7 +511,7 @@ img[data-cap] { cursor:zoom-in; }
 <input type="file" id="cfpick" accept="application/pdf,.pdf,image/*" multiple style="display:none">
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyAF82NyYZZ81ISJ_r7_jPRP0rWNA4kLraB9uMkd2FuZwbnkOJ9SzuM9HaA-oymdXpQ/exec';
-var WEB_VERSION = '11/25d';
+var WEB_VERSION = '11/25e';
 // 開發者「用 Google 登入」（使用者 2026-11-11）：Google Cloud 專案 Bojie SiteApp 的「工地App-網頁」用戶端
 var WEB_CLIENT_ID = '583965561376-qo53n6dm3a2g60iamdkk0349cufcpl07.apps.googleusercontent.com';
 /** 從電腦版程式（安裝檔）打開的：網址帶 ?app=pc */
@@ -5012,7 +5012,8 @@ function openPdfDoc(doc, opt) {
 /* MEASURE-BEGIN
  * PDF 上量測（使用者 2026-11-24「你再pdf有抓取點的功能讓我能夠量測」；App 0.9.139 的 PdfSnap.kt、MeasureScreen.kt 同一套）：
  * BricsCAD「施工單發佈」把每頁圖上的端點、交點和「紙上 1 mm＝圖上幾個單位」放在 PDF 裡（/Type /BojieSnap，格式「BJSNAP02」見外掛 PublishSnap.cs）。
- * snapLoad 讀出來；每頁左下「📏 量測」開全螢幕：兩指放大、拖曳移動，點一下放一個點（附近有圖上的點就抓過去），兩點一組寫長度。 */
+ * snapLoad 讀出來；每頁左下「📏 量測」開全螢幕：兩指放大、拖曳移動，點一下放一個點（附近有圖上的點就抓過去），兩點一組寫長度。
+ * 2026-11-25 起新的 PDF 是 BJSNAP03（多存線段）：也抓中點、垂直、線上任一點（使用者「能否可以鎖定那些原點以外的」→ ABC）；舊的 02 照舊只抓點。 */
 function snapLoad(bytes) {
   var mark = [47, 84, 121, 112, 101, 32, 47, 66, 111, 106, 105, 101, 83, 110, 97, 112], at = -1;   // 「/Type /BojieSnap」：放在檔案後面，從尾巴往前找
   for (var i = bytes.length - mark.length, stop = Math.max(0, bytes.length - 24e6); i >= stop && at < 0; i--) {
@@ -5028,25 +5029,40 @@ function snapLoad(bytes) {
   if (len < 16 || start + len > bytes.length) return Promise.resolve(null);
   var dv = new DataView(bytes.buffer, bytes.byteOffset + start, len), magic = '';
   for (j = 0; j < 8; j++) magic += String.fromCharCode(dv.getUint8(j));
-  if (magic !== 'BJSNAP02') return Promise.resolve(null);
-  var data = { unit: dv.getUint8(8), pages: [] }, n = dv.getUint16(10, true), o = 12, total = 0;
-  for (j = 0; j < n; j++, o += 36) {
-    var pg = { w: dv.getFloat32(o, true), h: dv.getFloat32(o + 4, true), upm: dv.getFloat64(o + 8, true), ox: dv.getFloat32(o + 16, true), oy: dv.getFloat32(o + 20, true), n: dv.getUint32(o + 32, true), pts: null };
-    if (pg.n > 200000) return Promise.resolve(null);
-    data.pages.push(pg); total += pg.n;
+  // 02＝只有點；03（外掛 2026-11-25 起）＝每頁多「線段」（線上任一點、中點、垂直用；使用者「能否可以鎖定那些原點以外的」→ ABC）
+  var ver = magic === 'BJSNAP03' ? 3 : magic === 'BJSNAP02' ? 2 : 0;
+  if (!ver) return Promise.resolve(null);
+  var data = { unit: dv.getUint8(8), pages: [] }, n = dv.getUint16(10, true), o = 12, total = 0, totalS = 0, hs = ver === 3 ? 40 : 36;
+  for (j = 0; j < n; j++, o += hs) {
+    var pg = { w: dv.getFloat32(o, true), h: dv.getFloat32(o + 4, true), upm: dv.getFloat64(o + 8, true), ox: dv.getFloat32(o + 16, true), oy: dv.getFloat32(o + 20, true),
+      ww: dv.getFloat32(o + 24, true), wh: dv.getFloat32(o + 28, true), n: dv.getUint32(o + 32, true), ns: ver === 3 ? dv.getUint32(o + 36, true) : 0, pts: null, segs: null };
+    if (pg.n > 200000 || pg.ns > 200000) return Promise.resolve(null);
+    data.pages.push(pg); total += pg.n; totalS += pg.ns;
   }
   var packed = dv.getUint32(o, true); o += 4;
   if (packed > len - o) return Promise.resolve(null);
-  if (!total) { data.pages.forEach(function (p) { p.pts = new Float32Array(0); }); return Promise.resolve(data); }
+  if (!total && !totalS) { data.pages.forEach(function (p) { p.pts = new Float32Array(0); p.segs = new Float32Array(0); }); return Promise.resolve(data); }
   if (!window.DecompressionStream) return Promise.resolve(null);   // 很舊的瀏覽器解不開：沒有量測
   var blob = new Blob([bytes.subarray(start + o, start + o + packed)]);
   return new Response(blob.stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer().then(function (buf) {
-    if (buf.byteLength < total * 8) return null;
+    if (buf.byteLength < total * 8 + totalS * 16) return null;
     var off = 0;
     data.pages.forEach(function (p) { p.pts = new Float32Array(buf, off, p.n * 2); off += p.n * 8; });
+    data.pages.forEach(function (p) { p.segs = new Float32Array(buf, off, p.ns * 4); off += p.ns * 16; });
     return data;
   });
 }
+/** 線段的中點（範圍裡面的才算；[x,y,x,y…]，算一次記著）。 */
+function msMids(pg) {
+  if (pg.mids) return pg.mids;
+  var s = pg.segs || [], out = [], i, x, y, e = 1e-3 * Math.max(pg.ww || 0, pg.wh || 0);
+  for (i = 0; i + 3 < s.length; i += 4) {
+    x = (s[i] + s[i + 2]) / 2; y = (s[i + 1] + s[i + 3]) / 2;
+    if (!(pg.ww > 0) || (x >= -e && x <= pg.ww + e && y >= -e && y <= pg.wh + e)) out.push(x, y);
+  }
+  return (pg.mids = new Float32Array(out));
+}
+var MS_KIND = { pt: '端點／交點', mid: '中點', perp: '垂直', on: '線上' };
 function msLen(v, unit) { return unit === 1 ? v.toFixed(0) + ' 公釐' : unit === 2 ? v.toFixed(1) + ' 公分' : unit === 3 ? v.toFixed(3) + ' 公尺' : v.toFixed(1); }
 function msMeters(v, unit) { return unit === 1 && v >= 1000 ? (v / 1000).toFixed(3) + ' 公尺' : unit === 2 && v >= 100 ? (v / 100).toFixed(2) + ' 公尺' : ''; }
 function msPageWrap(my, pi, c) {
@@ -5063,12 +5079,12 @@ function measureClose() { var m = MS; MS = null; if (m && m.el.parentNode) m.el.
 window.addEventListener('popstate', measureClose);
 function measureOpen(my, pi, src) {
   measureClose();
-  var pg = my.snap.pages[pi], unit = my.snap.unit, ratio = pg.h / pg.w;
+  var pg = my.snap.pages[pi], unit = my.snap.unit, ratio = pg.h / pg.w, hasSeg = !!(pg.segs && pg.segs.length);
   var pill = 'border:0;border-radius:999px;background:rgba(42,47,54,.92);color:#fff;font-size:14px;font-weight:700;padding:10px 4px;text-align:center;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.3)';
   var el = document.createElement('div');
   el.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:99999;background:#5A6270;touch-action:none;-webkit-user-select:none;user-select:none;font-family:inherit';
   el.innerHTML = '<canvas style="position:absolute;left:0;top:0;width:100%;height:100%"></canvas>' +
-    '<div style="position:absolute;left:0;right:0;top:calc(10px + env(safe-area-inset-top));text-align:center;pointer-events:none"><span style="display:inline-block;background:rgba(42,47,54,.92);color:#fff;font-size:14px;font-weight:700;border-radius:12px;padding:6px 12px">📏 P.' + (pi + 1) + ' 量測　兩指放大，點兩個點<br><span style="font-weight:400;font-size:12px;opacity:.8">長按不放＝十字游標，拖到要的點再放開（一定抓圖上的點）</span></span></div>' +
+    '<div style="position:absolute;left:0;right:0;top:calc(10px + env(safe-area-inset-top));text-align:center;pointer-events:none"><span style="display:inline-block;background:rgba(42,47,54,.92);color:#fff;font-size:14px;font-weight:700;border-radius:12px;padding:6px 12px">📏 P.' + (pi + 1) + ' 量測　兩指放大，點兩個點<br><span style="font-weight:400;font-size:12px;opacity:.8">長按不放＝十字游標，拖到要的點再放開（' + (hasSeg ? '抓端點、交點、中點、線上、垂直' : '一定抓圖上的點') + '）</span></span></div>' +
     '<div style="position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom))">' +
     '<div data-ms="res" style="display:none;background:#fff;border-radius:14px;padding:8px 14px;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,.3)"></div>' +
     '<div data-ms="hint" style="display:none;background:rgba(224,102,43,.95);color:#fff;font-size:14px;font-weight:700;border-radius:12px;padding:8px 12px;margin-bottom:8px"></div>' +
@@ -5101,6 +5117,13 @@ function measureOpen(my, pi, src) {
       if (sx >= 0 && sx <= W && sy >= 0 && sy <= H) seen.push(sx, sy);
     }
     if (seen.length <= 3000) { ctx.strokeStyle = 'rgba(21,101,192,.75)'; ctx.lineWidth = 1.6; for (i = 0; i < seen.length; i += 2) { ctx.beginPath(); ctx.arc(seen[i], seen[i + 1], 3, 0, 6.2832); ctx.stroke(); } }
+    // 中點（新的 PDF 才有）：紫色小三角形，一樣畫面裡不超過 1500 個才畫
+    var mids = pg.segs && pg.segs.length ? msMids(pg) : null, ms2 = [];
+    for (i = 0; mids && i + 1 < mids.length && ms2.length <= 3000; i += 2) {
+      var mx3 = x0 + pageX(mids[i]) * sw, my3 = y0 + pageY(mids[i + 1]) * sh;
+      if (mx3 >= 0 && mx3 <= W && my3 >= 0 && my3 <= H) ms2.push(mx3, my3);
+    }
+    if (ms2.length && ms2.length <= 3000) { ctx.fillStyle = 'rgba(122,63,176,.75)'; for (i = 0; i < ms2.length; i += 2) { ctx.beginPath(); ctx.moveTo(ms2[i], ms2[i + 1] - 3.6); ctx.lineTo(ms2[i] + 3.2, ms2[i + 1] + 2.4); ctx.lineTo(ms2[i] - 3.2, ms2[i + 1] + 2.4); ctx.closePath(); ctx.fill(); } }
     ctx.font = '700 15px sans-serif'; ctx.textBaseline = 'middle';
     for (n = 0; n < M.shots.length; n += 2) {
       var a = M.shots[n], pa = scr(a.u, a.v), b = M.shots[n + 1];
@@ -5131,7 +5154,12 @@ function measureOpen(my, pi, src) {
         ctx.beginPath(); ctx.arc(cat.x, cat.y, 12, 0, 6.2832); ctx.stroke();
       });
       if (cs && cs.snapped) { ctx.beginPath(); ctx.arc(cat.x, cat.y, 3.4, 0, 6.2832); ctx.fillStyle = col; ctx.fill(); }
-      var tip = !cs ? '圖外面' : cs.snapped ? '抓到圖上的點' : '附近沒有點：再移近', tw3 = ctx.measureText(tip).width, tx3 = Math.max(8, Math.min(W - tw3 - 8, cat.x - tw3 / 2));
+      if (cs && cs.kind === 'perp' && M.shots.length % 2 === 1) {   // 垂直：在那一點畫一個直角的小記號
+        var fq = scr(M.shots[M.shots.length - 1].u, M.shots[M.shots.length - 1].v), ux = fq.x - cat.x, uy = fq.y - cat.y, ul = Math.hypot(ux, uy) || 1;
+        ux /= ul; uy /= ul; var vx2 = -uy, vy2 = ux, q2 = 11;
+        [[4, '#fff'], [2, col]].forEach(function (w) { ctx.strokeStyle = w[1]; ctx.lineWidth = w[0]; ctx.beginPath(); ctx.moveTo(cat.x + ux * q2, cat.y + uy * q2); ctx.lineTo(cat.x + (ux + vx2) * q2, cat.y + (uy + vy2) * q2); ctx.lineTo(cat.x + vx2 * q2, cat.y + vy2 * q2); ctx.stroke(); });
+      }
+      var tip = !cs ? '圖外面' : cs.snapped ? '抓到' + MS_KIND[cs.kind || 'pt'] : '附近沒有點、線：再移近', tw3 = ctx.measureText(tip).width, tx3 = Math.max(8, Math.min(W - tw3 - 8, cat.x - tw3 / 2));
       ctx.fillStyle = cs && cs.snapped ? 'rgba(18,183,106,.95)' : 'rgba(42,47,54,.92)'; ctx.fillRect(tx3 - 6, cat.y - 36 - 34, tw3 + 12, 28);
       ctx.fillStyle = '#fff'; ctx.fillText(tip, tx3, cat.y - 36 - 19);
     }
@@ -5145,24 +5173,48 @@ function measureOpen(my, pi, src) {
       res.style.display = 'block';
       res.innerHTML = '<div style="font-size:22px;font-weight:700;color:#183B56">' + msLen(d, unit) + (me ? '　＝ ' + me : '') + '</div>' +
         '<div style="font-size:14px;color:#5D7486">橫 ' + msLen(Math.abs(s1.x - s0.x), unit) + '　直 ' + msLen(Math.abs(s1.y - s0.y), unit) + '</div>' +
-        '<div style="font-size:13px;color:#1E9E6A">● 兩點都是圖上的點（準的）</div>';
+        '<div style="font-size:13px;color:#1E9E6A">● 準的：' + MS_KIND[s0.kind || 'pt'] + ' → ' + MS_KIND[s1.kind || 'pt'] + '</div>';
     }
   }
-  /** 畫面上 (x,y) 會定在哪裡：附近（rad px 以內）有圖上的點就是那個點，沒有就是這個位置；圖外面回 null */
+  /**
+   * 畫面上 (x,y) 會定在哪裡（rad px 以內）；圖外面回 null。先後（使用者 2026-11-25 選 ABC，跟 CAD 鎖點一樣）：
+   * 端點／交點（pt）→ 中點（mid）→ 垂直（perp：已經點了第一點，第二點靠近一條線＝第一點垂直拉到那條線上的那一點）→ 線上最近的一點（on）。
+   * 線段只有新的 PDF 才有（BJSNAP03）；舊的只抓 pt。都沒抓到 snapped＝false。
+   */
   function shotAt(x, y, rad) {
     var u = (x - hx - M.mx) / (fw * M.scale), v = (y - hy - M.my) / (fh * M.scale);
     if (u < 0 || u > 1 || v < 0 || v > 1) return null;
-    var max = rad / (fw * M.scale) * pg.w, best = -1, bd = max * max, pts = pg.pts, tx = u * pg.w, ty = v * pg.h;
-    for (var i = 0; i + 1 < pts.length; i += 2) {
-      var dx = pg.ox + pts[i] / pg.upm - tx, dy = pg.h - (pg.oy + pts[i + 1] / pg.upm) - ty, d = dx * dx + dy * dy;
-      if (d <= bd) { bd = d; best = i; }
+    var tx = (u * pg.w - pg.ox) * pg.upm, ty = ((1 - v) * pg.h - pg.oy) * pg.upm, R = rad / (fw * M.scale) * pg.w * pg.upm, R2 = R * R;
+    function hit(px, py, kind) { return { u: pageX(px), v: pageY(py), x: px, y: py, snapped: true, kind: kind }; }
+    function near(a) { var best = -1, bd = R2; for (var i = 0; i + 1 < a.length; i += 2) { var dx = a[i] - tx, dy = a[i + 1] - ty, d = dx * dx + dy * dy; if (d <= bd) { bd = d; best = i; } } return best; }
+    var k = near(pg.pts); if (k >= 0) return hit(pg.pts[k], pg.pts[k + 1], 'pt');
+    var sg = pg.segs || [];
+    if (sg.length) {
+      var md = msMids(pg); k = near(md); if (k >= 0) return hit(md[k], md[k + 1], 'mid');
+      var e = 1e-3 * Math.max(pg.ww || 0, pg.wh || 0), inWin = function (px, py) { return !(pg.ww > 0) || (px >= -e && px <= pg.ww + e && py >= -e && py <= pg.wh + e); };
+      var from = M.shots.length % 2 === 1 ? M.shots[M.shots.length - 1] : null, pb = null, pd = R2, ob = null, od = R2;
+      for (var i = 0; i + 3 < sg.length; i += 4) {
+        var ax = sg[i], ay = sg[i + 1], bx = sg[i + 2], by = sg[i + 3];
+        if (Math.min(ax, bx) - R > tx || Math.max(ax, bx) + R < tx || Math.min(ay, by) - R > ty || Math.max(ay, by) + R < ty) continue;
+        var vx = bx - ax, vy = by - ay, L2 = vx * vx + vy * vy; if (L2 <= 0) continue;
+        var t = Math.max(0, Math.min(1, ((tx - ax) * vx + (ty - ay) * vy) / L2)), nx = ax + vx * t, ny = ay + vy * t, d = (nx - tx) * (nx - tx) + (ny - ty) * (ny - ty);
+        if (d <= od && inWin(nx, ny)) { od = d; ob = [nx, ny]; }
+        if (from) {
+          var tf = ((from.x - ax) * vx + (from.y - ay) * vy) / L2;
+          if (tf >= 0 && tf <= 1) {
+            var fx = ax + vx * tf, fy = ay + vy * tf, df = (fx - tx) * (fx - tx) + (fy - ty) * (fy - ty), self = (fx - from.x) * (fx - from.x) + (fy - from.y) * (fy - from.y);
+            if (df <= pd && self > R2 * 1e-4 && inWin(fx, fy)) { pd = df; pb = [fx, fy]; }
+          }
+        }
+      }
+      if (pb) return hit(pb[0], pb[1], 'perp');
+      if (ob) return hit(ob[0], ob[1], 'on');
     }
-    return best >= 0 ? { u: pageX(pts[best]), v: pageY(pts[best + 1]), x: pts[best], y: pts[best + 1], snapped: true }
-      : { u: u, v: v, x: (u * pg.w - pg.ox) * pg.upm, y: ((1 - v) * pg.h - pg.oy) * pg.upm, snapped: false };
+    return { u: u, v: v, x: tx, y: ty, snapped: false };
   }
   // 只收抓到圖上的點的（使用者 2026-11-24「長按選擇點我希望是準的」「不要大概」）：沒抓到不定，下面講怎麼辦
   function place(s, miss) { if (s && s.snapped) { M.shots.push(s); M.hint = ''; } else M.hint = miss; draw(); }
-  function tap(x, y) { place(shotAt(x, y, 22), '這裡沒有抓到圖上的點：放大再點，或長按用十字游標對'); }
+  function tap(x, y) { place(shotAt(x, y, 22), '這裡沒有抓到圖上的點' + (hasSeg ? '或線' : '') + '：放大再點，或長按用十字游標對'); }
   function zoom(k, cx, cy, px, py) {   // 放大 k 倍（(cx,cy) 那一點不動）再移 (px,py)；圖至少留一半在畫面裡
     var ns = Math.max(1, Math.min(24, M.scale * k)), kk = ns / M.scale, ox = hx + M.mx, oy = hy + M.my;
     var nx = cx + (ox - cx) * kk + px, ny = cy + (oy - cy) * kk + py;
@@ -5193,7 +5245,7 @@ function measureOpen(my, pi, src) {
   }, { passive: false });
   cv.addEventListener('touchend', function (e) {
     e.preventDefault(); lpStop();
-    if (t0 && t0.cur && M.cur && !e.touches.length) { var s = shotAt(M.cur.x, M.cur.y, 36); M.cur = null; place(s, '游標附近沒有圖上的點，沒有定下來：再移近一點或放大'); }
+    if (t0 && t0.cur && M.cur && !e.touches.length) { var s = shotAt(M.cur.x, M.cur.y, 36); M.cur = null; place(s, '游標附近沒有圖上的點' + (hasSeg ? '或線' : '') + '，沒有定下來：再移近一點或放大'); }
     else if (t0 && t0.n === 1 && !t0.moved && !e.touches.length) tap(t0.sx, t0.sy);
     if (M.cur && !e.touches.length) { M.cur = null; draw(); }
     t0 = e.touches.length === 1 ? one(e.touches[0], true) : e.touches.length ? t0 : null;
