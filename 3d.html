@@ -944,7 +944,7 @@ function pick(x, y) {
 }
 function hideHint() { const h = document.getElementById('hint'); if (h) h.style.opacity = 0; }
 
-// ---------- 圈起來（使用者 2026-11-10「可以圈起來，哪裡需要改進」；老闆、主任、公司、開發者都能圈，開發者按「已改好」） ----------
+// ---------- 圈起來（使用者 2026-11-10「可以圈起來，哪裡需要改進」；老闆、主任、公司、開發者都能圈，開發者按「已改好」；2026-11-25 起老闆也能按） ----------
 const CAD2T = p => new THREE.Vector3(p[0], p[2], -p[1]);
 const T2CAD = v => [Math.round(v.x * 10) / 10, Math.round(-v.z * 10) / 10, Math.round(v.y * 10) / 10];
 let drawingPts = null;
@@ -2082,9 +2082,10 @@ function renderSide() {
     h += '<div class="card">' + (st.draft.member ? '<div class="muted">圈的地方：' + esc(st.draft.member) + '</div>' : '')
       + (st.editMark ? '<div>在畫面<b>最上面的框</b>改字，按「送出」；要換位置按「⭕ 重圈」；不改了按「取消圈」。</div>'
         : '<div>在畫面<b>最上面的框</b>寫要改進什麼，按「送出」；不要了按「取消圈」。可以先轉動看清楚，圈會黏在模型上。</div>')
-      + '<div class="muted" style="margin-top:6px">送出後老闆、主任、公司、開發者都看得到、會收到通知（施工人員看不到）；開發者改好會按「已改好」。</div></div>';
+      + '<div class="muted" style="margin-top:6px">送出後老闆、主任、公司、開發者都看得到、會收到通知（施工人員看不到）；改好了開發者或老闆按「已改好」。</div></div>';
   } else if (mk) {
     const dev = me && me.role === '管理者', mine = me && me.name === mk.by, away = markAway(mk);
+    const canDone = dev || (me && me.role === '老闆');   // 老闆也可以按「已改好」（使用者 2026-11-25「以修改的權限授權給老闆」；收件服務第 87 版起）
     const awayFl = away && mk.cam && mk.cam.v && mk.cam.v.f && mk.cam.v.f !== '全部' ? mk.cam.v.f : '';
     T.textContent = '📍 要改進的地方 ' + markNo(mk);
     h += '<div class="card"><div class="t" style="font-size:16px">' + esc(mk.text) + '</div>'
@@ -2092,7 +2093,7 @@ function renderSide() {
       + '<div style="margin-top:6px">' + (mk.done ? '<span class="st d">已改好</span> <span class="muted">' + esc(mk.doneBy || '') + ' ' + when(mk.doneAt) + '</span>' : '<span class="st o">待處理</span>') + '</div>'
       + (away ? '<div class="tip" style="margin-top:8px">📌 這個是在換成 SketchUp 模型以前圈的' + (awayFl ? '（圈的時候看 ' + esc(awayFl) + '）' : '') + '，SketchUp 模型上不會出現這個圈；照上面寫的字和位置處理就好。</div>' : '')
       + '<div class="row">' + (away ? '' : '<button class="btn" id="markGo">轉到這裡</button>')
-      + (dev ? '<button class="btn solid" id="markDone">' + (mk.done ? '改回待處理' : '✅ 已改好') + '</button>' : '')
+      + (canDone ? '<button class="btn solid" id="markDone">' + (mk.done ? '改回待處理' : '✅ 已改好') + '</button>' : '')
       + (dev || mine ? (away ? '' : '<button class="btn" id="markEdit">✏️ 修改</button>') + '<button class="btn ghost" id="markDel">刪除</button>' : '')
       + '<button class="btn ghost" id="markClose">關閉</button><span class="muted" id="markErr2"></span></div></div>';
     h += markSection();
@@ -2328,6 +2329,7 @@ function shots() {
     const b = pick2('梁'), c = pick2('柱');
     if (b) marks.push({ id: 'd1', at: Date.now() - 3600e3, by: '測試老闆', text: '2F 這支梁的上層筋看起來不夠長，請確認', pos: at(b), member: b.f + ' 梁 ' + (b.c || ''), done: false });
     if (c) marks.push({ id: 'd2', at: Date.now() - 86400e3, by: '測試主任', text: 'C3 箍筋間距再確認', pos: at(c), member: c.f + ' 柱 ' + (c.c || ''), done: true, doneBy: '開發者', doneAt: Date.now() - 7200e3 });
+    if (P.get('asrole')) me = { name: '測試', role: P.get('asrole') };   // 截圖用：用哪個身分看（老闆、主任…）
     if (P.get('sel') === '1') st.markSel = 'd1';
     if (P.get('draft') === '1' && b) { st.draft = { pos: at(b), member: b.f + ' 梁 ' + (b.c || '') }; showDraft(true); }
     if (P.get('marking') || P.get('draft') === '1') { if (!WIDE()) st.sideMin = true; if (P.get('marking')) setMarking(P.get('marking')); renderSide(); }
